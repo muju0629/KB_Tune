@@ -1,0 +1,116 @@
+# KB Tune — 금융 에이전트 백엔드
+
+소비 데이터를 **결정론적 엔진**으로 계산하고, 그 위에서 **Claude**가 설명·판단·문장만 만드는
+"금융 라이프 에이전트" API. 단순한 LLM 프롬프트 래퍼가 아니라, 검증 가능한 재무 모델이 핵심이다.
+
+## 설계 원칙 — 숫자는 코드, 판단은 LLM
+
+```
+요청 → [결정론 엔진] → PlanResult(모든 숫자) → [Claude] 설명/판단 → [groundedness 검증] → 응답
+                └ 예산배분 · 몬테카를로 목표확률 · 위험탐지 · 조정안 생성
+```
+
+- **LLM은 계산하지 않는다.** 사용 가능액·확률·조정안은 전부 파이썬 엔진이 계산한다.
+- **LLM은 엔진이 준 숫자만 인용한다.** 지어낸 숫자가 있으면(groundedness 실패) 자동으로
+  결정론적 템플릿으로 폴백한다 → AI 결과 정확도 보증.
+- **키가 없어도 전부 동작한다.** `ANTHROPIC_API_KEY` 없이 실행하면 엔진은 그대로 계산하고
+  코칭/대화는 템플릿으로 응답한다. → 심사자가 키 없이 바로 실행 가능.
+
+## 구조
+
+```
+app/
+├─ engine/            # 결정론적 금융 엔진 (LLM 없음)
+│  ├─ budget.py       #   가처분·주예산·이번 주 사용 가능액
+│  ├─ probability.py  #   적금 목표 달성 확률 (시드 고정 몬테카를로 20,000회)
+│  ├─ risk.py         #   위험 일정 탐지 + 조정안 생성
+│  ├─ analysis.py     #   카테고리 분석·급증 탐지
+│  └─ plan.py         #   오케스트레이션 → PlanResult(숫자 단일 출처)
+├─ llm/               # Claude 레이어 (설명·판단만)
+│  ├─ prompts.py      #   엔진 숫자에 접지된 프롬프트
+│  ├─ coach.py        #   구조화 출력 + groundedness 폴백
+│  └─ chat.py         #   스트리밍 대화
+├─ eval/              # 평가
+│  ├─ golden.py       #   엔진 정합성 골든 케이스
+│  ├─ groundedness.py #   LLM이 엔진 숫자만 쓰는지 검사
+│  └─ runner.py       #   /api/eval
+├─ data.py            # 데모 페르소나(김민지 22, 대학생)
+├─ models.py          # Pydantic 스키마
+└─ main.py            # FastAPI 라우트
+tests/test_engine.py  # pytest 회귀 테스트
+```
+
+## 실행 (키 없이도 됨)
+
+```bash
+cd backend
+./run.sh                       # venv 생성 + 설치 + 서버(:8000)
+# 또는 수동:
+python3 -m venv .venv && ./.venv/bin/pip install -r requirements.txt
+./.venv/bin/uvicorn app.main:app --reload
+```
+
+Claude 코칭을 켜려면 `.env`에 키만 넣으면 된다 (`.env.example` 참고):
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+## 엔드포인트
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| GET | `/api/health` | 상태 + LLM 사용 여부 |
+| POST | `/api/plan` | **순수 엔진** 결과(숫자) — 알고리즘 단독 동작 |
+| POST | `/api/coach` | 엔진 계획 + 접지된 LLM 코칭 |
+| POST | `/api/chat` | 계획을 바꾸는 대화(텍스트 스트리밍) |
+| GET | `/api/eval` | 평가 리포트(골든 + groundedness) |
+| POST | `/api/estimate` | **① 일정 제목 → 예상 지출** (과거 이력 개인화 + 엔진 클램프) |
+| POST | `/api/extract` | **② 캡처 → 거래 추출** (`text`=기기 OCR·키 불필요 / `image_base64`=Claude 비전) |
+| POST | `/api/categorize` | **③ 가맹점 → 카테고리** (규칙 사전 → 미스만 LLM, 집합 강제) |
+| POST | `/api/forecast` | **④ 다음 달 일정·지출 예측** (반복 패턴 탐지) |
+
+### AI를 어디에 쓰는가 — 인식은 AI, 계산은 엔진
+
+| 기능 | AI가 하는 일(비정형→정형) | 엔진이 하는 일(검증) |
+|---|---|---|
+| ① 예상 지출 | 제목의 의미 파악·세상 지식 추정 | 과거 분포로 클램프(2.5배 상한), 500원 단위 정리 |
+| ② 거래 추출 | 캡처에서 가맹점·금액 인식 | 금액 범위 검증, 잔액/합계 줄 제외, 카테고리 판정 |
+| ③ 분류 | 규칙이 놓친 가맹점 분류 | 허용 카테고리 집합 강제(계약 위반 값 폐기) |
+| ④ 예측 | (선택) 예측 설명 문장 | 반복 주기 탐지·월 합계 산출 전부 결정론 |
+
+**키가 없어도 4개 모두 동작한다** — 규칙 사전·과거 이력·패턴 탐지로 결정론 경로가 항상 존재.
+
+예:
+```bash
+curl -s localhost:8000/api/plan -X POST -H 'content-type: application/json' -d '{}' | python3 -m json.tool
+curl -s localhost:8000/api/eval | python3 -m json.tool
+curl -sN localhost:8000/api/chat -X POST -H 'content-type: application/json' \
+     -d '{"message":"금요일 2차 가도 돼?"}'
+```
+
+## 평가 / 테스트
+
+```bash
+./.venv/bin/pytest -q          # 엔진 골든·MC 정합성·groundedness
+curl -s localhost:8000/api/eval
+```
+
+데모 페르소나(김민지) 기준 엔진 출력(시드 고정 → 항상 동일):
+
+| 방향 | 이번 주 사용 가능액 | 목표 확률 |
+|---|---:|---:|
+| 줄이기 | 38,000원 | 86% |
+| 유지 | 52,000원 | 78% |
+| 늘리기 | 70,000원 | 69% |
+
+위험: `생일파티 2차 40,000원` → 사용가능액 52,000→12,000, 확률 78%→60% (조정안 3종 제시).
+
+## Render 배포
+
+- Build: `pip install -r requirements.txt`
+- Start: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- 환경변수: `ANTHROPIC_API_KEY` (선택 — 없어도 동작)
+
+> ⚠️ 무료 티어는 유휴 시 슬립(콜드스타트). 라이브 데모라면 직전에 `/api/health`로 깨워두거나
+> 로컬 실행을 백업으로 준비. 심사자가 코드를 직접 받아 실행하는 방식이면 로컬만으로 충분.
