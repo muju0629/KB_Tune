@@ -2,9 +2,7 @@
 //  OnboardingView.swift
 //  KB_Tune
 //
-//  랜딩/세팅 = 나만의 소비 에이전트를 '조립'하는 과정. 4문항으로 간소화.
-//  흐름: ①거래연결 ②수입·저축목표(세로 다이얼) ③좋아하고 지키고 싶은 것 ④이번달 방향
-//        → '에이전트 만드는 중' 빌드 연출 → 개인화된 완료 화면
+//  7월 캘린더를 바탕으로 수입·저축 목표와 지킬 소비를 확인하는 4단계 온보딩.
 //
 
 import SwiftUI
@@ -117,14 +115,14 @@ struct OnboardingView: View {
         .padding(.bottom, 10)
     }
 
-    // MARK: ① 거래 연결 / 데모
+    // MARK: ① 캘린더 확인
 
     private var stepConnect: some View {
         VStack(spacing: 0) {
-            header("최근 3개월 소비를\n먼저 살펴볼게요", "은행·카드 거래를 분석해 지금 얼마까지 써도 되는지 계산해요. 지금은 데모 데이터로 바로 체험할 수 있어요.")
+            header("7월 일정을\n먼저 확인할게요", "인턴 출근일과 약속을 보고 필요한 금액을 미리 계산해요.")
 
             Spacer()
-            Image(systemName: "chart.bar.doc.horizontal")
+            Image(systemName: "calendar.badge.clock")
                 .font(.system(size: 60, weight: .thin))
                 .foregroundStyle(KB.yellow)
             Spacer()
@@ -133,13 +131,13 @@ struct OnboardingView: View {
                 Button {
                     model.usesDemoData = true
                     next()
-                } label: { Text("데모 거래로 시작하기") }
+                } label: { Text("7월 일정으로 시작하기") }
                 .buttonStyle(PrimaryButtonStyle())
 
                 Button {
                     model.usesDemoData = true
                     next()
-                } label: { Text("내 계좌·카드 연결 (준비 중)") }
+                } label: { Text("내 캘린더 연결 (준비 중)") }
                 .buttonStyle(SecondaryButtonStyle())
                 .disabled(true)
                 .opacity(0.55)
@@ -147,7 +145,7 @@ struct OnboardingView: View {
             .padding(.horizontal, 24)
             .padding(.bottom, 8)
 
-            agentHint("에이전트가 소비 패턴 학습을 시작해요")
+            agentHint("일정별 예상 금액은 언제든 수정할 수 있어요")
         }
     }
 
@@ -157,38 +155,31 @@ struct OnboardingView: View {
         let pct = model.monthlyIncome > 0
             ? Int((Double(model.savingsGoal) / Double(model.monthlyIncome) * 100).rounded())
             : 0
-        let peerNote: String = {
-            switch pct {
-            case ..<15: "또래보다 여유 있게 잡았어요. 부담 없이 시작하기 좋아요."
-            case 15...25: "\(model.userName)님 나이대와 비슷한 수준이에요."
-            default: "또래 평균보다 높아요. 지킬 수 있는 선인지 확인해 보세요."
-            }
-        }()
+        let afterSaving = max(0, model.monthlyIncome - model.savingsGoal)
         return VStack(spacing: 0) {
-            header("한 달 수입과\n저축 목표를 알려주세요", "알바비·용돈 등 매달 들어오는 금액이면 돼요. 대략적이어도 괜찮아요.")
+            header("월 수입과\n저축 목표를 확인해 주세요", "인턴 급여·용돈처럼 매달 들어오는 금액을 입력해 주세요. 기본값은 일정에 맞춘 추정치예요.")
 
             HStack(spacing: 12) {
                 dialCard("월 수입", value: $model.monthlyIncome,
                          range: 200_000...5_000_000, step: 100_000)
                 dialCard("월 저축 목표", value: $model.savingsGoal,
-                         range: 0...1_000_000, step: 50_000)
+                         range: 0...3_000_000, step: 50_000)
             }
             .padding(.horizontal, 24)
             .padding(.top, 20)
 
-            // 또래 비교 안내
             HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "chart.pie")
+                Image(systemName: "equal.circle")
                     .font(.system(size: 14))
                     .foregroundStyle(KB.green)
                     .padding(.top, 1)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("지금 계획은 수입의 \(pct)%예요.")
+                    Text("저축 목표는 수입의 \(pct)%")
                         .font(.system(size: 13.5, weight: .semibold))
                         .foregroundStyle(KB.ink)
                         .contentTransition(.numericText())
                         .animation(.snappy(duration: 0.2), value: pct)
-                    Text("20대 초반은 보통 수입의 15~25%를 모아요. \(peerNote)")
+                    Text("저축 후 남는 \(formatWon(afterSaving))에서 일정비와 고정비를 계산해요.")
                         .font(.system(size: 12))
                         .foregroundStyle(KB.muted)
                         .lineSpacing(2)
@@ -208,7 +199,7 @@ struct OnboardingView: View {
                 .padding(.horizontal, 24)
                 .padding(.bottom, 8)
 
-            agentHint("수입에 맞춰 주간 예산을 설계해요")
+            agentHint("수입에 맞춰 이번 주 금액을 계산해요")
         }
     }
 
@@ -223,11 +214,11 @@ struct OnboardingView: View {
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
     }
 
-    // MARK: ③ 좋아하고 지키고 싶은 것 (통합 서베이)
+    // MARK: ③ 나한테 더 필요한 소비 (통합 서베이 — 취향 + 예산 조정 제외 대상)
 
     private var stepKeeps: some View {
         VStack(spacing: 0) {
-            header("좋아하는 것과\n지키고 싶은 소비를 골라주세요", "고른 것들은 ‘줄일 대상’이 아니라 ‘지킬 이유’가 돼요. 계획을 조정할 때 끝까지 지켜드릴게요.")
+            header("나한테 더 필요한 소비를\n골라주세요", "좋아하는 걸 고르면 돼요. 예산을 조정할 때도 줄이지 않고 남겨둘게요.")
 
             FlowChips(items: keepCandidates.map { (tag: $0.tag, label: $0.label, symbol: $0.symbol) },
                       selected: $model.hobbies)
@@ -236,12 +227,8 @@ struct OnboardingView: View {
 
             Spacer()
 
-            Button {
-                // 보호 소비 파생: 관계·행사성 태그는 보호 대상으로
-                let prot = model.hobbies.intersection(["모임", "가족", "경조사", "운동"])
-                model.protectedTags = prot.isEmpty ? ["모임"] : prot
-                next()
-            } label: { Text("다음") }
+            // 더 필요한 소비(protectedTags)는 hobbies에서 자동 파생 — 별도 저장 없음
+            Button { next() } label: { Text("다음") }
                 .buttonStyle(PrimaryButtonStyle())
                 .disabled(model.hobbies.isEmpty)
                 .opacity(model.hobbies.isEmpty ? 0.5 : 1)
@@ -249,8 +236,8 @@ struct OnboardingView: View {
                 .padding(.bottom, 8)
 
             agentHint(model.hobbies.isEmpty
-                      ? "취향은 에이전트의 판단 기준이 돼요"
-                      : "\(model.hobbies.sorted().joined(separator: "·")) — 기억할게요")
+                      ? "고른 소비는 예산을 조정할 때 줄이지 않아요"
+                      : "\(model.hobbies.sorted().joined(separator: "·")) — 더 필요한 소비로 기억할게요")
         }
     }
 
@@ -258,7 +245,7 @@ struct OnboardingView: View {
 
     private var stepDirection: some View {
         VStack(spacing: 0) {
-            header("7월 소비 방향을\n정해볼까요?", "한 달에 한 번, 월초에 정하는 방향이에요. 에이전트가 이 방향을 지키도록 도와드려요.")
+            header("7월 소비 방향을\n정해볼까요?", "일정이 바뀌면 주간 금액도 함께 다시 계산돼요.")
 
             VStack(spacing: 12) {
                 ForEach(SpendDirection.allCases) { dir in
@@ -268,7 +255,7 @@ struct OnboardingView: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(dir.label).font(.system(size: 16, weight: .semibold))
-                                Text("이번 주 \(formatWon(dir.budget)) · 목표 확률 \(dir.probability)%")
+                                Text("이번 주 \(formatWon(model.weeklyBudget(for: dir))) · 목표 확률 \(model.probability(for: dir))%")
                                     .font(.system(size: 12.5)).foregroundStyle(KB.muted)
                             }
                             Spacer()
@@ -292,7 +279,7 @@ struct OnboardingView: View {
 
             Spacer()
 
-            Button { next() } label: { Text("에이전트 만들기") }
+            Button { next() } label: { Text("7월 계획 계산하기") }
                 .buttonStyle(PrimaryButtonStyle())
                 .padding(.horizontal, 24)
                 .padding(.bottom, 24)
@@ -306,11 +293,11 @@ struct OnboardingView: View {
             ? "취향 프로필 반영"
             : "\(model.hobbies.sorted().prefix(3).joined(separator: "·")) 취향 반영"
         return [
-            "최근 3개월(2026.04~06) 소비 패턴 분석",
+            "7월 인턴 출근 22일 반영",
+            "일정별 예상 금액 범위 계산",
             hobbyText,
-            "월 수입 \(formatWon(model.monthlyIncome)) 기준 주간 예산 설계",
-            "‘\(model.protectedSummary)’ 보호 설정",
-            "저축 목표 \(formatWon(model.savingsGoal)) 달성 확률 계산",
+            "수입 \(formatWon(model.monthlyIncome)) · 저축 \(formatWon(model.savingsGoal)) 반영",
+            "\(model.protectedList) 소비는 줄이지 않게 설정",
         ]
     }
 
@@ -327,7 +314,7 @@ struct OnboardingView: View {
             .scaleEffect(buildStep % 2 == 0 ? 1.0 : 1.08)
             .animation(.easeInOut(duration: 0.5), value: buildStep)
 
-            Text("나만의 소비 에이전트를\n만들고 있어요")
+            Text("7월 계획을\n계산하고 있어요")
                 .font(.system(size: 24, weight: .bold))
                 .foregroundStyle(KB.ink)
                 .multilineTextAlignment(.center)
@@ -387,7 +374,7 @@ struct OnboardingView: View {
                 .font(.system(size: 56))
                 .foregroundStyle(KB.green)
 
-            Text("\(model.userName)님만의 에이전트가\n준비됐어요")
+            Text("\(model.userName)님의 7월 계획이\n준비됐어요")
                 .font(.system(size: 25, weight: .bold))
                 .foregroundStyle(KB.ink)
                 .multilineTextAlignment(.center)
@@ -396,13 +383,11 @@ struct OnboardingView: View {
 
             VStack(alignment: .leading, spacing: 12) {
                 summaryRow(symbol: "heart",
-                           text: model.hobbies.isEmpty
-                               ? "취향을 계속 배워갈게요"
-                               : "\(model.hobbies.sorted().prefix(3).joined(separator: "·"))을 즐기는 \(model.userName)님")
+                           text: model.userRole)
                 summaryRow(symbol: "shield",
-                           text: "‘\(model.protectedSummary)’는 끝까지 지켜요")
+                           text: "\(model.protectedList) 소비는 더 필요한 소비라 줄이지 않아요")
                 summaryRow(symbol: "banknote",
-                           text: "월 수입 \(formatWon(model.monthlyIncome)) 중 \(formatWon(model.savingsGoal)) 저축 목표")
+                           text: "월 수입 \(formatWon(model.monthlyIncome)) · 저축 목표 \(formatWon(model.savingsGoal))")
             }
             .padding(18)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -411,17 +396,9 @@ struct OnboardingView: View {
             .padding(.horizontal, 24)
             .padding(.top, 22)
 
-            Text("이번 주 \(formatWon(model.weeklyBudget))까지 괜찮아요")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(KB.ink)
-                .padding(.horizontal, 16).padding(.vertical, 11)
-                .background(KB.yellowSoft, in: Capsule())
-                .overlay(Capsule().stroke(KB.yellow, lineWidth: 1))
-                .padding(.top, 18)
-
             Spacer()
 
-            Button(action: onFinish) { Text("내 계획 보기") }
+            Button(action: onFinish) { Text("7월 계획 보기") }
                 .buttonStyle(PrimaryButtonStyle())
                 .padding(.horizontal, 24)
                 .padding(.bottom, 24)

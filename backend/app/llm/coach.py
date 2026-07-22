@@ -68,10 +68,10 @@ def _template(plan: PlanResult, used_llm: bool, grounded: bool = True) -> CoachR
             if move else "조정안을 비교해 보세요."
         )
     else:
-        headline = f"이번 주 {plan.weekly_available:,}원까지 괜찮아요."
-        reason = f"최근 3개월 소비와 {plan.protected_summary}를 반영했어요."
+        headline = f"이번 주에는 약 {plan.weekly_available:,}원까지 쓸 수 있어요."
+        reason = f"7월 캘린더의 확정 일정과 ‘{plan.protected_summary}’ 원칙을 반영했어요."
         impact = f"적금 목표 달성 확률은 {plan.probability}%예요."
-        recommendation = "지금 계획대로 두면 목표를 지킬 수 있어요."
+        recommendation = "금액이 비어 있는 일정만 확인하면 예상 범위를 더 좁힐 수 있어요."
     return CoachResponse(
         direction=plan.direction, headline=headline, reason=reason,
         impact=impact, recommendation=recommendation,

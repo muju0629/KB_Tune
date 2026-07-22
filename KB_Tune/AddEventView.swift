@@ -117,7 +117,7 @@ struct AddEventView: View {
                     Text("7월 \(day)일").font(.system(size: 16, weight: .semibold)).foregroundStyle(KB.ink)
                         .monospacedDigit()
                     Spacer()
-                    Stepper("", value: $day, in: 21...31).labelsHidden()
+                    Stepper("", value: $day, in: 22...31).labelsHidden()
                 }
                 .padding(14)
                 .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -182,7 +182,7 @@ struct AddEventView: View {
                     ForEach(calendar.events) { ev in
                         Button {
                             title = ev.title
-                            if (21...31).contains(ev.dayOfMonth) { day = ev.dayOfMonth }
+                            if (22...31).contains(ev.dayOfMonth) { day = ev.dayOfMonth }
                             runEstimate()
                         } label: {
                             HStack(spacing: 12) {
@@ -214,10 +214,14 @@ struct AddEventView: View {
     // MARK: - 2단계: 추정 결과 + 영향 + 조정안
 
     private var resultStep: some View {
-        let before = BudgetEngine.weeklyAvailable(model.direction)
+        // '전'은 이미 추가한 일정까지 반영된 현재값 — model.weeklyBudget/probability와 같은 기준.
+        let before = model.weeklyBudget
         let after = before - amount
-        let probBefore = BudgetEngine.probability(model.direction)
-        let probAfter = BudgetEngine.probability(model.direction, extraCommitted: amount)
+        let probBefore = model.probability
+        let probAfter = BudgetEngine.probability(model.direction,
+                                                 extraCommitted: model.userAddedTotal + amount,
+                                                 income: model.monthlyIncome,
+                                                 savingsGoal: model.savingsGoal)
         let risky = (probBefore - probAfter) >= 10 || after < 0
 
         return VStack(alignment: .leading, spacing: 18) {
@@ -251,7 +255,7 @@ struct AddEventView: View {
                     Text(e.basis).font(.system(size: 12)).foregroundStyle(KB.muted)
                         .fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 6) {
-                        Text("과거 범위 \(formatWon(e.low))~\(formatWon(e.high))")
+                        Text("예상 범위 \(formatWon(e.low))~\(formatWon(e.high))")
                         Text("·")
                         Text("신뢰도 \(Int(e.confidence * 100))%")
                         Text("·")
@@ -290,7 +294,7 @@ struct AddEventView: View {
                     adjustmentRow(id: "keep", title: "그대로 추가",
                                   detail: "사용 가능액 \(formatWon(max(after, 0))) · 확률 \(probAfter)%")
                     adjustmentRow(id: "half", title: "예산을 절반으로 줄이기",
-                                  detail: "\(formatWon(amount / 2))로 조정하면 확률 \(BudgetEngine.probability(model.direction, extraCommitted: amount / 2))%")
+                                  detail: "\(formatWon(amount / 2))로 조정하면 확률 \(BudgetEngine.probability(model.direction, extraCommitted: model.userAddedTotal + amount / 2, income: model.monthlyIncome, savingsGoal: model.savingsGoal))%")
                     adjustmentRow(id: "next", title: "다음 주로 옮기기",
                                   detail: "이번 주 계획을 그대로 지켜요 · 확률 \(probBefore)%")
                 }
@@ -302,11 +306,35 @@ struct AddEventView: View {
 
             Button {
                 if chosenAdjustment == "half" { amount /= 2 }
+                if chosenAdjustment == "next" { day = min(day + 7, 31) }
+
+                // 최종 금액·날짜 기준으로 위험 재판정 → 위험하면 경고를 일정에 남긴다.
+                var note: String? = nil
+                var detail: String? = nil
+                if model.currentWeekRange.contains(day) {
+                    let finalAfter = before - amount
+                    let finalProb = BudgetEngine.probability(model.direction,
+                                                             extraCommitted: model.userAddedTotal + amount,
+                                                             income: model.monthlyIncome,
+                                                             savingsGoal: model.savingsGoal)
+                    if finalAfter < 0 {
+                        note = "이번 주 예산을 \(formatWon(-finalAfter)) 넘겨요"
+                        detail = "그대로 두면 적금 목표 확률이 \(probBefore)% → \(finalProb)%로 낮아져요. 금액을 줄이거나 다음 주로 옮기는 걸 추천해요."
+                    } else if probBefore - finalProb >= 10 {
+                        note = "적금 목표 확률을 \(probBefore - finalProb)%p 낮춰요"
+                        detail = "금액을 줄이거나 다음 주로 옮기면 목표 확률을 지킬 수 있어요."
+                    }
+                }
+
+                model.addEvent(title: title, day: day, amount: amount,
+                               category: estimate?.category ?? "기타",
+                               basis: estimate?.basis,
+                               riskNote: note, riskDetail: detail)
                 withAnimation(spring) { step = .done }
             } label: { Text("이 계획으로 일정 추가") }
             .buttonStyle(PrimaryButtonStyle())
 
-            hint("‘\(model.protectedSummary)’는 조정 대상에서 제외했어요.")
+            hint("\(model.protectedList) 일정은 \(model.userName)님한테 더 필요한 소비라 조정안에서 제외했어요.")
         }
     }
 
@@ -345,12 +373,12 @@ struct AddEventView: View {
     // MARK: - 3단계: 완료
 
     private var doneStep: some View {
-        let after = BudgetEngine.weeklyAvailable(model.direction) - amount
+        // addEvent 가 이미 반영된 상태 — 모델의 현재값이 곧 '추가 후' 숫자다.
         return VStack(spacing: 14) {
             Spacer(minLength: 40)
             Image(systemName: "checkmark.circle.fill").font(.system(size: 54)).foregroundStyle(KB.green)
             Text("일정을 추가했어요").font(.system(size: 20, weight: .bold)).foregroundStyle(KB.ink)
-            Text("7월 \(day)일 ‘\(title)’ \(formatWon(amount))을 반영했어요.\n이번 주에는 \(formatWon(max(after, 0)))까지 쓸 수 있어요.")
+            Text("7월 \(day)일 ‘\(title)’ \(formatWon(amount))을 반영했어요.\n이번 주에는 \(formatWon(model.weeklyBudget))까지 쓸 수 있어요.")
                 .font(.system(size: 13.5)).foregroundStyle(KB.muted)
                 .multilineTextAlignment(.center).lineSpacing(3)
             Spacer()

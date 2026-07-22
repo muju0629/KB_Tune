@@ -13,18 +13,18 @@ import Foundation
 
 enum BudgetEngine {
 
-    // 데모 페르소나(김민지) — 백엔드 data.py 와 동일.
-    static let income = 800_000
-    static let fixed = 130_000                 // 통신 55 + 교통 60 + 구독 15
-    static let savingsGoal = 200_000
-    static let variableSpentToDate = 270_000   // 7/1~20 실제 가변지출
-    static let committedThisWeek = 48_000       // 팀플 8 + 동아리 25 + 영화 15
-    static let committedFuture = 78_000         // 확정된 미래 일정(이번주+다음주)
-    static let candidateAmount = 40_000         // 생일파티 2차(후보/위험)
+    // 성제의 2026년 7월 캘린더 기준. 고정비·단건 지출은 본인 확인값(07-22), 수입·저축은 데모 가정.
+    static let income = 2_200_000               // 미확인 — 데모 가정(설정에서 수정)
+    static let fixed = 435_000                  // 통신 7.5 + 교통 15 + 유류 6 + 구독 3 + 청약 10 + 보험 2 (확인값)
+    static let savingsGoal = 800_000            // 미확인 — 데모 가정
+    static let variableSpentToDate = 761_000    // 7/1~21 일정비 (출근 무비용 · 확인 단가 반영)
+    static let committedThisWeek = 40_000       // 7/22 와드 (출근·회의는 비용 없음)
+    static let committedFuture = 40_000         // 7/22~31 확정 일정 = 와드뿐
+    static let candidateAmount = 0              // 미확정 일정은 기본 계산에서 제외
     static let daysInMonth = 31
-    static let today = 21
-    static let discretionaryDaily = 5_500.0     // 과거 소액 재량지출 일평균
-    static let sigma = 80_000.0                 // 월 가변지출 표준편차
+    static let today = 22
+    static let discretionaryDaily = 7_500.0     // 일정 밖 소액지출 데모 가정
+    static let sigma = 100_000.0                // 추정 오차를 넉넉히 반영
 
     // 소비 방향 계수(위험 성향)
     static func weeklyFactor(_ d: SpendDirection) -> Double {
@@ -34,28 +34,40 @@ enum BudgetEngine {
         switch d { case .reduce: 0.60; case .maintain: 1.00; case .increase: 1.35 }
     }
 
-    static var disposableMonth: Int { income - fixed - savingsGoal }        // 470,000
-    static var remainingBudget: Int { disposableMonth - variableSpentToDate } // 200,000
+    static func disposableMonth(income: Int = income,
+                                savingsGoal: Int = savingsGoal) -> Int {
+        income - fixed - savingsGoal
+    }
+
+    static func remainingBudget(income: Int = income,
+                                savingsGoal: Int = savingsGoal) -> Int {
+        disposableMonth(income: income, savingsGoal: savingsGoal) - variableSpentToDate
+    }
+
     static var remainingWeeks: Int { Int(ceil(Double(daysInMonth - today + 1) / 7.0)) } // 2
 
     /// 이번 주 사용 가능액 = 주예산 × 방향계수 − 이번 주 확정지출
     /// - extraCommitted: 새로 추가하려는 일정의 예상 지출(영향 시뮬레이션용)
     static func weeklyAvailable(_ d: SpendDirection, includeCandidate: Bool = false,
-                                extraCommitted: Int = 0) -> Int {
-        let base = Double(remainingBudget) / Double(remainingWeeks)
+                                extraCommitted: Int = 0,
+                                income: Int = income,
+                                savingsGoal: Int = savingsGoal) -> Int {
+        let base = Double(remainingBudget(income: income, savingsGoal: savingsGoal)) / Double(remainingWeeks)
         let committed = committedThisWeek + (includeCandidate ? candidateAmount : 0) + extraCommitted
-        return Int((base * weeklyFactor(d)).rounded()) - committed
+        return max(0, Int((base * weeklyFactor(d)).rounded()) - committed)
     }
 
     /// 적금 목표 달성 확률 — 정규근사(백엔드 몬테카를로와 ±1%p 이내).
     /// - extraCommitted: 새 일정을 반영했을 때의 확률을 보려면 금액을 넣는다.
     static func probability(_ d: SpendDirection, includeCandidate: Bool = false,
-                            extraCommitted: Int = 0) -> Int {
+                            extraCommitted: Int = 0,
+                            income: Int = income,
+                            savingsGoal: Int = savingsGoal) -> Int {
         let daysLeft = Double(daysInMonth - today + 1)
         let discretionary = discretionaryDaily * daysLeft * discretionaryFactor(d)
         let committed = Double(committedFuture + (includeCandidate ? candidateAmount : 0) + extraCommitted)
         let mu = committed + discretionary
-        let z = (Double(remainingBudget) - mu) / sigma
+        let z = (Double(remainingBudget(income: income, savingsGoal: savingsGoal)) - mu) / sigma
         let cdf = 0.5 * (1 + erf(z / 2.0.squareRoot()))
         return Int((cdf * 100).rounded())
     }

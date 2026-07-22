@@ -2,7 +2,7 @@
 //  AnalysisView.swift
 //  KB_Tune
 //
-//  소비 분석. 토스·카드앱 캡처 업로드(저장) + 최근 3개월 소비 분석.
+//  7월 캘린더 예상 지출 + 선택적으로 올린 결제 캡처 분석.
 //  상품 추천은 이 화면 '맨 아래'에서만 낮은 강조로 진입(제품 원칙 4).
 //
 
@@ -48,7 +48,7 @@ struct AnalysisView: View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("소비 데이터 올리기").font(.system(size: 16, weight: .semibold)).foregroundStyle(KB.ink)
-                Text("토스·카드앱에서 캡처한 소비 내역을 올리면 저장하고 분석에 활용해요. 이미지는 기기에만 보관돼요.")
+                Text("결제 캡처가 있으면 일정의 예상 금액과 비교할 수 있어요. 이미지는 기기에만 보관돼요.")
                     .font(.system(size: 12.5)).foregroundStyle(KB.muted).lineSpacing(2)
             }
 
@@ -196,7 +196,7 @@ struct AnalysisView: View {
         switch method {
         case "on-device": "기기에서 처리"
         case "ocr-rule": "기기 OCR + 서버 구조화"
-        case "llm-vision": "AI 비전 분석"
+        case "llm-vision": "이미지 분석"
         default: method
         }
     }
@@ -211,6 +211,11 @@ struct AnalysisView: View {
         case "교통": "bus"
         case "구독": "play.rectangle"
         case "여가": "film"
+        case "출근": "briefcase"
+        case "데이트": "heart"
+        case "가족": "house"
+        case "경조사": "gift"
+        case "자기관리": "cross.case"
         default: "questionmark.circle"
         }
     }
@@ -230,16 +235,16 @@ struct AnalysisView: View {
         }
     }
 
-    // MARK: 소비 분석
+    // MARK: 캘린더 예상 지출
 
     private var breakdownSection: some View {
-        let sorted = model.spendProfile.sorted { $0.total3m > $1.total3m }
-        let maxTotal = sorted.first?.total3m ?? 1
+        let sorted = model.spendProfile.sorted { $0.monthly > $1.monthly }
+        let maxTotal = max(sorted.first?.monthly ?? 0, 1)
         return VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
-                Text("최근 3개월 소비").font(.system(size: 16, weight: .semibold)).foregroundStyle(KB.ink)
+                Text("7월 일정별 예상 지출").font(.system(size: 16, weight: .semibold)).foregroundStyle(KB.ink)
                 Spacer()
-                Text("월 평균 \(formatWon(model.spendMonthly))").font(.system(size: 12.5)).foregroundStyle(KB.muted)
+                Text("합계 약 \(formatWon(model.spendMonthly))").font(.system(size: 12.5)).foregroundStyle(KB.muted)
             }
 
             VStack(spacing: 12) {
@@ -250,13 +255,13 @@ struct AnalysisView: View {
                             HStack {
                                 Text(cat.name).font(.system(size: 14, weight: .medium)).foregroundStyle(KB.ink)
                                 Spacer()
-                                Text(formatWon(cat.total3m)).font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.ink)
+                                Text(formatWon(cat.monthly)).font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.ink)
                             }
                             GeometryReader { geo in
                                 ZStack(alignment: .leading) {
                                     Capsule().fill(KB.line.opacity(0.5)).frame(height: 6)
                                     Capsule().fill(KB.yellow)
-                                        .frame(width: geo.size.width * CGFloat(cat.total3m) / CGFloat(maxTotal), height: 6)
+                                        .frame(width: geo.size.width * CGFloat(cat.monthly) / CGFloat(maxTotal), height: 6)
                                 }
                             }
                             .frame(height: 6)
@@ -267,6 +272,9 @@ struct AnalysisView: View {
             .padding(16)
             .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KB.line, lineWidth: 1))
+
+            Text("캘린더 제목을 기준으로 계산한 예상액이며 실제 결제와 다를 수 있어요.")
+                .font(.system(size: 11.5)).foregroundStyle(KB.muted)
         }
     }
 
@@ -277,8 +285,8 @@ struct AnalysisView: View {
                 Image(systemName: "sparkles").font(.system(size: 18)).foregroundStyle(KB.ink)
             }
             VStack(alignment: .leading, spacing: 5) {
-                Text("외식·모임 지출이 가장 커요.").font(.system(size: 14, weight: .semibold)).foregroundStyle(KB.ink)
-                Text("지키고 싶은 소비라 유지하되, 카드 혜택으로 그 지출의 일부를 돌려받을 수 있어요.")
+                Text("7월은 경조사·쇼핑 지출이 220,000원으로 가장 커요.").font(.system(size: 14, weight: .semibold)).foregroundStyle(KB.ink)
+                Text("정장 150,000원과 교수님 결혼식 70,000원이 대부분이에요. 출근은 점심·교통 비용이 들지 않아 합계에서 뺐고, 금액이 없는 월급날·카드 결제일도 계산에 넣지 않았어요.")
                     .font(.system(size: 13)).foregroundStyle(KB.muted).fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -295,7 +303,7 @@ struct AnalysisView: View {
             Button { showProducts = true } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass").font(.system(size: 15))
-                    Text("이 소비에 맞는 카드·적금 알아보기").font(.system(size: 14, weight: .medium))
+                    Text("확인한 지출로 카드·적금 비교하기").font(.system(size: 14, weight: .medium))
                     Spacer()
                     Image(systemName: "chevron.right").font(.system(size: 13))
                 }
@@ -306,7 +314,7 @@ struct AnalysisView: View {
             }
             .buttonStyle(.plain)
 
-            Text("계획을 세운 뒤 참고하는 선택 항목이에요.")
+            Text("캘린더 예상액은 카드 전월실적과 다를 수 있어요.")
                 .font(.system(size: 11.5)).foregroundStyle(KB.muted)
                 .frame(maxWidth: .infinity, alignment: .center)
         }

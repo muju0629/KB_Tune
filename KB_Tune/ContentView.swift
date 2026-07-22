@@ -15,7 +15,16 @@ struct ContentView: View {
     @StateObject private var model = AppModel()
 
     enum Phase { case splash, onboarding, main }
-    @State private var phase: Phase = .splash
+    @State private var phase: Phase
+
+    init() {
+        #if DEBUG
+        let startsOnMain = ProcessInfo.processInfo.arguments.contains("-ui-test-main")
+        _phase = State(initialValue: startsOnMain ? .main : .splash)
+        #else
+        _phase = State(initialValue: .splash)
+        #endif
+    }
 
     var body: some View {
         ZStack {

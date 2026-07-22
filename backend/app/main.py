@@ -79,7 +79,7 @@ def eval_endpoint():
 
 @app.post("/api/estimate", response_model=EstimateResult)
 def estimate_endpoint(req: EstimateRequest):
-    """일정 제목만으로 예상 지출을 추정(과거 이력으로 개인화 + 엔진 클램프)."""
+    """일정 제목만으로 예상 지출을 추정(캘린더의 같은 유형 + 엔진 범위 보정)."""
     return estimate_event_cost(req.title, TRANSACTIONS_HISTORY,
                                use_llm=config.llm_backend() == "claude")
 
@@ -110,6 +110,6 @@ def categorize_endpoint(req: CategorizeRequest):
 
 @app.post("/api/forecast", response_model=ForecastResult)
 def forecast_endpoint(req: PlanRequest):
-    """3개월 거래에서 반복 패턴을 찾아 다음 달 일정·지출을 예측."""
+    """7월 캘린더에서 반복 패턴을 찾아 다음 달 일정·지출을 예측."""
     p = _profile(req)
     return forecast_next_month(TRANSACTIONS_HISTORY, disposable_month(p))

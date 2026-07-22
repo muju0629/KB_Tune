@@ -2,3 +2,15 @@
 xcuserdata/
 DerivedData/
 *.xcuserstate
+
+# 작업 산출물(스크린샷·QA 리포트·도구 스크래치) — 소스가 아니라 재생성 가능
+_workspace/
+design-audit/
+design-qa-artifacts/
+design-qa.md
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env

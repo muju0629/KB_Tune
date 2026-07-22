@@ -20,6 +20,10 @@ final class AgentService: ObservableObject {
 
     /// 헬스체크(짧은 타임아웃).
     func ping() async {
+        if ProcessInfo.processInfo.arguments.contains("-ui-test-offline") {
+            backendReachable = false
+            return
+        }
         var req = URLRequest(url: Self.baseURL.appendingPathComponent("api/health"))
         req.timeoutInterval = 2.5
         do {
@@ -76,15 +80,34 @@ final class AgentService: ObservableObject {
 
     /// 스트리밍 대화. 토큰이 올 때마다 onToken(델타) 호출.
     /// 반환: true=백엔드 응답 성공, false=실패(호출부가 로컬 폴백).
-    func chatStream(_ message: String, direction: SpendDirection,
+    func chatStream(_ message: String, model: AppModel,
                     onToken: @escaping (String) -> Void) async -> Bool {
+        if ProcessInfo.processInfo.arguments.contains("-ui-test-offline") {
+            backendReachable = false
+            return false
+        }
         var req = URLRequest(url: Self.baseURL.appendingPathComponent("api/chat"))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.timeoutInterval = 12
+        let fixedCosts: [[String: Any]] = [
+            ["name": "고정비", "amount": BudgetEngine.fixed],
+        ]
+        var profile: [String: Any] = [
+            "name": model.userName,
+            "monthly_income": model.monthlyIncome,
+            "savings_goal": model.savingsGoal,
+            "fixed_costs": fixedCosts,
+            "direction": model.direction.rawValue,
+            "protected_categories": Array(model.protectedTags).sorted(),
+        ]
+        if let age = model.userAge {
+            profile["age"] = age
+        }
         let body: [String: Any] = [
             "message": message,
-            "profile": ["direction": direction.rawValue],
+            "profile": profile,
+            "today": 22,
         ]
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
 

@@ -1,8 +1,9 @@
-//
+ //
 //  MainTabView.swift
 //  KB_Tune
 //
-//  하단 내비게이션: 주간 계획 / 캘린더 / 대화
+//  하단 내비게이션: 주간 / 대화 / 분석.
+//  상품은 계획·분석 맥락에서, 설정은 계획 화면 상단에서 진입한다.
 //
 
 import SwiftUI
@@ -11,15 +12,11 @@ struct MainTabView: View {
     var body: some View {
         TabView {
             WeeklyPlanView()
-                .tabItem { Label("계획", systemImage: "calendar.day.timeline.left") }
-            AnalysisView()
-                .tabItem { Label("분석", systemImage: "chart.bar.xaxis") }
+                .tabItem { Label("주간", systemImage: "calendar.day.timeline.left") }
             ChatbotView()
                 .tabItem { Label("대화", systemImage: "bubble.left.and.bubble.right") }
-            ProductsTabView()
-                .tabItem { Label("상품", systemImage: "creditcard") }
-            SettingsView()
-                .tabItem { Label("설정", systemImage: "gearshape") }
+            AnalysisView()
+                .tabItem { Label("분석", systemImage: "chart.bar.xaxis") }
         }
         .tint(KB.ink)
     }

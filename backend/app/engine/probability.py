@@ -1,7 +1,7 @@
 """적금 목표 달성 확률 — 몬테카를로 시뮬레이션.
 
 '이번 달 가변지출이 가처분 예산을 넘지 않을 확률' = 저축 목표를 지킬 확률.
-남은 지출 = 확정된 미래 일정 + 재량 지출(과거 패턴 기반 확률변수).
+남은 지출 = 확정된 미래 일정 + 재량 지출(캘린더 밖 지출 완충치).
 시드를 고정해 재현 가능(=평가 가능)하게 만든다.
 """
 from __future__ import annotations
@@ -14,8 +14,8 @@ from ..models import PlannedEvent, Profile
 # 소비 방향별 재량지출 배수(위험 성향).
 DIRECTION_DISCRETIONARY = {"reduce": 0.60, "maintain": 1.00, "increase": 1.35}
 
-DISCRETIONARY_DAILY = 5_500   # 과거 3개월 소액 재량지출 일평균(엔진 추정)
-SPEND_SIGMA = 80_000          # 월 가변지출의 표준편차(과거 변동성)
+DISCRETIONARY_DAILY = 7_500   # 일정 밖 소액 지출에 둔 하루 완충액(데모 가정)
+SPEND_SIGMA = 100_000         # 일정별 예상액의 불확실성을 반영한 표준편차
 SIM_N = 20_000
 SIM_SEED = 42                 # 재현성 고정
 

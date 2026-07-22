@@ -16,7 +16,7 @@ def extract_amounts(text: str) -> set[int]:
     # "52,000원" / "52000원" → 52,000
     for m in re.finditer(r"(\d[\d,]{2,})\s*원", text):
         nums.add(int(m.group(1).replace(",", "")))
-    # "78%" → 78
+    # "75%" → 75
     for m in re.finditer(r"(\d{1,3})\s*%", text):
         nums.add(int(m.group(1)))
     return nums

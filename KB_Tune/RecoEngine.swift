@@ -60,14 +60,24 @@ struct SavingsEval: Identifiable {
 
 enum RecoEngine {
 
-    /// 실적 인정 예상액: 최근 3개월 월평균 소비(할인매출 제외 전 보수 추정)
+    /// 현재는 7월 캘린더 예상액이다. 실제 카드 전월실적과는 구분해 표시한다.
     static func recognizedSpend(_ m: AppModel) -> Int { m.spendMonthly }
 
     // MARK: 카드
 
     static func evalCards(_ m: AppModel) -> CardReco {
         let recognized = recognizedSpend(m)
-        let byName = Dictionary(uniqueKeysWithValues: m.spendProfile.map { ($0.name, $0.monthly) })
+        let schedule = Dictionary(uniqueKeysWithValues: m.spendProfile.map { ($0.name, $0.monthly) })
+        // 상품 규칙의 기존 카테고리명에 7월 일정비를 대응한다.
+        let byName: [String: Int] = [
+            "외식": (schedule["모임·식사"] ?? 0) + (schedule["데이트·가족"] ?? 0),
+            "술·모임": schedule["모임·식사"] ?? 0,
+            "쇼핑": (schedule["경조사·쇼핑"] ?? 0) + (schedule["건강·관리"] ?? 0),
+            "카페": schedule["학업·연구"] ?? 0,
+            "교통": schedule["출근 점심·교통"] ?? 0,
+            "배달": 0,
+            "구독": 0,
+        ]
 
         var ranked: [CardEval] = []
         var excluded: [CardEval] = []
@@ -76,7 +86,7 @@ enum RecoEngine {
             var e = CardEval(product: card)
 
             // 하드필터 1: 연령
-            if let range = card.ageRange, !range.contains(m.userAge) {
+            if let range = card.ageRange, let age = m.userAge, !range.contains(age) {
                 e.excludeReason = "만 \(range.lowerBound)~\(range.upperBound)세 전용 카드예요."
                 excluded.append(e); continue
             }
@@ -97,6 +107,9 @@ enum RecoEngine {
             var bestSum = -1
             var bestPack: String? = nil
             var unmet: [String] = []
+            if let range = card.ageRange, m.userAge == nil {
+                unmet.append("신청 전 만 \(range.lowerBound)~\(range.upperBound)세 조건을 확인해 주세요.")
+            }
 
             for pack in card.packs {
                 var lines: [(label: String, amount: Int)] = []
@@ -128,6 +141,7 @@ enum RecoEngine {
             e.estMonthly = max(bestSum, 0)
             e.netMonthly = e.estMonthly - card.annualFee / 12
             e.unmet = unmet
+            e.unmet.append("혜택 계산은 7월 캘린더 예상액 기준이며 실제 전월실적은 카드 내역에서 확인해야 해요.")
 
             if card.kind == .credit {
                 e.unmet.append("신용카드 발급은 KB국민카드 심사 기준이 적용돼요 — 발급 가능을 단정하지 않아요.")
@@ -136,12 +150,15 @@ enum RecoEngine {
             // 개인화 문구: 실제 혜택을 만든 영역 할인의 카테고리만(전 카테고리 기본할인 제외).
             // 금액은 화면에서 순혜택 숫자로 이미 보여주므로 문구에서 반복하지 않는다.
             let focused = Set(card.packs.flatMap(\.rules).filter { !$0.isBase }.flatMap(\.categories))
-            let tops = m.spendProfile.filter { focused.contains($0.name) }.prefix(3)
+            let tops = byName
+                .filter { focused.contains($0.key) && $0.value > 0 }
+                .sorted { $0.value > $1.value }
+                .prefix(3)
             if tops.isEmpty {
                 e.fitCopy = card.appCopy
             } else {
-                let detail = tops.map { "\($0.name) 월 \(formatWon($0.monthly))" }.joined(separator: " · ")
-                e.fitCopy = "\(detail) — 회원님이 자주 쓰는 영역이라 추가 소비 없이 혜택이 그대로 붙어요."
+                let detail = tops.map { "\($0.key) 월 \(formatWon($0.value))" }.joined(separator: " · ")
+                e.fitCopy = "7월 일정의 \(detail) 예상액에 혜택을 적용한 결과예요."
             }
 
             ranked.append(e)
@@ -178,7 +195,7 @@ enum RecoEngine {
             case "my-made":
                 var e = SavingsEval(
                     product: p, verdict: .pick,
-                    fitCopy: "월 수입 \(formatWon(m.monthlyIncome))에서 소비 \(formatWon(m.spendMonthly))을 빼면 약 \(formatWon(free))이 남아요. 목표 저축 \(formatWon(goal))은 현금 흐름을 침범하지 않아 월급날 자동저축으로 굳히기 좋아요.")
+                    fitCopy: "월 수입 \(formatWon(m.monthlyIncome))에서 7월 일정 예상액 \(formatWon(m.spendMonthly))을 빼면 고정비 차감 전 \(formatWon(free))이 남아요. 월 \(formatWon(goal)) 자동저축 전 고정비를 한 번 더 확인해 주세요.")
                 e.monthlyDeposit = goal
                 e.months = 12
                 e.estInterest = savingsInterest(monthly: goal, months: 12, ratePct: p.expectedRate)
@@ -200,14 +217,14 @@ enum RecoEngine {
             case "youth-future":
                 var e = SavingsEval(
                     product: p, verdict: .statusBlocked,
-                    fitCopy: "만 19~34세 요건은 맞지만 지금은 신청기간이 닫혀 있어요. 다음 차수가 열리면 소득·가구 요건 자격조회부터 진행해요.")
-                e.unmet = [p.statusNote ?? "신청 상태 확인 필요"]
+                    fitCopy: "나이를 입력하지 않아 연령 요건을 아직 확인하지 못했어요. 신청기간이 열리면 연령·소득·가구 요건부터 확인해 주세요.")
+                e.unmet = ["만 19~34세 여부 확인", p.statusNote ?? "신청 상태 확인 필요"]
                 return e
 
             case "dream":
                 var e = SavingsEval(
                     product: p, verdict: .conditional,
-                    fitCopy: "실제 주택청약 의사가 있고 2년 이상 유지할 수 있을 때만 맞는 상품이에요. 금리보다 청약 자격이 본질이에요.")
+                    fitCopy: "실제 주택청약 의사가 있고 2년 이상 유지할 수 있을 때만 맞는 상품이에요. 금리보다 청약 자격부터 확인해 주세요.")
                 e.unmet = ["무주택 여부 확인", "실제 청약 의사 확인", "예금자보호 대상이 아닌 점 이해"]
                 return e
 

@@ -34,7 +34,7 @@ app/
 │  ├─ golden.py       #   엔진 정합성 골든 케이스
 │  ├─ groundedness.py #   LLM이 엔진 숫자만 쓰는지 검사
 │  └─ runner.py       #   /api/eval
-├─ data.py            # 데모 페르소나(김민지 22, 대학생)
+├─ data.py            # 성제의 2026년 7월 캘린더 기반 데모 입력
 ├─ models.py          # Pydantic 스키마
 └─ main.py            # FastAPI 라우트
 tests/test_engine.py  # pytest 회귀 테스트
@@ -65,7 +65,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 | POST | `/api/coach` | 엔진 계획 + 접지된 LLM 코칭 |
 | POST | `/api/chat` | 계획을 바꾸는 대화(텍스트 스트리밍) |
 | GET | `/api/eval` | 평가 리포트(골든 + groundedness) |
-| POST | `/api/estimate` | **① 일정 제목 → 예상 지출** (과거 이력 개인화 + 엔진 클램프) |
+| POST | `/api/estimate` | **① 일정 제목 → 예상 지출** (캘린더 유형 개인화 + 엔진 범위 보정) |
 | POST | `/api/extract` | **② 캡처 → 거래 추출** (`text`=기기 OCR·키 불필요 / `image_base64`=Claude 비전) |
 | POST | `/api/categorize` | **③ 가맹점 → 카테고리** (규칙 사전 → 미스만 LLM, 집합 강제) |
 | POST | `/api/forecast` | **④ 다음 달 일정·지출 예측** (반복 패턴 탐지) |
@@ -74,19 +74,19 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 | 기능 | AI가 하는 일(비정형→정형) | 엔진이 하는 일(검증) |
 |---|---|---|
-| ① 예상 지출 | 제목의 의미 파악·세상 지식 추정 | 과거 분포로 클램프(2.5배 상한), 500원 단위 정리 |
+| ① 예상 지출 | 제목의 의미 파악·세상 지식 추정 | 같은 일정 유형 범위로 보정, 500원 단위 정리 |
 | ② 거래 추출 | 캡처에서 가맹점·금액 인식 | 금액 범위 검증, 잔액/합계 줄 제외, 카테고리 판정 |
 | ③ 분류 | 규칙이 놓친 가맹점 분류 | 허용 카테고리 집합 강제(계약 위반 값 폐기) |
 | ④ 예측 | (선택) 예측 설명 문장 | 반복 주기 탐지·월 합계 산출 전부 결정론 |
 
-**키가 없어도 4개 모두 동작한다** — 규칙 사전·과거 이력·패턴 탐지로 결정론 경로가 항상 존재.
+**키가 없어도 4개 모두 동작한다** — 규칙 사전·캘린더 유형·패턴 탐지로 결정론 경로가 항상 존재.
 
 예:
 ```bash
 curl -s localhost:8000/api/plan -X POST -H 'content-type: application/json' -d '{}' | python3 -m json.tool
 curl -s localhost:8000/api/eval | python3 -m json.tool
 curl -sN localhost:8000/api/chat -X POST -H 'content-type: application/json' \
-     -d '{"message":"금요일 2차 가도 돼?"}'
+     -d '{"message":"이번 주 출근비까지 빼면 얼마 남아?"}'
 ```
 
 ## 평가 / 테스트
@@ -96,15 +96,16 @@ curl -sN localhost:8000/api/chat -X POST -H 'content-type: application/json' \
 curl -s localhost:8000/api/eval
 ```
 
-데모 페르소나(김민지) 기준 엔진 출력(시드 고정 → 항상 동일):
+성제의 2026년 7월 캘린더 기준 엔진 출력(시드 고정 → 항상 동일):
 
 | 방향 | 이번 주 사용 가능액 | 목표 확률 |
 |---|---:|---:|
-| 줄이기 | 38,000원 | 86% |
-| 유지 | 52,000원 | 78% |
-| 늘리기 | 70,000원 | 69% |
+| 줄이기 | 47,720원 | 88% |
+| 유지 | 62,000원 | 81% |
+| 늘리기 | 80,360원 | 74% |
 
-위험: `생일파티 2차 40,000원` → 사용가능액 52,000→12,000, 확률 78%→60% (조정안 3종 제시).
+금액은 2026-07-22 본인 확인값 기준. 7월 일정비는 801,000원(전 항목 확정 — 범위 없음)이고,
+출근은 점심 무비용 + 교통·유류 고정비 반영으로 일정 비용 0원이다.
 
 ## Render 배포
 

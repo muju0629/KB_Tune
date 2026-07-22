@@ -150,13 +150,16 @@ struct CardRecommendPage: View {
     private func spendSummary(_ reco: CardReco) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                Text("최근 3개월 월 평균").font(.system(size: 12)).foregroundStyle(KB.muted)
+                Text("7월 일정비 예상").font(.system(size: 12)).foregroundStyle(KB.muted)
                 Spacer()
                 Text(model.analysisPeriod).font(.system(size: 11)).foregroundStyle(KB.muted)
             }
             Text(formatWon(model.spendMonthly))
                 .font(.system(size: 24, weight: .bold)).foregroundStyle(KB.ink)
             TierBar(recognized: reco.recognizedSpend, tiers: [200_000, 300_000, 400_000])
+            Text("카드 전월실적이 아니라 캘린더 일정비예요. 실제 실적은 카드 내역에서 확인해 주세요.")
+                .font(.system(size: 11)).foregroundStyle(KB.muted)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(16)
         .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -188,15 +191,19 @@ struct TierBar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             GeometryReader { geo in
+                let ratio = min(1, max(0, CGFloat(Double(recognized) / maxScale)))
+                let fillWidth = recognized > 0 ? max(10, geo.size.width * ratio) : 0
                 ZStack(alignment: .leading) {
                     Capsule().fill(KB.line.opacity(0.5)).frame(height: 8)
                     Capsule().fill(KB.yellow)
-                        .frame(width: max(10, geo.size.width * CGFloat(Double(recognized) / maxScale)), height: 8)
+                        .frame(width: min(geo.size.width, fillWidth), height: 8)
                 }
+                .frame(width: geo.size.width, alignment: .leading)
+                .clipped()
             }
             .frame(height: 8)
             HStack(spacing: 6) {
-                Text("전월실적").font(.system(size: 11)).foregroundStyle(KB.muted)
+                Text("캘린더 기준").font(.system(size: 11)).foregroundStyle(KB.muted)
                 ForEach(tiers, id: \.self) { t in
                     let met = recognized >= t
                     HStack(spacing: 2) {
@@ -492,18 +499,23 @@ struct SavingsRecommendPage: View {
     }
 
     private var cashflowSummary: some View {
-        let free = model.monthlyIncome - model.spendMonthly
+        // 고정비를 빼지 않으면 '여유'가 과장된다 — 확인된 고정비를 한 칸으로 노출한다.
+        let free = model.monthlyIncome - BudgetEngine.fixed - model.spendMonthly
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 0) {
                 cashCol("수입", model.monthlyIncome, KB.ink)
-                Text("−").font(.system(size: 14)).foregroundStyle(KB.muted).frame(width: 20)
-                cashCol("소비", model.spendMonthly, KB.ink)
-                Text("=").font(.system(size: 14)).foregroundStyle(KB.muted).frame(width: 20)
+                Text("−").font(.system(size: 13)).foregroundStyle(KB.muted).frame(width: 14)
+                cashCol("고정비", BudgetEngine.fixed, KB.ink)
+                Text("−").font(.system(size: 13)).foregroundStyle(KB.muted).frame(width: 14)
+                cashCol("일정비", model.spendMonthly, KB.ink)
+                Text("=").font(.system(size: 13)).foregroundStyle(KB.muted).frame(width: 14)
                 cashCol("여유", free, KB.green)
             }
             HStack(spacing: 6) {
                 Image(systemName: "checkmark.seal.fill").font(.system(size: 12)).foregroundStyle(KB.green)
-                Text("목표 저축 \(formatWon(model.savingsGoal))은 여유 안이라 현금 흐름을 침범하지 않아요.")
+                Text(model.savingsGoal <= free
+                     ? "목표 저축 \(formatWon(model.savingsGoal))은 여유 안이라 현금 흐름을 침범하지 않아요."
+                     : "목표 저축 \(formatWon(model.savingsGoal))은 여유 \(formatWon(free))보다 커요. 일정비를 줄이거나 목표를 낮춰야 지킬 수 있어요.")
                     .font(.system(size: 12)).foregroundStyle(KB.ink)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -516,7 +528,9 @@ struct SavingsRecommendPage: View {
     private func cashCol(_ label: String, _ value: Int, _ color: Color) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(label).font(.system(size: 11)).foregroundStyle(KB.muted)
+            // 7자리 금액이 3분할 폭을 넘겨 줄바꿈되지 않게 축소 허용
             Text(formatWon(value)).font(.system(size: 15, weight: .bold)).foregroundStyle(color)
+                .lineLimit(1).minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

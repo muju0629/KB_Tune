@@ -1,11 +1,11 @@
-"""AI 기능 ④ — 다음 달 일정·지출 예측.
+"""AI 기능 ④ — 7월 캘린더의 반복 일정으로 다음 달 지출을 예측한다.
 
 에이전트를 '물어보면 답하는' 것에서 '먼저 알려주는' 것으로 바꾸는 기능.
 패턴 탐지·금액 계산은 전부 결정론(검증 가능), 문장만 LLM이 다듬을 수 있다.
 
 설계 주의: 반복은 두 층위로 나타난다.
-  - 습관(카테고리): 카페는 매주 가지만 가맹점은 매번 다름 → 카테고리로 묶어야 주기가 보인다
-  - 고정(가맹점):   넷플릭스는 매월 같은 날 같은 금액 → 가맹점이 지배적이면 이름으로 특정
+  - 습관(카테고리): 출근·연구처럼 반복되는 일정은 카테고리로 묶어야 주기가 보인다
+  - 고정(일정명):   같은 제목이 반복되면 그 이름으로 특정한다
 따라서 카테고리로 묶어 주기를 잡고, 한 가맹점이 지배적이면 그 이름을 쓴다.
 예상 금액은 '카테고리 월 합계 평균'이라 주기×평균 반올림 오차가 없다.
 """
@@ -16,7 +16,7 @@ from statistics import mean, pstdev
 
 from ..models import ForecastResult, PredictedEvent, RecurringPattern, Transaction
 
-MONTHS = 3               # 히스토리 개월 수
+MONTHS = 1               # 현재 제공된 캘린더 범위(2026년 7월)
 DOMINANT_RATIO = 0.66    # 한 가맹점이 이 비율 이상이면 '고정 지출'로 이름 붙임
 
 
@@ -44,7 +44,7 @@ def detect_patterns(txns: list[Transaction]) -> list[RecurringPattern]:
             continue
         cadence, _times = res
 
-        # 지배적 가맹점이 있으면(예: 넷플릭스) 고정 지출로 이름을 붙인다
+        # 지배적 일정명이 있으면(예: 인포스탁 인턴) 그 이름을 쓴다
         counts = Counter(t.merchant for t in items if t.merchant)
         merchant = None
         if counts:
@@ -95,7 +95,7 @@ def forecast_next_month(txns: list[Transaction], disposable_month: int,
         by_category[p.category] = monthly
 
         cadence_ko = {"weekly": "매주", "biweekly": "격주", "monthly": "매월"}[p.cadence]
-        reason = f"최근 3개월간 {p.occurrences}회({cadence_ko}) 반복됐어요"
+        reason = f"7월 캘린더에서 {p.occurrences}회({cadence_ko}) 확인됐어요"
         if p.cadence == "monthly":
             reason += f" · 보통 {p.typical_day}일"
         reason += "."

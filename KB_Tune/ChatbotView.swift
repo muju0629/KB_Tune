@@ -17,13 +17,14 @@ import SwiftUI
 struct ChatMessage: Identifiable {
     let id = UUID()
     enum Role { case user, agent }
+    enum Actions { case addEvent }
     let role: Role
     var conclusion: String                 // 결론(본문)
     var reason: String? = nil              // 이유
     var impact: String? = nil              // 영향(전/후)
     var basis: String? = nil               // 계산 근거(접기)
     var preview: EventPreview? = nil       // 대화 속 일정 미리보기
-    var showActions: Bool = false
+    var actions: Actions? = nil
     var isStream: Bool = false             // 백엔드 스트리밍 응답(자유 문장)
 }
 
@@ -42,9 +43,16 @@ struct ChatbotView: View {
     @State private var messages: [ChatMessage] = []
     @State private var input = ""
     @State private var isThinking = false
+    @State private var thinkingStep = 0
     @State private var toast: String?
+    @FocusState private var inputFocused: Bool
 
-    private let suggestions = ["금요일 2차 가도 돼?", "배달비 왜 늘었어?", "적금 목표 다시 맞춰줘"]
+    private let suggestions = ["이번 주 얼마까지 써도 돼?", "적금 목표 지킬 수 있어?", "다음 주 데이트 예산 잡아줘"]
+    private let thinkingSteps = [
+        "질문에 맞는 일정을 찾고 있어요",
+        "예상 지출을 더하고 있어요",
+        "남은 금액을 계산하고 있어요",
+    ]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -87,14 +95,27 @@ struct ChatbotView: View {
     // MARK: 컨텍스트 바
 
     private var contextBar: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "sparkles").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.ink)
-            Text("이번 주 사용 가능액 \(formatWon(model.weeklyBudget)) · 목표 확률 \(model.probability)%")
-                .font(.system(size: 12.5, weight: .medium)).foregroundStyle(KB.ink)
+        HStack(spacing: 10) {
+            Image("AgentMascot")
+                .resizable()
+                .scaledToFill()
+                .frame(width: 36, height: 36)
+                .clipShape(Circle())
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("계획 도우미")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(KB.ink)
+                Text("이번 주 약 \(formatWon(roundedWeeklyBudget)) · 목표 \(model.probability)%")
+                    .font(.caption)
+                    .foregroundStyle(KB.muted)
+            }
             Spacer()
         }
-        .padding(.horizontal, 18).padding(.vertical, 12)
+        .padding(.horizontal, 18).padding(.vertical, 10)
         .background(KB.yellowSoft)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("계획 도우미. 이번 주 사용 가능액 약 \(formatWon(roundedWeeklyBudget)), 목표 확률 \(model.probability)%")
     }
 
     // MARK: 말풍선
@@ -110,13 +131,9 @@ struct ChatbotView: View {
                     .background(KB.yellow, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
         } else {
-            HStack(alignment: .top, spacing: 8) {
-                ZStack {
-                    Circle().fill(KB.yellow).frame(width: 30, height: 30)
-                    Image(systemName: "sparkles").font(.system(size: 13, weight: .medium)).foregroundStyle(KB.ink)
-                }
+            HStack(alignment: .top, spacing: 0) {
                 agentCard(msg)
-                Spacer(minLength: 24)
+                Spacer(minLength: 44)
             }
         }
     }
@@ -155,13 +172,7 @@ struct ChatbotView: View {
                 .tint(KB.muted)
             }
 
-            if msg.showActions {
-                HStack(spacing: 8) {
-                    smallAction("일정 추가", filled: true) { flash("일정을 계획에 추가했어요.") }
-                    smallAction("금액 바꾸기", filled: false) { flash("금액을 조정할 수 있어요.") }
-                }
-                .padding(.top, 2)
-            }
+            actionButtons(for: msg.actions)
         }
         .padding(14)
         .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -193,22 +204,47 @@ struct ChatbotView: View {
         .buttonStyle(.plain)
     }
 
-    private var typingBubble: some View {
-        HStack(alignment: .top, spacing: 8) {
-            ZStack {
-                Circle().fill(KB.yellow).frame(width: 30, height: 30)
-                Image(systemName: "sparkles").font(.system(size: 13)).foregroundStyle(KB.ink)
-            }
-            HStack(spacing: 4) {
-                ForEach(0..<3, id: \.self) { _ in
-                    Circle().fill(KB.muted).frame(width: 6, height: 6)
+    @ViewBuilder
+    private func actionButtons(for actions: ChatMessage.Actions?) -> some View {
+        switch actions {
+        case .addEvent:
+            HStack(spacing: 8) {
+                // 8월은 아직 계획 모델 밖 — 실제로 반영되지 않으니 문구도 그렇게 말한다.
+                smallAction("예산 초안으로 기억", filled: true) { flash("8월 2일 데이트를 100,000원 초안으로 기억해둘게요.") }
+                smallAction("금액 바꾸기", filled: false) {
+                    input = "200일 데이트 예산을 "
+                    inputFocused = true
                 }
             }
-            .padding(.horizontal, 14).padding(.vertical, 14)
+            .padding(.top, 2)
+        case nil:
+            EmptyView()
+        }
+    }
+
+    private var typingBubble: some View {
+        HStack(alignment: .top, spacing: 0) {
+            HStack(spacing: 10) {
+                ProgressView()
+                    .tint(KB.ink)
+                    .controlSize(.small)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(thinkingSteps[min(thinkingStep, thinkingSteps.count - 1)])
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(KB.ink)
+                        .accessibilityIdentifier("chat-thinking")
+                    Text("캘린더와 예산을 맞춰 보는 중이에요")
+                        .font(.caption)
+                        .foregroundStyle(KB.muted)
+                }
+            }
+            .padding(.horizontal, 14).padding(.vertical, 12)
             .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KB.line, lineWidth: 1))
-            Spacer()
+            Spacer(minLength: 44)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(thinkingSteps[min(thinkingStep, thinkingSteps.count - 1)])
     }
 
     // MARK: 추천 질문 칩
@@ -224,6 +260,7 @@ struct ChatbotView: View {
                             .overlay(Capsule().stroke(KB.line, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
+                    .disabled(isThinking)
                 }
             }
             .padding(.horizontal, 18)
@@ -235,13 +272,15 @@ struct ChatbotView: View {
 
     private var inputBar: some View {
         HStack(spacing: 10) {
-            TextField("계획에 대해 물어보세요", text: $input)
+            TextField("일정이나 금액을 물어보세요", text: $input)
                 .font(.system(size: 14))
                 .padding(.horizontal, 16).padding(.vertical, 12)
                 .background(.white, in: Capsule())
                 .overlay(Capsule().stroke(KB.line, lineWidth: 1))
                 .submitLabel(.send)
                 .onSubmit { send(input) }
+                .focused($inputFocused)
+                .disabled(isThinking)
 
             Button {
                 send(input)
@@ -253,6 +292,7 @@ struct ChatbotView: View {
             }
             .disabled(input.trimmingCharacters(in: .whitespaces).isEmpty)
             .opacity(input.trimmingCharacters(in: .whitespaces).isEmpty ? 0.5 : 1)
+            .accessibilityLabel("질문 보내기")
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
@@ -265,9 +305,8 @@ struct ChatbotView: View {
         guard messages.isEmpty else { return }
         messages.append(ChatMessage(
             role: .agent,
-            conclusion: "안녕하세요! 이번 주 계획을 함께 조정해드릴게요.",
-            reason: "약속을 잡아도 되는지, 무엇을 옮기면 좋은지 편하게 물어보세요.",
-            basis: "최근 3개월(\(model.analysisPeriod)) 소비와 ‘\(model.protectedSummary)’를 기준으로 계산해요."
+            conclusion: "성제님, 이번 주 예산부터 볼까요?",
+            reason: "일정 이름을 말해 주면 예상 금액과 남는 돈을 같이 계산해요."
         ))
     }
 
@@ -276,31 +315,41 @@ struct ChatbotView: View {
         guard !trimmed.isEmpty, !isThinking else { return }
         messages.append(ChatMessage(role: .user, conclusion: trimmed))
         input = ""
+        inputFocused = false
+        thinkingStep = 0
         isThinking = true
 
-        // 1순위: 백엔드 스트리밍(Claude). 실패 시 로컬 폴백.
         Task {
-            var streamIndex: Int? = nil
-            var streamed = ""
-            let ok = await agent.chatStream(trimmed, direction: model.direction) { delta in
-                if streamIndex == nil {
-                    isThinking = false
-                    messages.append(ChatMessage(role: .agent, conclusion: "", isStream: true))
-                    streamIndex = messages.count - 1
-                }
-                streamed += delta
-                if let i = streamIndex, i < messages.count {
-                    messages[i].conclusion = streamed
-                }
+            let minimumDelay = Task {
+                try? await Task.sleep(for: .milliseconds(1_600))
             }
-            if ok, let i = streamIndex, i < messages.count {
-                messages[i].basis = "Claude가 엔진(BudgetEngine) 계산값을 근거로 답했어요."
-            } else if !ok {
-                // 백엔드/키 없음 → 로컬 엔진 + 스크립트 폴백
-                isThinking = false
-                if streamIndex == nil {
-                    messages.append(agentReply(to: trimmed))
-                }
+            let stageUpdates = Task {
+                try? await Task.sleep(for: .milliseconds(450))
+                guard !Task.isCancelled else { return }
+                thinkingStep = 1
+                try? await Task.sleep(for: .milliseconds(550))
+                guard !Task.isCancelled else { return }
+                thinkingStep = 2
+            }
+
+            var streamed = ""
+            let ok = await agent.chatStream(trimmed, model: model) { delta in
+                streamed += delta
+            }
+
+            _ = await minimumDelay.result
+            stageUpdates.cancel()
+            isThinking = false
+
+            if ok, !streamed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                messages.append(ChatMessage(
+                    role: .agent,
+                    conclusion: streamed.trimmingCharacters(in: .whitespacesAndNewlines),
+                    basis: "2026년 7월 캘린더 · 입력한 월수입과 저축 목표",
+                    isStream: true
+                ))
+            } else {
+                messages.append(agentReply(to: trimmed))
             }
         }
     }
@@ -319,60 +368,100 @@ struct ChatbotView: View {
         }
     }
 
-    // MARK: 로컬 스크립트 에이전트 (⇦ 교체 지점: 백엔드/Claude)
+    private var roundedWeeklyBudget: Int {
+        max(0, Int((Double(model.weeklyBudget) / 10_000).rounded()) * 10_000)
+    }
+
+    private func rangeText(low: Int, high: Int) -> String {
+        formatWonRange(low, high)
+    }
+
+    // MARK: 로컬 스크립트 에이전트 (백엔드가 없을 때)
 
     private func agentReply(to text: String) -> ChatMessage {
         let q = text.replacingOccurrences(of: " ", with: "")
 
-        if q.contains("금요일") || q.contains("2차") || q.contains("생일") {
+        if q.contains("출근") || q.contains("인턴") || q.contains("점심") || q.contains("교통") {
             return ChatMessage(
                 role: .agent,
-                conclusion: "금요일 2차는 조정을 추천해요.",
-                reason: "‘생일파티 2차’ 40,000원이 이번 주 예산을 36,000원 넘겨요. 1차까지만 하거나 다음 주로 옮기면 계획을 지킬 수 있어요.",
-                impact: "조정 시 52,000원 · 78% 유지 — 그대로 가면 목표 확률 61%",
-                basis: "이번 주 확정 지출(팀플·동아리 모임·영화)과 남은 예산 기준. 확률은 현재 계획 기준 시뮬레이션이에요.",
-                showActions: true
+                conclusion: "출근 비용은 따로 잡지 않았어요.",
+                reason: "점심은 돈이 들지 않고, 교통비와 유류비는 월 고정비 210,000원에 이미 들어 있어요.",
+                impact: "출근 22일 × 0원 · 일정비 합계에 영향 없음",
+                basis: "확인한 고정비: 교통 150,000원 + 유류 60,000원"
             )
         }
 
-        if q.contains("모임") || q.contains("더써") || q.contains("더가") || q.contains("일요일") {
+        if q.contains("200일") || q.contains("데이트") || q.contains("다음주") || q.contains("8월2일") {
             return ChatMessage(
                 role: .agent,
-                conclusion: "예상 20,000원까지는 괜찮아요.",
-                reason: "최근 3개월 모임 지출과 이번 주 일정을 반영했어요. 지키기로 한 ‘모임’은 그대로 두었어요.",
-                impact: "사용 가능액 52,000원 → 32,000원 · 목표 확률 78% → 76%",
-                basis: "이번 주 확정 지출(팀플·동아리 모임·영화)과 남은 예산 기준. 확률은 현재 계획 기준 시뮬레이션이에요.",
-                preview: EventPreview(title: "일요일 모임", amount: 20_000, day: "7월 26일 일요일"),
-                showActions: true
+                conclusion: "8월 2일 200일 데이트는 100,000원을 먼저 빼둘게요.",
+                reason: "아직 금액이 없어서 식사·카페·이동을 포함한 예산 초안으로 잡았어요.",
+                impact: "7월 계산에는 넣지 않고, 8월 예산에서 따로 확보",
+                basis: "8월 2일 캘린더의 ‘200일’·‘데이트’ 일정",
+                preview: EventPreview(title: "200일 데이트", amount: 100_000, day: "8월 2일 일요일"),
+                actions: .addEvent
             )
         }
 
-        if q.contains("외식") || q.contains("배달") || q.contains("왜늘") {
+        // 과거 이력에 같은 일정이 있으면 주기·평균으로 답한다.
+        if let p = SpendHistory.patterns.first(where: {
+            q.contains($0.key.replacingOccurrences(of: " ", with: ""))
+        }) {
             return ChatMessage(
                 role: .agent,
-                conclusion: "시험기간에 배달이 4회 늘어서예요.",
-                reason: "4~6월 평균 대비 7월 외식·배달 횟수가 늘었어요. 대부분 시험기간 야식과 팀플 후 식사예요.",
-                impact: "외식·배달 카테고리 월 예상 +32,000원",
-                basis: "카테고리별 거래 횟수·금액 집계 기준(2026.04~06 대비 07)."
+                conclusion: "\(p.key)는 \(formatWon(p.avgAmount)) 정도로 보고 있어요.",
+                reason: SpendHistory.reason(for: p),
+                impact: "최근 \(p.records.count)번 평균 · \(formatWon(p.low))~\(formatWon(p.high))",
+                basis: SpendHistory.recordSummary(p)
             )
         }
 
-        if q.contains("적금") || q.contains("목표") {
+        if q.contains("레이저") || q.contains("제모") {
             return ChatMessage(
                 role: .agent,
-                conclusion: "지금 계획대로면 목표 확률 78%예요.",
-                reason: "이번 달 방향 ‘\(model.direction.label)’ 기준이에요. 금요일 2차만 조정하면 확률을 지킬 수 있어요.",
-                impact: "조정 시 78% 유지 · 그대로 두면 61%",
-                basis: "월 저축 목표 \(formatWon(model.savingsGoal))와 남은 변동지출 기준 시뮬레이션.",
-                showActions: true
+                conclusion: "레이저 제모는 50,000원으로 잡았어요.",
+                reason: "당일 결제로 확인돼서 범위 없이 확정 금액으로 반영했어요.",
+                impact: "이번 주 일정비 \(rangeText(low: model.plannedSpendLow, high: model.plannedSpendHigh))",
+                basis: "7월 20일 캘린더 일정 · 확인된 금액"
+            )
+        }
+
+        if q.contains("가족") {
+            return ChatMessage(
+                role: .agent,
+                conclusion: "가족 일정은 줄이지 않는 항목으로 두었어요.",
+                reason: "7월 12일 가족 식사는 20,000원으로 반영했고, 다른 예산을 계산할 때 먼저 남겨둬요.",
+                impact: "더 필요한 소비 · 가족과 데이트",
+                basis: "성제님이 더 필요한 소비로 골라둔 일정이에요"
+            )
+        }
+
+        if q.contains("적금") || q.contains("저축") || q.contains("목표") {
+            return ChatMessage(
+                role: .agent,
+                conclusion: "현재 계획이면 \(formatWon(model.savingsGoal)) 저축 목표를 유지할 확률은 \(model.probability)%예요.",
+                reason: "7월 일정비와 확인된 고정비를 먼저 반영했어요.",
+                impact: "이번 주 추가 사용 가능액 약 \(formatWon(roundedWeeklyBudget))",
+                basis: "월수입 \(formatWon(model.monthlyIncome)) · 7월 캘린더 · 저축 목표"
+            )
+        }
+
+        if q.contains("이번주") || q.contains("얼마") || q.contains("더써") || q.contains("더쓸") || q.contains("괜찮") {
+            return ChatMessage(
+                role: .agent,
+                conclusion: "이번 주에는 약 \(formatWon(roundedWeeklyBudget))을 더 써도 돼요.",
+                reason: "7월 22일 기준 이번 주 남은 확정 일정은 ‘와드’ 40,000원뿐이에요. 출근과 회의는 비용이 들지 않아요.",
+                impact: "이번 주 일정비 \(rangeText(low: model.plannedSpendLow, high: model.plannedSpendHigh)) 예상",
+                basis: "월수입 \(formatWon(model.monthlyIncome)) · 저축 \(formatWon(model.savingsGoal)) · 확인된 일정 금액 기준"
             )
         }
 
         return ChatMessage(
             role: .agent,
-            conclusion: "이번 주는 \(formatWon(model.weeklyBudget))까지 쓸 수 있어요.",
-            reason: "지키기로 한 소비는 유지한 채 계산했어요. 특정 일정이나 금액을 물어보면 더 정확히 알려드릴게요.",
-            basis: "최근 3개월(\(model.analysisPeriod)) 소비와 이번 주 확정 지출 기준."
+            conclusion: "이번 주에는 약 \(formatWon(roundedWeeklyBudget))을 더 쓸 수 있어요.",
+            reason: "어떤 일정인지 알려주면 그 비용까지 넣어 다시 계산할게요.",
+            impact: "현재 일정비 \(rangeText(low: model.plannedSpendLow, high: model.plannedSpendHigh)) 예상",
+            basis: "2026년 7월 캘린더 · 입력한 월수입과 저축 목표"
         )
     }
 }

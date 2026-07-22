@@ -2,20 +2,16 @@
 //  SettingsView.swift
 //  KB_Tune
 //
-//  설정 탭. 프로필 + 내 계획(수입·저축·방향 편집) + 지키고 싶은 소비 + 앱 정보.
+//  설정 탭. 프로필 + 내 계획(수입·저축·방향 편집) + 나한테 더 필요한 소비 + 앱 정보.
 //
 
 import SwiftUI
-import UIKit
 
 struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
-    @StateObject private var calendar = CalendarStore()
 
     enum EditField: Identifiable { case income, savings; var id: Int { hashValue } }
     @State private var editing: EditField?
-    @State private var demoStatus: String?
-    @State private var isSeeding = false
 
     private var savingPct: Int {
         model.monthlyIncome > 0
@@ -30,7 +26,7 @@ struct SettingsView: View {
                     profileCard
                     planSection
                     keepsSection
-                    demoSection
+                    calendarBasisSection
                     infoSection
                 }
                 .padding(20)
@@ -53,7 +49,7 @@ struct SettingsView: View {
             }
             VStack(alignment: .leading, spacing: 3) {
                 Text("\(model.userName)님").font(.system(size: 18, weight: .bold)).foregroundStyle(KB.ink)
-                Text("만 \(model.userAge)세 · 대학생 · 카페 알바")
+                Text(model.userRole)
                     .font(.system(size: 13)).foregroundStyle(KB.muted)
             }
             Spacer()
@@ -68,7 +64,7 @@ struct SettingsView: View {
     private var planSection: some View {
         section("내 계획") {
             settingRow(icon: "banknote", title: "월 수입",
-                       value: formatWon(model.monthlyIncome)) { editing = .income }
+                       value: formatWon(model.monthlyIncome), sub: "기본값 · 직접 확인 필요") { editing = .income }
             rowDivider
             settingRow(icon: "target", title: "월 저축 목표",
                        value: formatWon(model.savingsGoal), sub: "수입의 \(savingPct)%") { editing = .savings }
@@ -100,125 +96,47 @@ struct SettingsView: View {
         .sensoryFeedback(.selection, trigger: model.direction)
     }
 
-    // MARK: 지키고 싶은 소비
+    // MARK: 나한테 더 필요한 소비
 
     private var keepsSection: some View {
-        let selected = keepCandidates.filter { model.hobbies.contains($0.tag) }
-        return VStack(alignment: .leading, spacing: 10) {
-            Text("지키고 싶은 소비").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
-            if selected.isEmpty {
-                Text("아직 선택한 항목이 없어요.").font(.system(size: 13)).foregroundStyle(KB.muted)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(16)
-                    .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
-            } else {
-                let columns = [GridItem(.adaptive(minimum: 96), spacing: 8)]
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
-                    ForEach(selected, id: \.tag) { item in
-                        HStack(spacing: 6) {
-                            Image(systemName: item.symbol).font(.system(size: 13))
-                            Text(item.label).font(.system(size: 13, weight: .medium))
-                        }
-                        .foregroundStyle(KB.ink)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(KB.yellowSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(KB.yellow, lineWidth: 1))
-                    }
-                }
-            }
-            Text("‘\(model.protectedSummary)’를 기준으로 계획을 조정해요.")
+        VStack(alignment: .leading, spacing: 10) {
+            Text("나한테 더 필요한 소비").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+            FlowChips(items: keepCandidates.map { (tag: $0.tag, label: $0.label, symbol: $0.symbol) },
+                      selected: $model.hobbies)
+            Text("예산을 조정할 때 \(model.protectedList) 소비는 줄이지 않고 남겨둬요. 탭해서 바로 바꿀 수 있어요.")
                 .font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    // MARK: 데모 (기기 캘린더에 모의 일정 심기)
+    // MARK: 계산 기준
 
-    private var demoSection: some View {
+    private var calendarBasisSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("데모").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+            Text("계산 기준").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
             VStack(spacing: 0) {
-                Button { seedDemo() } label: {
-                    HStack(spacing: 12) {
-                        rowIcon("calendar.badge.plus")
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("기기 캘린더에 모의 일정 만들기")
-                                .font(.system(size: 14.5)).foregroundStyle(KB.ink)
-                            Text("아이폰 기본 캘린더에 5건 추가돼요")
-                                .font(.system(size: 11.5)).foregroundStyle(KB.muted)
-                        }
-                        Spacer()
-                        if isSeeding { ProgressView().tint(KB.muted) }
-                        else { Image(systemName: "chevron.right").font(.system(size: 12)).foregroundStyle(KB.muted) }
-                    }
-                    .padding(.horizontal, 16).padding(.vertical, 14)
-                }
-                .buttonStyle(.plain)
-                .disabled(isSeeding)
-
+                basisRow(icon: "calendar", title: "2026년 7월 캘린더", detail: "31일 · 인턴 출근 22일")
                 rowDivider
-
-                Button {
-                    if let url = URL(string: "calshow://") { UIApplication.shared.open(url) }
-                } label: {
-                    HStack(spacing: 12) {
-                        rowIcon("calendar")
-                        Text("캘린더 앱에서 확인하기").font(.system(size: 14.5)).foregroundStyle(KB.ink)
-                        Spacer()
-                        Image(systemName: "arrow.up.right").font(.system(size: 12)).foregroundStyle(KB.muted)
-                    }
-                    .padding(.horizontal, 16).padding(.vertical, 14)
-                }
-                .buttonStyle(.plain)
-
-                rowDivider
-
-                Button {
-                    calendar.removeDemoEvents()
-                    demoStatus = "모의 일정을 지웠어요."
-                } label: {
-                    HStack(spacing: 12) {
-                        rowIcon("trash")
-                        Text("모의 일정 지우기").font(.system(size: 14.5)).foregroundStyle(KB.ink)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 16).padding(.vertical, 14)
-                }
-                .buttonStyle(.plain)
+                basisRow(icon: "wonsign.circle", title: "일정별 예상 금액", detail: "제목과 일정 유형으로 계산")
             }
             .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
 
-            if let demoStatus {
-                Text(demoStatus).font(.system(size: 11.5)).foregroundStyle(KB.green)
-            }
-            Text("데모 일정에만 숨은 표시를 넣어, 지울 때 회원님의 실제 일정은 건드리지 않아요.")
+            Text("실제 결제액이 아닌 예상값이에요. 수입과 일정 금액을 수정하면 계획도 다시 계산돼요.")
                 .font(.system(size: 11)).foregroundStyle(KB.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private func seedDemo() {
-        isSeeding = true
-        demoStatus = nil
-        Task {
-            if calendar.access != .authorized { await calendar.connect() }
-
-            guard calendar.access == .authorized else {
-                // 타임아웃이면 그 사유를, 아니면 권한 거부 안내
-                demoStatus = calendar.lastError
-                    ?? "캘린더 접근 권한이 필요해요. 설정 앱 → 개인정보 보호 → 캘린더에서 켜주세요."
-                isSeeding = false
-                return
-            }
-
-            let n = calendar.seedDemoEvents()
-            demoStatus = n > 0
-                ? "기본 캘린더에 모의 일정 \(n)건을 넣었어요."
-                : "쓰기 가능한 캘린더가 없어요. 캘린더 앱을 한 번 열어 기본 캘린더를 만든 뒤 다시 시도해 주세요."
-            isSeeding = false
+    private func basisRow(icon: String, title: String, detail: String) -> some View {
+        HStack(spacing: 12) {
+            rowIcon(icon)
+            Text(title).font(.system(size: 14.5)).foregroundStyle(KB.ink)
+            Spacer()
+            Text(detail).font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                .multilineTextAlignment(.trailing)
         }
+        .padding(.horizontal, 16).padding(.vertical, 14)
     }
 
     // MARK: 앱 정보

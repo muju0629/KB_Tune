@@ -2,7 +2,8 @@
 
 LLM/네트워크 없이 순수 알고리즘만 검증한다(키 불필요).
 """
-from app.data import DAYS_IN_MONTH, PROFILE, UPCOMING_EVENTS
+from app.data import (DAYS_IN_MONTH, PROFILE, TRANSACTIONS_THIS_MONTH,
+                      UPCOMING_EVENTS)
 from app.engine import build_plan
 from app.engine.probability import (SPEND_SIGMA, expected_remaining_spend,
                                     probability_analytic)
@@ -16,49 +17,59 @@ def test_golden_all_pass():
 
 
 def test_weekly_available_and_probability():
-    r = build_plan(PROFILE, today=21)
-    assert r.weekly_available == 52_000
-    assert r.probability == 78
-    assert r.disposable_month == 470_000
-    assert r.remaining_budget == 200_000
+    r = build_plan(PROFILE, today=22)
+    assert r.weekly_available == 62_000
+    assert r.probability == 81
+    assert r.disposable_month == 965_000
+    assert r.remaining_budget == 204_000
+    assert r.committed_this_week == 40_000
 
 
 def test_direction_changes_outputs():
-    reduce = build_plan(PROFILE.model_copy(update={"direction": "reduce"}), 21)
-    increase = build_plan(PROFILE.model_copy(update={"direction": "increase"}), 21)
-    assert reduce.weekly_available == 38_000 and reduce.probability == 86
-    assert increase.weekly_available == 70_000 and increase.probability == 69
+    reduce = build_plan(PROFILE.model_copy(update={"direction": "reduce"}), 22)
+    increase = build_plan(PROFILE.model_copy(update={"direction": "increase"}), 22)
+    assert reduce.weekly_available == 47_720 and reduce.probability == 88
+    assert increase.weekly_available == 80_360 and increase.probability == 74
 
 
-def test_risk_detected():
-    r = build_plan(PROFILE, today=21)
-    assert r.risk.has_risk
-    assert r.risk.event_title == "생일파티 2차"
-    assert r.risk.probability_now == 78
-    assert r.risk.probability_if_added == 60
+def test_calendar_estimate_range_and_no_fake_candidate():
+    r = build_plan(PROFILE, today=22)
+    assert r.month_estimate_low == 801_000
+    assert r.month_estimate_high == 801_000
+    assert r.month_end_remaining_low == 164_000
+    assert r.month_end_remaining_high == 164_000
+    assert not r.risk.has_risk
+    assert r.adjustments == []
+    assert build_plan(PROFILE, today=22, include_candidate=True).weekly_available == 62_000
+
+
+def test_calendar_inputs_match_visible_schedule():
+    assert sum(t.amount for t in TRANSACTIONS_THIS_MONTH) == 761_000
+    assert sum(e.amount for e in UPCOMING_EVENTS) == 40_000
+    assert sum(e.amount for e in UPCOMING_EVENTS if 22 <= e.day <= 26) == 40_000
 
 
 def test_monte_carlo_matches_analytic():
     """시드 고정 MC가 정규근사와 ±2%p 이내 → 모델 신뢰성."""
-    mu = expected_remaining_spend(PROFILE, UPCOMING_EVENTS, 21, DAYS_IN_MONTH, False)
-    r = build_plan(PROFILE, 21)
+    mu = expected_remaining_spend(PROFILE, UPCOMING_EVENTS, 22, DAYS_IN_MONTH, False)
+    r = build_plan(PROFILE, 22)
     analytic = probability_analytic(mu, SPEND_SIGMA, r.remaining_budget)
     assert abs(r.probability - analytic) <= 2
 
 
 def test_deterministic():
     """같은 입력 → 항상 같은 출력(재현성)."""
-    a = build_plan(PROFILE, 21)
-    b = build_plan(PROFILE, 21)
+    a = build_plan(PROFILE, 22)
+    b = build_plan(PROFILE, 22)
     assert a.weekly_available == b.weekly_available
     assert a.probability == b.probability
 
 
 def test_groundedness_extract():
-    nums = extract_amounts("이번 주 52,000원까지 괜찮고 확률은 78%예요. 4만원만 조정하세요.")
-    assert {52_000, 78, 40_000} <= nums
+    nums = extract_amounts("이번 주 약 62,000원이고 목표 확률은 81%예요. 월말에는 164,000원이 남을 수 있어요.")
+    assert {62_000, 81, 164_000} <= nums
 
 
 def test_groundedness_flags_hallucination():
-    ok, bad = check("목표 확률은 99%까지 올라가요", allowed={78})
+    ok, bad = check("목표 확률은 99%까지 올라가요", allowed={67})
     assert not ok and 99 in bad

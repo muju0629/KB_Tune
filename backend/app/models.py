@@ -16,12 +16,14 @@ class FixedCost(BaseModel):
 
 
 class Transaction(BaseModel):
-    """월중 실제 지출(가변). 분석·예산 계산의 원천."""
+    """월중 지출 입력. 데모에서는 캘린더 일정에서 계산한 예상액이다."""
     category: str
     amount: int
     day: int                       # 해당 월의 날짜(1~31)
     month: int = 7                 # 월(히스토리 구분용)
     merchant: str | None = None    # 가맹점 원문(분류의 입력)
+    estimate_low: int | None = None
+    estimate_high: int | None = None
 
 
 class PlannedEvent(BaseModel):
@@ -32,13 +34,16 @@ class PlannedEvent(BaseModel):
     day: int
     confirmed: bool = True
     protected: bool = False
+    estimate_low: int | None = None
+    estimate_high: int | None = None
 
 
 class Profile(BaseModel):
-    name: str = "민지"
-    age: int = 22
-    monthly_income: int = 800_000
-    savings_goal: int = 200_000
+    name: str = "성제"
+    role: str = "대학생 · 인포스탁 인턴"
+    age: int | None = None
+    monthly_income: int = 2_200_000
+    savings_goal: int = 800_000
     fixed_costs: list[FixedCost] = Field(default_factory=list)
     direction: Direction = "maintain"
     protected_categories: list[str] = Field(default_factory=list)
@@ -47,7 +52,7 @@ class Profile(BaseModel):
 class PlanRequest(BaseModel):
     """미지정 시 데모 페르소나 사용. 일부 필드만 덮어쓸 수 있음."""
     profile: Optional[Profile] = None
-    today: int = 21  # 7월 기준일
+    today: int = 22  # 2026년 7월 캘린더 기준일
     include_candidate: bool = False  # 위험 후보 일정을 계획에 반영할지
 
 
@@ -106,6 +111,11 @@ class PlanResult(BaseModel):
     weekly_available: int
     probability: int
     savings_goal: int
+    month_estimate_low: int
+    month_estimate_high: int
+    month_end_remaining_low: int
+    month_end_remaining_high: int
+    estimate_basis: str
     protected_summary: str
     analysis: SpendingAnalysis
     risk: RiskAssessment
@@ -144,8 +154,8 @@ class EstimateResult(BaseModel):
     title: str
     category: str
     amount: int          # 예상 지출(엔진이 최종 검증·보정한 값)
-    low: int             # 과거 기준 하한
-    high: int            # 과거 기준 상한
+    low: int             # 같은 일정 유형의 예상 하한
+    high: int            # 같은 일정 유형의 예상 상한
     confidence: float    # 0~1
     basis: str           # 사용자에게 보여줄 근거 한 줄
     method: str          # rule | history | llm

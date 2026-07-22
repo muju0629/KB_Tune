@@ -75,19 +75,21 @@ def _local_stream(plan: PlanResult, message: str) -> Iterator[str]:
 
 def _template_reply(plan: PlanResult, message: str) -> str:
     q = message.replace(" ", "")
-    r = plan.risk
-    if any(k in q for k in ("2차", "생일", "금요일")) and r.has_risk:
-        move = next((a for a in plan.adjustments if a.id == "move"), None)
-        tail = f" {move.title}(사용가능액 {move.weekly_available:,}원)를 추천해요." if move else ""
-        return f"‘{r.event_title}’은 조정을 추천해요. {r.summary}{tail}"
+    if any(k in q for k in ("출근", "점심", "교통", "인턴")):
+        return (f"이번 주 남은 확정 일정비는 {plan.committed_this_week:,}원이에요. "
+                f"출근일의 점심과 이동비를 포함한 예상이라 실제 결제액에 따라 달라질 수 있어요.")
+    if any(k in q for k in ("레이저", "제모", "예상범위")):
+        return (f"7월 일정비는 {plan.month_estimate_low:,}~{plan.month_estimate_high:,}원으로 보여요. "
+                "레이저 제모가 선결제인지 확인하면 범위를 더 좁힐 수 있어요.")
+    if any(k in q for k in ("데이트", "가족")):
+        return (f"{plan.protected_summary}으로 두었어요. 확정 일정을 반영하고도 이번 주에는 "
+                f"약 {plan.weekly_available:,}원까지 쓸 수 있어요.")
     if any(k in q for k in ("적금", "목표", "저축")):
         return (f"지금 계획대로면 목표 확률은 {plan.probability}%예요. "
                 f"이번 달 남은 예산은 {plan.remaining_budget:,}원이에요.")
-    if any(k in q for k in ("왜늘", "외식", "배달", "많이", "급증")):
-        an = plan.analysis.anomalies[0] if plan.analysis.anomalies else f"{plan.analysis.top_category} 비중이 커요."
-        return f"{an} 지키기로 한 {plan.protected_summary}는 유지하면서 다른 부분을 조정할 수 있어요."
-    return (f"이번 주는 {plan.weekly_available:,}원까지 쓸 수 있어요. "
-            f"적금 목표 확률은 {plan.probability}%예요. 특정 일정이나 금액을 물어보면 더 자세히 알려드릴게요.")
+    return (f"이번 주에는 약 {plan.weekly_available:,}원까지 쓸 수 있어요. "
+            f"7월 일정비는 {plan.month_estimate_low:,}~{plan.month_estimate_high:,}원으로 예상해요. "
+            "확인하고 싶은 일정을 말해 주세요.")
 
 
 def _template_stream(plan: PlanResult, message: str) -> Iterator[str]:

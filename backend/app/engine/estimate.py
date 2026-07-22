@@ -1,30 +1,34 @@
 """AI 기능 ① — 일정 제목 → 예상 지출 추정.
 
 제품 핵심 루프("일정 추가할 때마다 예상 지출 계산")의 실제 구현.
-1차: 키워드 규칙으로 카테고리 판정 → 사용자 과거 '건당 평균'으로 개인화
+1차: 키워드 규칙으로 카테고리 판정 → 7월 캘린더의 같은 일정 유형으로 개인화
 2차(선택): LLM이 세상 지식으로 카테고리·금액 추정
-어느 경우든 **엔진이 과거 분포(low~high)로 클램프**해서 말도 안 되는 값을 차단한다.
+어느 경우든 **엔진이 같은 일정 유형의 범위(low~high)로 보정**한다.
 """
 from __future__ import annotations
 
 from ..models import EstimateResult, Transaction
 
-# 카테고리 판정 키워드 + 과거 데이터가 없을 때의 기본 금액(원)
+# 카테고리 판정 키워드 + 같은 유형 표본이 부족할 때의 기본 금액(원)
 EVENT_RULES: list[tuple[str, list[str], int]] = [
-    ("경조사", ["결혼", "축의", "돌잔치", "장례", "부의", "청첩"], 150_000),
+    ("경조사", ["결혼", "축의", "돌잔치", "장례", "부의", "청첩"], 70_000),
     ("여행", ["여행", "MT", "엠티", "워크샵", "워크숍", "숙박", "펜션"], 200_000),
-    ("술·모임", ["회식", "술", "2차", "뒤풀이", "동아리", "모임", "파티", "생일"], 30_000),
-    ("여가", ["영화", "공연", "전시", "콘서트", "페스티벌", "노래방", "볼링"], 15_000),
-    ("카페", ["카페", "커피", "스터디", "팀플", "과제"], 8_000),
+    ("데이트", ["데이트", "기념일", "200일"], 40_000),
+    ("가족", ["가족", "부모님"], 20_000),
+    ("모임", ["회식", "술", "뒤풀이", "동아리", "모임", "파티", "생일", "친구"], 25_000),
+    ("문화", ["영화", "공연", "전시", "미술관", "콘서트", "페스티벌"], 30_000),
+    ("자기관리", ["병원", "한의원", "제모", "미용"], 25_000),
+    ("업무·학업", ["스터디", "팀플", "과제", "연구", "회의", "TA"], 8_000),
+    ("출근", ["출근", "인턴"], 0),  # 점심·교통 무비용(고정비 반영)
     ("외식", ["점심", "저녁", "식사", "밥", "맛집", "회", "고기", "런치", "디너"], 15_000),
     ("쇼핑", ["쇼핑", "구매", "교재", "옷", "선물"], 40_000),
 ]
 
-CLAMP_MULTIPLIER = 2.5  # 과거 최대치의 이 배수를 넘는 추정은 신뢰하지 않음
+CLAMP_MULTIPLIER = 2.5  # 같은 일정 유형 최대치에서 크게 벗어난 추정을 제한
 
 
 def _history_stats(txns: list[Transaction], category: str) -> tuple[int, int, int, int]:
-    """(건당 평균, 하한, 상한, 건수) — 과거 같은 카테고리 지출 분포."""
+    """(건당 평균, 하한, 상한, 건수) — 캘린더의 같은 카테고리 예상액."""
     amounts = [t.amount for t in txns if t.category == category]
     if not amounts:
         return 0, 0, 0, 0
@@ -41,6 +45,20 @@ def match_rule(title: str) -> tuple[str | None, int]:
 
 
 def estimate_event_cost(title: str, txns: list[Transaction], use_llm: bool = False) -> EstimateResult:
+    compact = title.replace(" ", "")
+    if "회의" in compact:
+        return EstimateResult(
+            title=title, category="업무·학업", amount=0, low=0, high=0,
+            confidence=1.0, basis="성제님의 회의는 별도 비용 없음으로 설정했어요.",
+            method="rule", llm_raw=None,
+        )
+    if "와드" in compact:
+        return EstimateResult(
+            title=title, category="업무·학업", amount=40_000, low=40_000, high=40_000,
+            confidence=1.0, basis="성제님이 확인한 금액을 반영했어요.",
+            method="rule", llm_raw=None,
+        )
+
     cat, default_amount = match_rule(title)
     method = "rule"
     llm_raw: int | None = None
@@ -59,23 +77,23 @@ def estimate_event_cost(title: str, txns: list[Transaction], use_llm: bool = Fal
     avg, lo, hi, n = _history_stats(txns, cat)
 
     if n >= 2:
-        # 과거 이력이 있으면 개인화: 건당 평균을 기준값으로
+        # 같은 일정 유형이 반복되면 건당 평균을 기준값으로 사용
         amount = avg if method != "llm" else int((avg + default_amount) / 2)
         low, high = lo, hi
-        basis = f"지난 3개월 ‘{cat}’ {n}건 평균 {avg:,}원 기준이에요."
+        basis = f"7월 캘린더의 ‘{cat}’ 일정 {n}건, 평균 {avg:,}원을 기준으로 잡았어요."
         confidence = 0.85 if method == "rule" else 0.7
     else:
         amount = default_amount
         low, high = int(amount * 0.6), int(amount * 1.6)
-        basis = f"과거 이력이 적어 일반적인 ‘{cat}’ 지출로 잡았어요."
+        basis = f"같은 유형의 일정이 적어 ‘{cat}’ 기본 예상액으로 잡았어요."
         confidence = 0.5
 
-    # 엔진 최종 검증: 과거 최대치의 CLAMP_MULTIPLIER 배를 넘으면 잘라낸다
+    # 엔진 최종 검증: 같은 유형 최대치의 CLAMP_MULTIPLIER 배를 넘으면 잘라낸다
     if hi > 0:
         ceiling = int(hi * CLAMP_MULTIPLIER)
         if amount > ceiling:
             amount = ceiling
-            basis += " (과거 범위를 크게 벗어나 상한으로 보정했어요)"
+            basis += " (같은 일정 유형의 범위를 크게 벗어나 상한으로 보정했어요)"
             confidence = min(confidence, 0.5)
 
     amount = max(0, int(round(amount / 500)) * 500)  # 500원 단위 정리
