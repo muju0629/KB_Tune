@@ -174,24 +174,23 @@ struct WeeklyPlanView: View {
                 .font(.system(size: 13))
                 .foregroundStyle(KB.muted)
 
-            Text("이번 주,\n\(formatWon(roundedWeeklyBudget)) 더 쓸 수 있어요")
+            Text("이번 주 일정비 \(formatWon(model.plannedSpendTotal))")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(KB.muted)
+                .padding(.top, 12)
+
+            Text("\(formatWon(roundedWeeklyBudget)) 더 쓸 수 있어요")
             .font(.system(size: 30, weight: .bold))
             .foregroundStyle(KB.ink)
             .lineSpacing(4)
-            .padding(.top, 14)
+            .padding(.top, 6)
             .background(alignment: .bottomLeading) {
                 KB.yellow.frame(width: 118, height: 9)
                     .offset(x: 0, y: -6)
             }
-
-            Text("7월 22일 이후 확정 일정을 먼저 뺐어요. 출근은 비용이 들지 않아요.")
-                .font(.system(size: 12.5))
-                .foregroundStyle(KB.muted)
-                .lineSpacing(3)
-                .padding(.top, 14)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("이번 주 추가 사용 가능액 약 \(formatWon(roundedWeeklyBudget)). 7월 22일 이후 확정 일정을 반영했습니다.")
+        .accessibilityLabel("이번 주 일정비 \(formatWon(model.plannedSpendTotal)), 추가 사용 가능액 약 \(formatWon(roundedWeeklyBudget)).")
     }
 
     /// 주간 날짜 스트립 — 날짜를 누르면 그 날 타임테이블
@@ -717,6 +716,8 @@ struct DayTimetableBody: View {
     private let startHour: Double = 8
     private let endHour: Double = 24
     private let hourHeight: CGFloat = 46
+    private let gutter: CGFloat = 50        // 시간 눈금이 차지하는 왼쪽 폭
+    private let columnGap: CGFloat = 6      // 좌우로 나뉜 블록 사이 간격
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -787,6 +788,49 @@ struct DayTimetableBody: View {
             .stroke(KB.caution.opacity(0.3), lineWidth: 1))
     }
 
+    /// 일정 블록의 가로 배치 결과 — 같은 시간대에 몰린 일정을 몇 번째 열에 놓을지.
+    private struct EventSlot: Identifiable {
+        let event: DayEvent
+        let column: Int
+        let columnCount: Int
+        var id: DayEvent.ID { event.id }
+    }
+
+    /// 블록이 실제로 차지하는 세로 길이(시간 환산).
+    /// 내용이 duration보다 길면 블록이 늘어나므로, 겹침 판정도 이 값으로 해야 한다.
+    /// 실제 렌더 높이보다 조금 넉넉하게 잡는다 — 과하게 잡으면 불필요하게 열이 나뉠 뿐이지만,
+    /// 모자라게 잡으면 블록이 겹쳐 보인다.
+    private func occupiedHours(_ ev: DayEvent) -> Double {
+        let content: CGFloat = (ev.isPredicted && ev.estimateBasis != nil) ? 112 : 80
+        return Double(max(CGFloat(ev.duration) * hourHeight, content) / hourHeight)
+    }
+
+    /// 겹치는 일정끼리 묶어 좌우로 나눈다 (캘린더 앱과 같은 방식).
+    private var placedEvents: [EventSlot] {
+        var slots: [EventSlot] = []
+        var cluster: [(event: DayEvent, column: Int)] = []   // 서로 겹쳐 폭을 나눠 쓸 일정들
+        var columnEnds: [Double] = []                        // 열별로 마지막 일정이 끝나는 지점
+        var clusterEnd = -Double.infinity
+
+        // 열 개수는 묶음 전체가 같아야 폭이 어긋나지 않으므로, 묶음이 끝난 뒤 한꺼번에 확정한다.
+        func flush() {
+            slots += cluster.map { EventSlot(event: $0.event, column: $0.column, columnCount: columnEnds.count) }
+            cluster = []
+            columnEnds = []
+        }
+
+        for ev in day.events.sorted(by: { $0.startHour < $1.startHour }) {
+            if ev.startHour >= clusterEnd { flush() }
+            let column = columnEnds.firstIndex { $0 <= ev.startHour } ?? columnEnds.count
+            if column == columnEnds.count { columnEnds.append(0) }
+            columnEnds[column] = ev.startHour + occupiedHours(ev)
+            cluster.append((ev, column))
+            clusterEnd = max(clusterEnd, columnEnds[column])
+        }
+        flush()
+        return slots
+    }
+
     private var timetable: some View {
         let totalHeight = CGFloat(endHour - startHour) * hourHeight
         return ZStack(alignment: .topLeading) {
@@ -805,11 +849,16 @@ struct DayTimetableBody: View {
                 }
             }
 
-            // 일정 블록
-            ForEach(day.events) { ev in
-                eventBlock(ev)
-                    .padding(.leading, 50)
-                    .offset(y: CGFloat(ev.startHour - startHour) * hourHeight + 4)
+            // 일정 블록 — 겹치는 일정은 좌우로 나눠 놓는다
+            GeometryReader { geo in
+                let lane = geo.size.width - gutter
+                ForEach(placedEvents) { slot in
+                    let width = (lane - CGFloat(slot.columnCount - 1) * columnGap) / CGFloat(slot.columnCount)
+                    eventBlock(slot.event)
+                        .frame(width: width)
+                        .offset(x: gutter + CGFloat(slot.column) * (width + columnGap),
+                                y: CGFloat(slot.event.startHour - startHour) * hourHeight + 4)
+                }
             }
         }
         .frame(height: totalHeight)
@@ -851,7 +900,7 @@ struct DayTimetableBody: View {
             Spacer(minLength: 0)
         }
         .padding(10)
-        .frame(height: height, alignment: .top)
+        .frame(minHeight: height, alignment: .top)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(isRisky ? KB.cautionSoft : (ev.isProtected ? KB.greenSoft : KB.yellowSoft),
                     in: RoundedRectangle(cornerRadius: 12, style: .continuous))

@@ -2,8 +2,8 @@
 //  MainTabView.swift
 //  KB_Tune
 //
-//  하단 내비게이션: 주간 / 대화 / 분석.
-//  상품은 계획·분석 맥락에서, 설정은 계획 화면 상단에서 진입한다.
+//  하단 내비게이션: 주간 / 대화 / 분석 / 카드·적금.
+//  설정은 계획 화면 상단에서 진입한다.
 //
 
 import SwiftUI
@@ -17,6 +17,8 @@ struct MainTabView: View {
                 .tabItem { Label("대화", systemImage: "bubble.left.and.bubble.right") }
             AnalysisView()
                 .tabItem { Label("분석", systemImage: "chart.bar.xaxis") }
+            ProductsTabView()
+                .tabItem { Label("카드·적금", systemImage: "creditcard") }
         }
         .tint(KB.ink)
     }
