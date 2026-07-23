@@ -17,7 +17,6 @@ struct AnalysisView: View {
     @StateObject private var agent = AgentService()
     @State private var picks: [PhotosPickerItem] = []
     @State private var isImporting = false
-    @State private var showProducts = false
 
     // 캡처 → 거래 추출 상태
     @State private var isExtracting = false
@@ -39,7 +38,6 @@ struct AnalysisView: View {
             .navigationTitle("소비 분석")
             .navigationBarTitleDisplayMode(.inline)
         }
-        .sheet(isPresented: $showProducts) { ProductsSheet().environmentObject(model) }
     }
 
     // MARK: 업로드
@@ -300,7 +298,7 @@ struct AnalysisView: View {
 
     private var productEntry: some View {
         VStack(spacing: 8) {
-            Button { showProducts = true } label: {
+            Button { model.selectedTab = .products } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass").font(.system(size: 15))
                     Text("확인한 지출로 카드·적금 비교하기").font(.system(size: 14, weight: .medium))

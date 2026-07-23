@@ -16,8 +16,9 @@ struct WeeklyPlanView: View {
     @State private var mode: Mode
     @State private var selectedDay: PlanDay? = nil       // 타임테이블로 보는 날
     @State private var selectedMonthDay: Int? = nil      // 월간에서 탭한 (일정 없는) 날짜
+    @State private var scrolledWeek: Int? = nil          // 주간 스트립에서 보고 있는 주(가로 페이징)
 
-    enum Sheet: Identifiable { case products, addEvent, direction, settings; var id: Int { hashValue } }
+    enum Sheet: Identifiable { case addEvent, settings; var id: Int { hashValue } }
     @State private var sheet: Sheet?
     @State private var showSuccess = false
     @State private var toast: String?
@@ -77,9 +78,7 @@ struct WeeklyPlanView: View {
         }
         .sheet(item: $sheet) { which in
             switch which {
-            case .products: ProductsSheet().environmentObject(model)
             case .addEvent: AddEventView().environmentObject(model)
-            case .direction: directionSheet
             case .settings: SettingsView().environmentObject(model)
             }
         }
@@ -90,27 +89,10 @@ struct WeeklyPlanView: View {
 
     private var planToolbar: some View {
         HStack(spacing: 10) {
-            Button { sheet = .direction } label: {
-                HStack(spacing: 7) {
-                    Text("이번 달 방향")
-                        .font(.subheadline)
-                        .foregroundStyle(KB.muted)
-                    Text(model.direction.label)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(KB.ink)
-                    Image(systemName: "chevron.down")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(KB.muted)
-                }
-                .padding(.horizontal, 13)
-                .frame(minHeight: 40)
-                .background(.white, in: Capsule())
-                .overlay(Capsule().stroke(KB.line, lineWidth: 1))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("이번 달 소비 방향")
-            .accessibilityValue(model.direction.label)
-            .accessibilityHint("두 번 탭하여 소비 방향을 바꿉니다")
+            Text("7월 \(model.todayDayNumber)일 \(weekdayName(model.todayDayNumber))요일")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(KB.ink)
+                .accessibilityLabel("오늘 7월 \(model.todayDayNumber)일 \(weekdayName(model.todayDayNumber))요일")
 
             Spacer(minLength: 4)
 
@@ -159,8 +141,8 @@ struct WeeklyPlanView: View {
     private var weekContent: some View {
         VStack(alignment: .leading, spacing: 22) {
             hero
-            weekStrip
-            eventCards
+            weekStripPager
+            spendTimeline
             if !model.upcomingSpends.isEmpty { predictedSpends }
             recommendation
             actions
@@ -170,14 +152,9 @@ struct WeeklyPlanView: View {
 
     private var hero: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("\(model.referenceDateLabel) · \(model.userName)님")
-                .font(.system(size: 13))
-                .foregroundStyle(KB.muted)
-
-            Text("이번 주 일정비 \(formatWon(model.plannedSpendTotal))")
+            Text("\(model.userName)님의 이번 주 일정비는 \(formatWon(model.plannedSpendTotal))")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(KB.muted)
-                .padding(.top, 12)
 
             Text("\(formatWon(roundedWeeklyBudget)) 더 쓸 수 있어요")
             .font(.system(size: 30, weight: .bold))
@@ -193,85 +170,169 @@ struct WeeklyPlanView: View {
         .accessibilityLabel("이번 주 일정비 \(formatWon(model.plannedSpendTotal)), 추가 사용 가능액 약 \(formatWon(roundedWeeklyBudget)).")
     }
 
-    /// 주간 날짜 스트립 — 날짜를 누르면 그 날 타임테이블
-    private var weekStrip: some View {
-        HStack(spacing: 0) {
-            ForEach(model.week) { day in
-                Button {
-                    withAnimation(switchSpring) { selectedDay = day }
-                } label: {
-                    VStack(spacing: 6) {
-                        Text(day.weekday).font(.system(size: 12)).foregroundStyle(KB.muted)
-                        Text(day.dateLabel)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(KB.ink)
-                            .frame(width: 36, height: 34)
-                            .background {
-                                if day.isToday {
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .fill(KB.yellowSoft)
+    /// 주간 날짜 스트립 — 가로로 넘기면 다른 주(3주차·4주차…)를 본다. 날짜를 누르면 그 날 타임테이블.
+    private var weekStripPager: some View {
+        let viewed = scrolledWeek ?? model.currentWeekIndex
+        return VStack(spacing: 10) {
+            HStack {
+                Text("7월 \(viewed + 1)주차")
+                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.ink)
+                if viewed == model.currentWeekIndex {
+                    Text("이번 주").font(.system(size: 10.5, weight: .bold)).foregroundStyle(KB.ink)
+                        .padding(.horizontal, 7).padding(.vertical, 2)
+                        .background(KB.yellow, in: Capsule())
+                }
+                Spacer()
+            }
+
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: 0) {
+                        ForEach(Array(model.julyWeeks.enumerated()), id: \.offset) { index, slots in
+                            HStack(spacing: 0) {
+                                ForEach(Array(slots.enumerated()), id: \.offset) { _, dayNumber in
+                                    if let dayNumber, let day = model.day(number: dayNumber) {
+                                        dayColumn(day)
+                                    } else {
+                                        Color.clear.frame(maxWidth: .infinity, minHeight: 1)
+                                    }
                                 }
                             }
-                        Circle()
-                            .fill(day.hasRisk ? KB.caution : (day.isToday ? KB.ink : (day.hasSpend ? KB.yellow : .clear)))
-                            .frame(width: 5, height: 5)
-                            .accessibilityHidden(true)
+                            .containerRelativeFrame(.horizontal)
+                            .id(index)
+                        }
                     }
-                    .frame(maxWidth: .infinity)
+                    .scrollTargetLayout()
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(day.weekday)요일 \(day.dateLabel)")
-                .accessibilityValue(day.hasRisk ? "예산 조정이 필요한 일정 있음" : day.hasSpend ? "예정 지출 있음" : day.isToday ? "오늘" : "예정 지출 없음")
-                .accessibilityHint("두 번 탭하여 하루 일정을 봅니다")
+                .scrollTargetBehavior(.paging)
+                .scrollPosition(id: $scrolledWeek)
+                .onAppear {
+                    if scrolledWeek == nil {
+                        scrolledWeek = model.currentWeekIndex
+                        proxy.scrollTo(model.currentWeekIndex, anchor: .center)
+                    }
+                }
             }
         }
     }
 
-    /// 이번 주 지출 일정 카드 — 누르면 그 날 타임테이블
-    private var eventCards: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
-                ForEach(model.weekSpendItems) { item in
-                    Button {
-                        if let day = model.day(number: item.dayNumber) {
-                            withAnimation(switchSpring) { selectedDay = day }
+    /// 스트립 한 칸(하루). 여러 주에 걸쳐 재사용.
+    private func dayColumn(_ day: PlanDay) -> some View {
+        Button {
+            withAnimation(switchSpring) { selectedDay = day }
+        } label: {
+            VStack(spacing: 6) {
+                Text(day.weekday).font(.system(size: 12)).foregroundStyle(KB.muted)
+                Text(day.dateLabel)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(KB.ink)
+                    .frame(width: 36, height: 34)
+                    .background {
+                        if day.isToday {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(KB.yellowSoft)
                         }
-                    } label: {
-                        VStack(spacing: 8) {
-                            ZStack(alignment: .topTrailing) {
-                                // 카드 배경이 상태색이라 배지는 흰색으로 둬야 아이콘이 보인다.
-                                IconBadge(systemName: item.symbol, background: .white)
-                                if item.isRisky {
-                                    Image(systemName: "exclamationmark.circle.fill")
-                                        .font(.system(size: 14))
-                                        .foregroundStyle(KB.caution)
-                                        .offset(x: 4, y: -3)
-                                }
-                            }
-                            Text(item.title).font(.system(size: 12)).foregroundStyle(KB.muted)
-                                .lineLimit(1)
-                            Text(estimateLabel(low: item.amountLow,
-                                               high: item.amountHigh,
-                                               estimated: item.isEstimated))
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(KB.ink)
-                                .lineLimit(1).minimumScaleFactor(0.7)
-                            Text(item.dayLabel).font(.system(size: 10.5)).foregroundStyle(KB.muted)
-                        }
-                        .frame(width: 104)
-                        .padding(.vertical, 14)
-                        .background(item.isRisky ? KB.cautionSoft : (item.isProtected ? KB.greenSoft : KB.yellowSoft),
-                                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(item.isRisky ? KB.caution.opacity(0.45) : (item.isProtected ? KB.green.opacity(0.35) : KB.yellow.opacity(0.55)), lineWidth: 1))
                     }
+                Circle()
+                    .fill(day.hasRisk ? KB.caution : (day.isToday ? KB.ink : (day.hasSpend ? KB.yellow : .clear)))
+                    .frame(width: 5, height: 5)
+                    .accessibilityHidden(true)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(day.weekday)요일 \(day.dateLabel)")
+        .accessibilityValue(day.hasRisk ? "예산 조정이 필요한 일정 있음" : day.hasSpend ? "예정 지출 있음" : day.isToday ? "오늘" : "예정 지출 없음")
+        .accessibilityHint("두 번 탭하여 하루 일정을 봅니다")
+    }
+
+    /// 이번 주 지출을 세로 타임라인으로 — 일자별 노드를 수직선으로 잇는다. 항목을 누르면 그 날 타임테이블.
+    private var spendTimeline: some View {
+        let groups = Dictionary(grouping: model.weekSpendItems, by: \.dayNumber)
+            .sorted { $0.key < $1.key }
+        return VStack(alignment: .leading, spacing: 0) {
+            if groups.isEmpty {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle").font(.system(size: 15)).foregroundStyle(KB.green)
+                    Text("이번 주 예정된 지출이 없어요.").font(.system(size: 13)).foregroundStyle(KB.muted)
+                }
+                .padding(.vertical, 4)
+            } else {
+                ForEach(Array(groups.enumerated()), id: \.element.key) { index, entry in
+                    timelineDay(dayNumber: entry.key, items: entry.value, isLast: index == groups.count - 1)
+                }
+            }
+        }
+    }
+
+    private func timelineDay(dayNumber: Int, items: [WeekSpendItem], isLast: Bool) -> some View {
+        let isToday = model.day(number: dayNumber)?.isToday == true
+        let risky = items.contains { $0.isRisky }
+        let nodeColor = risky ? KB.caution : (isToday ? KB.ink : KB.yellow)
+        let total = items.reduce(0) { $0 + $1.amount }
+        return HStack(alignment: .top, spacing: 14) {
+            // 레일: 노드 + 아래로 잇는 수직선 (마지막 날은 선 없음)
+            VStack(spacing: 0) {
+                Circle().fill(nodeColor).frame(width: 11, height: 11).padding(.top, 3)
+                if !isLast {
+                    Rectangle().fill(KB.line).frame(width: 2).frame(maxHeight: .infinity)
+                }
+            }
+            .frame(width: 11)
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Text(items.first?.dayLabel ?? "")
+                        .font(.system(size: 12.5, weight: .semibold)).foregroundStyle(KB.ink)
+                    if isToday {
+                        Text("오늘").font(.system(size: 9.5, weight: .bold)).foregroundStyle(KB.ink)
+                            .padding(.horizontal, 6).padding(.vertical, 1.5)
+                            .background(KB.yellow, in: Capsule())
+                    }
+                    Spacer()
+                    Text(formatWon(total))
+                        .font(.system(size: 12.5, weight: .semibold)).foregroundStyle(KB.muted)
+                }
+                ForEach(items) { item in
+                    Button {
+                        if let d = model.day(number: item.dayNumber) {
+                            withAnimation(switchSpring) { selectedDay = d }
+                        }
+                    } label: { timelineItemRow(item) }
                     .buttonStyle(.plain)
                     .accessibilityLabel("\(item.dayLabel), \(item.title), \(estimateLabel(low: item.amountLow, high: item.amountHigh, estimated: item.isEstimated))")
                     .accessibilityValue(item.isRisky ? "예산 조정 필요" : item.isProtected ? "더 필요한 소비로 남겨둔 일정" : "예정 지출")
                     .accessibilityHint("두 번 탭하여 하루 일정을 봅니다")
                 }
             }
+            .padding(.bottom, isLast ? 0 : 20)
         }
+    }
+
+    private func timelineItemRow(_ item: WeekSpendItem) -> some View {
+        HStack(spacing: 10) {
+            IconBadge(systemName: item.symbol,
+                      background: item.isRisky ? KB.cautionSoft : (item.isProtected ? KB.greenSoft : KB.yellowSoft),
+                      size: 34)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 5) {
+                    Text(item.title).font(.system(size: 14, weight: .medium)).foregroundStyle(KB.ink).lineLimit(1)
+                    if item.isProtected {
+                        Image(systemName: "shield.fill").font(.system(size: 10)).foregroundStyle(KB.green)
+                    }
+                    if item.isRisky {
+                        Image(systemName: "exclamationmark.circle.fill").font(.system(size: 11)).foregroundStyle(KB.caution)
+                    }
+                }
+                Text(estimateLabel(low: item.amountLow, high: item.amountHigh, estimated: item.isEstimated))
+                    .font(.system(size: 12.5)).foregroundStyle(KB.muted)
+            }
+            Spacer(minLength: 8)
+            Image(systemName: "chevron.right").font(.system(size: 12)).foregroundStyle(KB.muted.opacity(0.6))
+        }
+        .padding(.vertical, 8).padding(.horizontal, 12)
+        .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(KB.line, lineWidth: 1))
     }
 
     /// 캘린더엔 없지만 과거 주기상 이번 주에 나갈 것 같은 지출.
@@ -285,7 +346,7 @@ struct WeeklyPlanView: View {
                 Text("캘린더에 없는 지출").font(.system(size: 11)).foregroundStyle(KB.muted)
             }
 
-            ForEach(model.upcomingSpends) { spend in
+            ForEach(model.upcomingSpends, id: \.pattern.key) { spend in
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 10) {
                         IconBadge(systemName: spend.pattern.symbol, background: .white, size: 38)
@@ -316,8 +377,10 @@ struct WeeklyPlanView: View {
 
                     HStack(spacing: 8) {
                         Button {
-                            model.acceptPrediction(spend)
                             flash("‘\(spend.pattern.key)’ \(formatWon(spend.amount))을 계획에 넣었어요.")
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) {
+                                model.acceptPrediction(spend)
+                            }
                         } label: {
                             Text("계획에 넣기")
                                 .font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.ink)
@@ -325,8 +388,10 @@ struct WeeklyPlanView: View {
                                 .background(KB.yellow, in: Capsule())
                         }
                         Button {
-                            model.dismissPrediction(spend)
                             flash("이번엔 빼둘게요.")
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) {
+                                model.dismissPrediction(spend)
+                            }
                         } label: {
                             Text("이번엔 안 써요")
                                 .font(.system(size: 13, weight: .medium)).foregroundStyle(KB.muted)
@@ -340,6 +405,7 @@ struct WeeklyPlanView: View {
                 .padding(14)
                 .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
+                .transition(.scale(scale: 0.85).combined(with: .opacity))
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel("\(spend.pattern.key) 예상 \(formatWon(spend.amount)). \(spend.reason)")
             }
@@ -417,7 +483,7 @@ struct WeeklyPlanView: View {
     }
 
     private var benefitRow: some View {
-        Button { sheet = .products } label: {
+        Button { model.selectedTab = .products } label: {
             HStack(spacing: 12) {
                 IconBadge(systemName: "magnifyingglass", background: KB.yellowSoft)
                 VStack(alignment: .leading, spacing: 2) {
@@ -542,7 +608,7 @@ struct WeeklyPlanView: View {
         return Button {
             withAnimation(.snappy(duration: 0.25)) { selectedMonthDay = d }
         } label: {
-            VStack(spacing: 4) {
+            VStack(spacing: 2) {
                 Text("\(d)")
                     .font(.system(size: 13.5, weight: isToday ? .bold : .regular))
                     .foregroundStyle(KB.ink)
@@ -551,11 +617,16 @@ struct WeeklyPlanView: View {
                         if isToday { Circle().fill(KB.yellow) }
                         else if isSelected { Circle().stroke(KB.yellow, lineWidth: 2) }
                     }
-                Circle()
-                    .fill(day?.hasRisk == true ? KB.caution : (day?.hasSpend == true ? KB.yellow : .clear))
-                    .frame(width: 4.5, height: 4.5)
+                if let day, day.spendTotal > 0 {
+                    Text(compactSpend(day.spendTotal))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(KB.expenseRed)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
             }
-            .frame(height: 44)
+            .frame(height: 50, alignment: .top)
+            .frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
         .sensoryFeedback(.selection, trigger: selectedMonthDay)
@@ -573,46 +644,6 @@ struct WeeklyPlanView: View {
     }
 
     // MARK: - 시트 · 오버레이
-
-    private var directionSheet: some View {
-        SheetContainer(title: "이번 달 소비 방향") {
-            Text("더 필요한 소비는 그대로 두고 이번 주 사용 가능액과 목표 확률을 다시 계산해요.")
-                .font(.subheadline)
-                .foregroundStyle(KB.muted)
-
-            VStack(spacing: 10) {
-                ForEach(SpendDirection.allCases) { direction in
-                    let isSelected = model.direction == direction
-                    Button {
-                        model.direction = direction
-                        sheet = nil
-                        flash("이번 달 방향을 ‘\(direction.label)’로 바꿨어요.")
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                                .font(.title3)
-                                .foregroundStyle(isSelected ? KB.ink : KB.line)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(direction.label)
-                                    .font(.body.weight(.semibold))
-                                    .foregroundStyle(KB.ink)
-                                Text("이번 주 약 \(formatWon(roundToTenThousand(model.weeklyBudget(for: direction)))) · 목표 확률 \(model.probability(for: direction))%")
-                                    .font(.subheadline)
-                                    .foregroundStyle(KB.muted)
-                            }
-                            Spacer()
-                        }
-                        .padding(15)
-                        .background(isSelected ? KB.yellowSoft : .white,
-                                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(isSelected ? KB.yellow : KB.line, lineWidth: 1.5))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-    }
 
     private var successOverlay: some View {
         ZStack {
@@ -917,6 +948,13 @@ struct DayTimetableBody: View {
 
 private func roundToTenThousand(_ amount: Int) -> Int {
     Int((Double(amount) / 10_000).rounded()) * 10_000
+}
+
+/// 월간 캘린더 날짜 칸처럼 좁은 자리에 넣는 축약 지출 표기 (예: -73,000 → "-7.3만")
+private func compactSpend(_ amount: Int) -> String {
+    if amount < 10_000 { return "-\(decimalString(amount))" }
+    let man = (Double(amount) / 1_000).rounded() / 10
+    return man == man.rounded() ? "-\(Int(man))만" : String(format: "-%.1f만", man)
 }
 
 private func formatRange(low: Int, high: Int) -> String {

@@ -19,6 +19,7 @@ enum KB {
     static let greenSoft = Color(hex: 0xEEF5EC)   // 아이콘 배경 · 보호 상태
     static let caution = Color(hex: 0xB4540A)     // 차분한 주의(예산 초과 등) — 오류용 빨강 아님
     static let cautionSoft = Color(hex: 0xFBEEE2) // 주의 배경
+    static let expenseRed = Color(hex: 0xD64545)  // 월간 캘린더 등 지출 금액 표기
 }
 
 extension Color {
@@ -34,7 +35,7 @@ extension Color {
 }
 
 /// 86000 -> "86,000"
-private func decimalString(_ value: Int) -> String {
+func decimalString(_ value: Int) -> String {
     let f = NumberFormatter()
     f.numberStyle = .decimal
     f.locale = Locale(identifier: "ko_KR")

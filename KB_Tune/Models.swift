@@ -123,6 +123,9 @@ struct SpendCategory: Identifiable {
 
 // MARK: - 앱 상태
 
+/// 하단 내비게이션 탭 — 화면 간 프로그래밍 방식 이동에 쓴다.
+enum MainTab: Hashable { case weekly, chat, analysis, products }
+
 final class AppModel: ObservableObject {
     // 페르소나
     let userName = "성제"
@@ -130,6 +133,7 @@ final class AppModel: ObservableObject {
     let userRole = "대학생 · 인포스탁 인턴"
 
     @Published var hasOnboarded = false
+    @Published var selectedTab: MainTab = .weekly
 
     // 온보딩 입력값 (페르소나 기본값)
     @Published var usesDemoData = true
@@ -192,6 +196,20 @@ final class AppModel: ObservableObject {
     @Published var calendarDays: [PlanDay] = AppModel.makeJulyCalendar()
     let currentWeekRange = 20...26
     var week: [PlanDay] { calendarDays.filter { currentWeekRange.contains($0.dayNumber) } }
+
+    /// 월요일 시작, 7월과 겹치는 주 단위 날짜 창. 각 주는 7칸(월~일)이고 7월 밖은 nil.
+    /// 주간 날짜 스트립을 가로로 넘겨(3주차·4주차…) 보기 위한 창.
+    var julyWeeks: [[Int?]] {
+        var slots: [Int?] = Array(repeating: nil, count: firstWeekdayOffset)  // 월·화 빈칸
+        slots += (1...daysInMonth).map { Optional($0) }
+        while slots.count % 7 != 0 { slots.append(nil) }
+        return stride(from: 0, to: slots.count, by: 7).map { Array(slots[$0..<$0 + 7]) }
+    }
+
+    /// 오늘이 포함된 주의 인덱스 (0-based). "7월 N주차"의 N은 이 인덱스 + 1.
+    var currentWeekIndex: Int {
+        julyWeeks.firstIndex { $0.contains(todayDayNumber) } ?? 0
+    }
 
     var weekSpendItems: [WeekSpendItem] {
         var items: [WeekSpendItem] = []
@@ -269,11 +287,11 @@ final class AppModel: ObservableObject {
 
     /// 새 일정을 캘린더와 예산 계산에 함께 반영한다.
     func addEvent(title: String, day: Int, amount: Int, category: String,
-                  basis: String?, predicted: Bool = false,
+                  basis: String?, predicted: Bool = false, startHour: Double? = nil,
                   riskNote: String? = nil, riskDetail: String? = nil) {
         guard let i = calendarDays.firstIndex(where: { $0.dayNumber == day }) else { return }
-        // 기존 일정과 시간이 겹치면 타임테이블에서 블록이 포개진다 — 마지막 일정 뒤로 붙인다.
-        let start = Self.freeSlot(after: calendarDays[i].events)
+        // 사용자가 시간을 골랐으면 그 시각에, 아니면 겹치지 않는 빈 시간에 넣는다.
+        let start = startHour ?? Self.freeSlot(after: calendarDays[i].events)
         let event = DayEvent(title: title, symbol: Self.symbol(for: category),
                              startHour: start, duration: 2, amount: amount,
                              estimateLow: amount, estimateHigh: amount,

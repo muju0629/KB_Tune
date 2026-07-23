@@ -3,24 +3,108 @@
 //  KB_Tune
 //
 //  하단 내비게이션: 주간 / 대화 / 분석 / 카드·적금.
+//  페이지형 TabView라 화면을 좌우로 스와이프해 탭을 넘길 수 있다(인스타그램식).
+//  기본 탭바 대신 브랜드에 맞춘 커스텀 하단바를 쓴다.
 //  설정은 계획 화면 상단에서 진입한다.
 //
 
 import SwiftUI
 
 struct MainTabView: View {
+    @EnvironmentObject private var model: AppModel
+
     var body: some View {
-        TabView {
-            WeeklyPlanView()
-                .tabItem { Label("주간", systemImage: "calendar.day.timeline.left") }
-            ChatbotView()
-                .tabItem { Label("대화", systemImage: "bubble.left.and.bubble.right") }
-            AnalysisView()
-                .tabItem { Label("분석", systemImage: "chart.bar.xaxis") }
-            ProductsTabView()
-                .tabItem { Label("카드·적금", systemImage: "creditcard") }
+        TabView(selection: $model.selectedTab) {
+            WeeklyPlanView().tag(MainTab.weekly)
+            ChatbotView().tag(MainTab.chat)
+            AnalysisView().tag(MainTab.analysis)
+            ProductsTabView().tag(MainTab.products)
+        }
+        .tabViewStyle(.page(indexDisplayMode: .never))
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            CustomTabBar(selected: $model.selectedTab)
         }
         .tint(KB.ink)
+    }
+}
+
+/// 브랜드 하단바. iOS 26 리퀴드 글래스 스타일 — 회색 유리 알약이 선택된 탭으로 미끄러진다.
+/// 탭 하나만 상태가 바뀌므로 다른 탭은 색만 조용히 따라가고 따로 반응하지 않는다.
+struct CustomTabBar: View {
+    @Binding var selected: MainTab
+    @Namespace private var highlight
+
+    private let items: [(tab: MainTab, label: String, icon: String)] = [
+        (.weekly,   "주간",     "calendar.day.timeline.left"),
+        (.chat,     "대화",     "bubble.left.and.bubble.right"),
+        (.analysis, "분석",     "chart.bar.xaxis"),
+        (.products, "카드·적금", "creditcard"),
+    ]
+
+    private let slide = Animation.spring(response: 0.34, dampingFraction: 0.8)
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(items, id: \.tab) { item in
+                let isOn = selected == item.tab
+                Button {
+                    selected = item.tab
+                } label: {
+                    VStack(spacing: 3) {
+                        Image(systemName: item.icon)
+                            .font(.system(size: 18, weight: isOn ? .semibold : .regular))
+                        Text(item.label)
+                            .font(.system(size: 10, weight: .medium))
+                    }
+                    .foregroundStyle(isOn ? KB.ink : KB.muted)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 7)
+                    .background {
+                        if isOn {
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(.thinMaterial)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .fill(Color.primary.opacity(0.06))
+                                )
+                                .shadow(color: .black.opacity(0.1), radius: 4, y: 1)
+                                .matchedGeometryEffect(id: "tabHighlight", in: highlight)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(TabPressStyle())
+                .accessibilityLabel("\(item.label) 탭")
+                .accessibilityAddTraits(isOn ? .isSelected : [])
+            }
+        }
+        .animation(slide, value: selected)
+        .padding(5)
+        .background(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .shadow(color: .black.opacity(0.08), radius: 12, y: 3)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .stroke(KB.line.opacity(0.6), lineWidth: 1)
+        )
+        .padding(.horizontal, 18)
+        .padding(.top, 6)
+        .padding(.bottom, 2)
+        .frame(maxWidth: .infinity)
+        .background(KB.canvas.ignoresSafeArea(edges: .bottom))
+        .sensoryFeedback(.selection, trigger: selected)
+    }
+}
+
+/// 탭을 누르는 동안 살짝 눌러지는 반응 — 애플 기본 버튼처럼 은은하게.
+private struct TabPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.55 : 1)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
     }
 }
 

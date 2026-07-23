@@ -100,6 +100,15 @@ enum EventEstimator {
             )
         }
 
+        if t.contains("결혼") || t.contains("축의") || t.contains("청첩") {
+            return EstimateResponse(
+                title: title, category: "경조사", amount: 70_000,
+                low: 50_000, high: 100_000, confidence: 0.6,
+                basis: "지난 결혼식 때 축의금·교통비로 7만원 정도 쓰셨어요.",
+                method: "history"
+            )
+        }
+
         if t.contains("정장") {
             return EstimateResponse(
                 title: title, category: "쇼핑", amount: 150_000,

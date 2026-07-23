@@ -27,13 +27,30 @@ struct AddEventView: View {
     @State private var step: Step = .input
 
     @State private var title = ""
-    @State private var day = 25
+    @State private var date: Date = AddEventView.defaultDate   // 날짜+시간을 함께 고른다
     @State private var estimate: EstimateResponse?
     @State private var amount = 0            // 사용자가 조정 가능한 최종 금액
+    @State private var amountText = ""       // 입력 단계에서 사용자가 직접 적은 금액(비면 추정치 사용)
+    @State private var suggested: EstimateResponse?  // 제목으로 미리 잡은 회색 예상 금액
     @State private var isEstimating = false
     @State private var chosenAdjustment: String?
 
     private let spring = Animation.spring(response: 0.38, dampingFraction: 0.86)
+
+    // 7월(오늘~월말) 범위 안에서만 고르게 한다 — 데모 캘린더가 2026년 7월이라서.
+    private static let cal = Calendar(identifier: .gregorian)
+    private static var defaultDate: Date {
+        cal.date(from: DateComponents(year: 2026, month: 7, day: 25, hour: 19, minute: 0))!
+    }
+    private static var dateRange: ClosedRange<Date> {
+        let lower = cal.date(from: DateComponents(year: 2026, month: 7, day: 22, hour: 0, minute: 0))!
+        let upper = cal.date(from: DateComponents(year: 2026, month: 7, day: 31, hour: 23, minute: 59))!
+        return lower...upper
+    }
+    private var dayNumber: Int { Self.cal.component(.day, from: date) }
+    private var startHour: Double {
+        Double(Self.cal.component(.hour, from: date)) + Double(Self.cal.component(.minute, from: date)) / 60
+    }
 
     var body: some View {
         NavigationStack {
@@ -109,19 +126,48 @@ struct AddEventView: View {
                     .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(KB.line, lineWidth: 1))
                     .submitLabel(.done)
+                    .onChange(of: title) { _, newValue in
+                        let t = newValue.trimmingCharacters(in: .whitespaces)
+                        suggested = t.isEmpty ? nil : EventEstimator.estimate(t)
+                    }
             }
 
+            // 예상 지출 금액 — 제목으로 잡은 추정치를 회색으로 미리 얹어두고,
+            // 사용자가 직접 적으면 그 값이 우선한다(회색 안내는 사라진다).
             VStack(alignment: .leading, spacing: 8) {
-                Text("언제예요?").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
-                HStack {
-                    Text("7월 \(day)일").font(.system(size: 16, weight: .semibold)).foregroundStyle(KB.ink)
-                        .monospacedDigit()
-                    Spacer()
-                    Stepper("", value: $day, in: 22...31).labelsHidden()
+                Text("예상 지출 금액").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+                HStack(spacing: 6) {
+                    TextField("", text: $amountText,
+                              prompt: Text(suggested.map { formatWon($0.amount) } ?? "금액을 입력하세요"))
+                        .font(.system(size: 16))
+                        .keyboardType(.numberPad)
+                    if !amountText.isEmpty {
+                        Text("원").font(.system(size: 16)).foregroundStyle(KB.muted)
+                    }
                 }
                 .padding(14)
                 .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(KB.line, lineWidth: 1))
+
+                if amountText.isEmpty, let s = suggested, s.amount > 0 {
+                    Text(s.basis)
+                        .font(.system(size: 12)).foregroundStyle(KB.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("언제예요?").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+                DatePicker("", selection: $date, in: Self.dateRange,
+                           displayedComponents: [.date, .hourAndMinute])
+                    .datePickerStyle(.compact)
+                    .labelsHidden()
+                    .environment(\.locale, Locale(identifier: "ko_KR"))
+                    .tint(KB.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+                    .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(KB.line, lineWidth: 1))
             }
 
             Button { runEstimate() } label: {
@@ -132,7 +178,7 @@ struct AddEventView: View {
             .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty || isEstimating)
             .opacity(title.trimmingCharacters(in: .whitespaces).isEmpty ? 0.5 : 1)
 
-            hint("제목만 쓰면 과거 소비를 바탕으로 예상 금액을 자동으로 잡아드려요.")
+            hint("금액을 비워 두면 과거 소비를 바탕으로 잡은 예상 금액을 그대로 써요.")
         }
     }
 
@@ -182,7 +228,10 @@ struct AddEventView: View {
                     ForEach(calendar.events) { ev in
                         Button {
                             title = ev.title
-                            if (22...31).contains(ev.dayOfMonth) { day = ev.dayOfMonth }
+                            if (22...31).contains(ev.dayOfMonth),
+                               let d = Self.cal.date(from: DateComponents(year: 2026, month: 7, day: ev.dayOfMonth, hour: 19, minute: 0)) {
+                                date = d
+                            }
                             runEstimate()
                         } label: {
                             HStack(spacing: 12) {
@@ -238,7 +287,7 @@ struct AddEventView: View {
                     }
                 }
                 Text(title).font(.system(size: 17, weight: .bold)).foregroundStyle(KB.ink)
-                Text("7월 \(day)일").font(.system(size: 12.5)).foregroundStyle(KB.muted)
+                Text("7월 \(dayNumber)일").font(.system(size: 12.5)).foregroundStyle(KB.muted)
 
                 HStack {
                     Text(formatWon(amount))
@@ -306,12 +355,15 @@ struct AddEventView: View {
 
             Button {
                 if chosenAdjustment == "half" { amount /= 2 }
-                if chosenAdjustment == "next" { day = min(day + 7, 31) }
+                if chosenAdjustment == "next",
+                   let moved = Self.cal.date(byAdding: .day, value: 7, to: date) {
+                    date = min(moved, Self.dateRange.upperBound)
+                }
 
                 // 최종 금액·날짜 기준으로 위험 재판정 → 위험하면 경고를 일정에 남긴다.
                 var note: String? = nil
                 var detail: String? = nil
-                if model.currentWeekRange.contains(day) {
+                if model.currentWeekRange.contains(dayNumber) {
                     let finalAfter = before - amount
                     let finalProb = BudgetEngine.probability(model.direction,
                                                              extraCommitted: model.userAddedTotal + amount,
@@ -326,9 +378,9 @@ struct AddEventView: View {
                     }
                 }
 
-                model.addEvent(title: title, day: day, amount: amount,
+                model.addEvent(title: title, day: dayNumber, amount: amount,
                                category: estimate?.category ?? "기타",
-                               basis: estimate?.basis,
+                               basis: estimate?.basis, startHour: startHour,
                                riskNote: note, riskDetail: detail)
                 withAnimation(spring) { step = .done }
             } label: { Text("이 계획으로 일정 추가") }
@@ -378,7 +430,7 @@ struct AddEventView: View {
             Spacer(minLength: 40)
             Image(systemName: "checkmark.circle.fill").font(.system(size: 54)).foregroundStyle(KB.green)
             Text("일정을 추가했어요").font(.system(size: 20, weight: .bold)).foregroundStyle(KB.ink)
-            Text("7월 \(day)일 ‘\(title)’ \(formatWon(amount))을 반영했어요.\n이번 주에는 \(formatWon(model.weeklyBudget))까지 쓸 수 있어요.")
+            Text("7월 \(dayNumber)일 ‘\(title)’ \(formatWon(amount))을 반영했어요.\n이번 주에는 \(formatWon(model.weeklyBudget))까지 쓸 수 있어요.")
                 .font(.system(size: 13.5)).foregroundStyle(KB.muted)
                 .multilineTextAlignment(.center).lineSpacing(3)
             Spacer()
@@ -411,7 +463,9 @@ struct AddEventView: View {
         Task {
             let result = await agent.estimate(title: t) ?? EventEstimator.estimate(t)
             estimate = result
-            amount = result.amount
+            // 사용자가 직접 적은 금액이 있으면 그 값이 우선, 없으면 추정치.
+            let typed = Int(amountText.filter(\.isNumber)) ?? 0
+            amount = typed > 0 ? typed : result.amount
             isEstimating = false
             withAnimation(spring) { step = .result }
         }
