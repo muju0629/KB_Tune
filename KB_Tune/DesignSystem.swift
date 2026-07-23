@@ -20,6 +20,23 @@ enum KB {
     static let caution = Color(hex: 0xB4540A)     // 차분한 주의(예산 초과 등) — 오류용 빨강 아님
     static let cautionSoft = Color(hex: 0xFBEEE2) // 주의 배경
     static let expenseRed = Color(hex: 0xD64545)  // 월간 캘린더 등 지출 금액 표기
+
+    // 종이 위에 카드를 얇은 테두리 대신 '깊이'로 띄우는 그림자.
+    static let cardShadow = Color(hex: 0x2A2822).opacity(0.07)
+}
+
+extension View {
+    /// 돈 숫자의 정체성 — 따뜻하고 정확한 라운드 숫자(자릿수 고정으로 흔들림 없음).
+    /// 한글(원)은 시스템 서체로 자연히 폴백되고, 숫자만 부드러워진다.
+    func money(_ size: CGFloat, weight: Font.Weight = .bold) -> some View {
+        font(.system(size: size, weight: weight, design: .rounded)).monospacedDigit()
+    }
+
+    /// 떠 있는 카드 표면 — 테두리 대신 부드러운 그림자로 종이 위에 띄운다.
+    func elevatedCard(_ radius: CGFloat = 18, fill: Color = .white) -> some View {
+        background(fill, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .shadow(color: KB.cardShadow, radius: 12, x: 0, y: 5)
+    }
 }
 
 extension Color {
@@ -64,7 +81,8 @@ struct PrimaryButtonStyle: ButtonStyle {
             .frame(maxWidth: .infinity)
             .frame(height: 52)
             .background(KB.yellow, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .opacity(configuration.isPressed ? 0.82 : 1)
+            .shadow(color: KB.yellow.opacity(configuration.isPressed ? 0.15 : 0.35), radius: 10, x: 0, y: 5)
+            .opacity(configuration.isPressed ? 0.9 : 1)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }

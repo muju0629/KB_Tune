@@ -223,26 +223,28 @@ struct ChatbotView: View {
     }
 
     private var typingBubble: some View {
-        HStack(alignment: .top, spacing: 0) {
-            HStack(spacing: 10) {
-                ProgressView()
-                    .tint(KB.ink)
-                    .controlSize(.small)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(thinkingSteps[min(thinkingStep, thinkingSteps.count - 1)])
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(KB.ink)
-                        .accessibilityIdentifier("chat-thinking")
-                    Text("캘린더와 예산을 맞춰 보는 중이에요")
-                        .font(.caption)
-                        .foregroundStyle(KB.muted)
-                }
+        HStack(alignment: .bottom, spacing: 8) {
+            Image("AgentMascot")
+                .resizable()
+                .scaledToFill()
+                .frame(width: 30, height: 30)
+                .clipShape(Circle())
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text(thinkingSteps[min(thinkingStep, thinkingSteps.count - 1)])
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(KB.ink)
+                    .contentTransition(.opacity)
+                    .accessibilityIdentifier("chat-thinking")
+                TypingDots()
             }
-            .padding(.horizontal, 14).padding(.vertical, 12)
-            .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KB.line, lineWidth: 1))
+            .padding(.horizontal, 14).padding(.vertical, 11)
+            .elevatedCard(16)
+
             Spacer(minLength: 44)
         }
+        .transition(.opacity.combined(with: .move(edge: .bottom)))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(thinkingSteps[min(thinkingStep, thinkingSteps.count - 1)])
     }
@@ -317,7 +319,7 @@ struct ChatbotView: View {
         input = ""
         inputFocused = false
         thinkingStep = 0
-        isThinking = true
+        withAnimation(.easeOut(duration: 0.25)) { isThinking = true }
 
         Task {
             let minimumDelay = Task {
@@ -326,10 +328,10 @@ struct ChatbotView: View {
             let stageUpdates = Task {
                 try? await Task.sleep(for: .milliseconds(450))
                 guard !Task.isCancelled else { return }
-                thinkingStep = 1
+                withAnimation(.easeInOut(duration: 0.3)) { thinkingStep = 1 }
                 try? await Task.sleep(for: .milliseconds(550))
                 guard !Task.isCancelled else { return }
-                thinkingStep = 2
+                withAnimation(.easeInOut(duration: 0.3)) { thinkingStep = 2 }
             }
 
             var streamed = ""
@@ -339,7 +341,7 @@ struct ChatbotView: View {
 
             _ = await minimumDelay.result
             stageUpdates.cancel()
-            isThinking = false
+            withAnimation(.easeOut(duration: 0.25)) { isThinking = false }
 
             if ok, !streamed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 messages.append(ChatMessage(
@@ -463,6 +465,30 @@ struct ChatbotView: View {
             impact: "현재 일정비 \(rangeText(low: model.plannedSpendLow, high: model.plannedSpendHigh)) 예상",
             basis: "2026년 7월 캘린더 · 입력한 월수입과 저축 목표"
         )
+    }
+}
+
+/// 답변을 기다리는 동안 살아 있는 느낌을 주는 타이핑 점(웨이브 애니메이션).
+private struct TypingDots: View {
+    @State private var animating = false
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(0..<3, id: \.self) { i in
+                Circle()
+                    .fill(KB.ink.opacity(0.5))
+                    .frame(width: 6.5, height: 6.5)
+                    .scaleEffect(animating ? 1 : 0.5)
+                    .opacity(animating ? 1 : 0.35)
+                    .animation(
+                        .easeInOut(duration: 0.5)
+                            .repeatForever(autoreverses: true)
+                            .delay(Double(i) * 0.18),
+                        value: animating
+                    )
+            }
+        }
+        .onAppear { animating = true }
     }
 }
 

@@ -151,20 +151,25 @@ struct WeeklyPlanView: View {
     }
 
     private var hero: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 8) {
             Text("\(model.userName)님의 이번 주 일정비는 \(formatWon(model.plannedSpendTotal))")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(KB.muted)
 
-            Text("\(formatWon(roundedWeeklyBudget)) 더 쓸 수 있어요")
-            .font(.system(size: 30, weight: .bold))
-            .foregroundStyle(KB.ink)
-            .lineSpacing(4)
-            .padding(.top, 6)
-            .background(alignment: .bottomLeading) {
-                KB.yellow.frame(width: 118, height: 9)
-                    .offset(x: 0, y: -6)
-            }
+            Text(formatWon(roundedWeeklyBudget))
+                .money(46, weight: .heavy)
+                .foregroundStyle(KB.ink)
+                .padding(.trailing, 2)
+                .background(alignment: .bottom) {
+                    KB.yellow.frame(height: 13)
+                        .padding(.horizontal, -4)
+                        .offset(y: -5)
+                }
+                .padding(.top, 2)
+
+            Text("더 쓸 수 있어요")
+                .font(.system(size: 19, weight: .semibold))
+                .foregroundStyle(KB.ink)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("이번 주 일정비 \(formatWon(model.plannedSpendTotal)), 추가 사용 가능액 약 \(formatWon(roundedWeeklyBudget)).")
@@ -291,7 +296,7 @@ struct WeeklyPlanView: View {
                     }
                     Spacer()
                     Text(formatWon(total))
-                        .font(.system(size: 12.5, weight: .semibold)).foregroundStyle(KB.muted)
+                        .money(12.5, weight: .semibold).foregroundStyle(KB.muted)
                 }
                 ForEach(items) { item in
                     Button {
@@ -325,14 +330,13 @@ struct WeeklyPlanView: View {
                     }
                 }
                 Text(estimateLabel(low: item.amountLow, high: item.amountHigh, estimated: item.isEstimated))
-                    .font(.system(size: 12.5)).foregroundStyle(KB.muted)
+                    .money(12.5, weight: .medium).foregroundStyle(KB.muted)
             }
             Spacer(minLength: 8)
             Image(systemName: "chevron.right").font(.system(size: 12)).foregroundStyle(KB.muted.opacity(0.6))
         }
-        .padding(.vertical, 8).padding(.horizontal, 12)
-        .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(KB.line, lineWidth: 1))
+        .padding(.vertical, 10).padding(.horizontal, 12)
+        .elevatedCard(14)
     }
 
     /// 캘린더엔 없지만 과거 주기상 이번 주에 나갈 것 같은 지출.
@@ -358,7 +362,7 @@ struct WeeklyPlanView: View {
                         }
                         Spacer(minLength: 8)
                         Text("예상 \(formatWon(spend.amount))")
-                            .font(.system(size: 14, weight: .bold)).foregroundStyle(KB.ink)
+                            .money(14, weight: .bold).foregroundStyle(KB.ink)
                             .lineLimit(1).minimumScaleFactor(0.8)
                     }
 
@@ -402,9 +406,8 @@ struct WeeklyPlanView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                .padding(14)
-                .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
+                .padding(16)
+                .elevatedCard(16)
                 .transition(.scale(scale: 0.85).combined(with: .opacity))
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel("\(spend.pattern.key) 예상 \(formatWon(spend.amount)). \(spend.reason)")
@@ -469,10 +472,8 @@ struct WeeklyPlanView: View {
             .buttonStyle(.plain)
             .accessibilityHint("이번 주 사용 가능액의 계산 기준을 봅니다")
         }
-        .padding(16)
-        .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .stroke(KB.line, lineWidth: 1))
+        .padding(18)
+        .elevatedCard(18)
     }
 
     private var actions: some View {
@@ -493,9 +494,8 @@ struct WeeklyPlanView: View {
                 Spacer()
                 Image(systemName: "chevron.right").font(.system(size: 14)).foregroundStyle(KB.muted)
             }
-            .padding(14)
-            .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
+            .padding(16)
+            .elevatedCard(16)
         }
         .buttonStyle(.plain)
     }

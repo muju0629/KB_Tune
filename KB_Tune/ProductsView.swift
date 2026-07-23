@@ -155,15 +155,14 @@ struct CardRecommendPage: View {
                 Text(model.analysisPeriod).font(.system(size: 11)).foregroundStyle(KB.muted)
             }
             Text(formatWon(model.spendMonthly))
-                .font(.system(size: 24, weight: .bold)).foregroundStyle(KB.ink)
+                .money(27, weight: .heavy).foregroundStyle(KB.ink)
             TierBar(recognized: reco.recognizedSpend, tiers: [200_000, 300_000, 400_000])
             Text("카드 전월실적이 아니라 캘린더 일정비예요. 실제 실적은 카드 내역에서 확인해 주세요.")
                 .font(.system(size: 11)).foregroundStyle(KB.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(16)
-        .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
+        .elevatedCard(16)
     }
 
     private func excludedRow(_ e: CardEval) -> some View {
@@ -243,11 +242,12 @@ struct CardHeroRow: View {
                     if !compact {
                         Text(eval.product.short).font(.system(size: 12)).foregroundStyle(KB.muted)
                     }
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text("월 +\(formatWon(eval.netMonthly))")
-                            .font(.system(size: compact ? 15 : 19, weight: .bold)).foregroundStyle(KB.green)
-                        Text("예상 혜택").font(.system(size: 11)).foregroundStyle(KB.muted)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("월 예상 혜택").font(.system(size: 10.5)).foregroundStyle(KB.muted)
+                        Text("+\(formatWon(eval.netMonthly))")
+                            .money(compact ? 17 : 22, weight: .heavy).foregroundStyle(KB.green)
                     }
+                    .padding(.top, 2)
                 }
                 Spacer(minLength: 4)
                 Image(systemName: "chevron.right").font(.system(size: 13)).foregroundStyle(KB.muted)
@@ -255,7 +255,8 @@ struct CardHeroRow: View {
             .padding(16)
             .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(badge == "추천" ? KB.yellow : KB.line, lineWidth: badge == "추천" ? 1.5 : 1))
+                .stroke(badge == "추천" ? KB.yellow : KB.line.opacity(0.001), lineWidth: badge == "추천" ? 1.5 : 0))
+            .shadow(color: KB.cardShadow, radius: 12, x: 0, y: 5)
         }
         .buttonStyle(.plain)
     }
@@ -270,12 +271,11 @@ struct CardCandidateRow: View {
             Text(eval.product.name).font(.system(size: 14, weight: .semibold)).foregroundStyle(KB.ink)
             Spacer(minLength: 4)
             Text("월 +\(formatWon(eval.netMonthly))")
-                .font(.system(size: 12.5, weight: .semibold)).foregroundStyle(KB.green)
+                .money(13, weight: .bold).foregroundStyle(KB.green)
             Image(systemName: "chevron.right").font(.system(size: 12)).foregroundStyle(KB.muted)
         }
         .padding(.horizontal, 13).frame(height: 56)
-        .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
+        .elevatedCard(14)
     }
 }
 
@@ -598,7 +598,7 @@ struct SavingsRow: View {
                 Text("\(eval.product.role.rawValue) · \(eval.product.termLabel)")
                     .font(.system(size: 11.5)).foregroundStyle(KB.muted)
                 if let m = metric {
-                    Text(m.headline).font(.system(size: 13, weight: .bold)).foregroundStyle(KB.green)
+                    Text(m.headline).money(13.5, weight: .bold).foregroundStyle(KB.green)
                         .lineLimit(1).minimumScaleFactor(0.85)
                     Text(m.sub).font(.system(size: 11)).foregroundStyle(KB.muted)
                 }
@@ -609,7 +609,8 @@ struct SavingsRow: View {
         .padding(15)
         .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .stroke(eval.verdict == .pick ? KB.yellow : KB.line, lineWidth: eval.verdict == .pick ? 1.5 : 1))
+            .stroke(eval.verdict == .pick ? KB.yellow : Color.clear, lineWidth: eval.verdict == .pick ? 1.5 : 0))
+        .shadow(color: KB.cardShadow, radius: 12, x: 0, y: 5)
     }
 }
 
@@ -675,9 +676,9 @@ struct SavingsDetailView: View {
                     .font(.system(size: 12)).foregroundStyle(KB.muted)
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text("예상 이자 \(formatWon(eval.estInterest))")
-                        .font(.system(size: 22, weight: .bold)).foregroundStyle(KB.green)
+                        .money(22, weight: .heavy).foregroundStyle(KB.green)
                     Text("연 \(String(format: "%.2f", eval.product.expectedRate))%")
-                        .font(.system(size: 12)).foregroundStyle(KB.muted)
+                        .money(12, weight: .medium).foregroundStyle(KB.muted)
                 }
                 Text("모든 우대 충족 시 최대 \(formatWon(eval.maxInterest)) (연 \(String(format: "%.2f", eval.product.maxRate))%) · 원금 \(formatWon(eval.monthlyDeposit * eval.months)) · 중도해지 시 낮은 이율")
                     .font(.system(size: 11.5)).foregroundStyle(KB.muted)
@@ -685,7 +686,7 @@ struct SavingsDetailView: View {
             } else {
                 Text("100만원 보관 기준 (세전)").font(.system(size: 12)).foregroundStyle(KB.muted)
                 Text("월 약 \(formatWon(eval.estInterest)) 이자")
-                    .font(.system(size: 22, weight: .bold)).foregroundStyle(KB.green)
+                    .money(22, weight: .heavy).foregroundStyle(KB.green)
                 Text("기본금리 연 0.1% · 우대조건 충족 여부에 따라 크게 달라져요.")
                     .font(.system(size: 11.5)).foregroundStyle(KB.muted)
             }
