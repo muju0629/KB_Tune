@@ -106,7 +106,8 @@ struct ChatbotView: View {
                 Text("계획 도우미")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(KB.ink)
-                Text("이번 주 약 \(formatWon(roundedWeeklyBudget)) · 목표 \(model.probability)%")
+                // 확률 한 줄 대신, 목표를 지켰을 때 남는 돈과 예측 오차를 함께 보여준다(11.2).
+                Text("이번 주 약 \(formatWon(roundedWeeklyBudget)) · 목표 달성 후 \(formatWon(monthEndSurplus)) 여유 · 오차 ±\(formatWon(monthEndMargin))")
                     .font(.caption)
                     .foregroundStyle(KB.muted)
             }
@@ -115,7 +116,16 @@ struct ChatbotView: View {
         .padding(.horizontal, 18).padding(.vertical, 10)
         .background(KB.yellowSoft)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("계획 도우미. 이번 주 사용 가능액 약 \(formatWon(roundedWeeklyBudget)), 목표 확률 \(model.probability)%")
+        .accessibilityLabel("계획 도우미. 이번 주 사용 가능액 약 \(formatWon(roundedWeeklyBudget)), 저축 목표 달성 후 약 \(formatWon(monthEndSurplus)) 여유, 예상 오차 ±\(formatWon(monthEndMargin))")
+    }
+
+    /// 저축 목표를 지킨 뒤 월말에 남을 것으로 보이는 금액(예상범위의 대표값)
+    private var monthEndSurplus: Int {
+        (model.monthEndRemainingLow + model.monthEndRemainingHigh) / 2
+    }
+    /// 예상범위의 폭 — 대표금액 대비 오차로 보여준다
+    private var monthEndMargin: Int {
+        (model.monthEndRemainingHigh - model.monthEndRemainingLow) / 2
     }
 
     // MARK: 말풍선
@@ -210,11 +220,12 @@ struct ChatbotView: View {
         case .addEvent:
             HStack(spacing: 8) {
                 // 8월은 아직 계획 모델 밖 — 실제로 반영되지 않으니 문구도 그렇게 말한다.
-                smallAction("예산 초안으로 기억", filled: true) { flash("8월 2일 데이트를 100,000원 초안으로 기억해둘게요.") }
-                smallAction("금액 바꾸기", filled: false) {
+                smallAction("100,000원 예약", filled: true) { flash("8월 2일 데이트 100,000원을 8월 계획 예산에 예약했어요.") }
+                smallAction("금액 변경", filled: false) {
                     input = "200일 데이트 예산을 "
                     inputFocused = true
                 }
+                smallAction("예약하지 않기", filled: false) { flash("이번엔 예약하지 않을게요.") }
             }
             .padding(.top, 2)
         case nil:
@@ -396,8 +407,8 @@ struct ChatbotView: View {
         if q.contains("200일") || q.contains("데이트") || q.contains("다음주") || q.contains("8월2일") {
             return ChatMessage(
                 role: .agent,
-                conclusion: "8월 2일 200일 데이트는 100,000원을 먼저 빼둘게요.",
-                reason: "아직 금액이 없어서 식사·카페·이동을 포함한 예산 초안으로 잡았어요.",
+                conclusion: "8월 2일 200일 데이트 비용으로 100,000원을 8월 계획 예산에 예약할까요? 실제 출금은 없어요.",
+                reason: "아직 금액이 없어서 식사·카페·이동을 포함한 예산으로 잡았어요.",
                 impact: "7월 계산에는 넣지 않고, 8월 예산에서 따로 확보",
                 basis: "8월 2일 캘린더의 ‘200일’·‘데이트’ 일정",
                 preview: EventPreview(title: "200일 데이트", amount: 100_000, day: "8월 2일 일요일"),

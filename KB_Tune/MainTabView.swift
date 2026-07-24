@@ -22,7 +22,10 @@ struct MainTabView: View {
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            CustomTabBar(selected: $model.selectedTab)
+            // 이미 보고 있는 탭을 다시 누르면 그 화면을 처음 상태로 되돌린다.
+            CustomTabBar(selected: $model.selectedTab) { tab in
+                if tab == .weekly { model.resetPlanView() }
+            }
         }
         .tint(KB.ink)
     }
@@ -32,6 +35,7 @@ struct MainTabView: View {
 /// 탭 하나만 상태가 바뀌므로 다른 탭은 색만 조용히 따라가고 따로 반응하지 않는다.
 struct CustomTabBar: View {
     @Binding var selected: MainTab
+    var onReselect: (MainTab) -> Void
     @Namespace private var highlight
 
     private let items: [(tab: MainTab, label: String, icon: String)] = [
@@ -48,7 +52,7 @@ struct CustomTabBar: View {
             ForEach(items, id: \.tab) { item in
                 let isOn = selected == item.tab
                 Button {
-                    selected = item.tab
+                    if selected == item.tab { onReselect(item.tab) } else { selected = item.tab }
                 } label: {
                     VStack(spacing: 3) {
                         Image(systemName: item.icon)

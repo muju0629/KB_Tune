@@ -10,6 +10,17 @@ import SwiftUI
 import PhotosUI
 import UIKit
 
+/// 지출 묶음 한 줄 — 이미 쓴 돈(spent)과 앞으로 예상되는 돈(upcoming)을 함께 담는다.
+private struct SpendBucket: Identifiable {
+    let name: String
+    let symbol: String
+    var spent = 0
+    var upcoming = 0
+    var detail: String? = nil   // 구독료처럼 안에 뭐가 들었는지 한 줄 설명
+    var id: String { name }
+    var total: Int { spent + upcoming }
+}
+
 struct AnalysisView: View {
     @EnvironmentObject private var model: AppModel
     @StateObject private var store = ImageStore()
@@ -17,6 +28,9 @@ struct AnalysisView: View {
     @StateObject private var agent = AgentService()
     @State private var picks: [PhotosPickerItem] = []
     @State private var isImporting = false
+
+    // 앞으로 예상되는(아직 안 쓴) 지출 색 — 짙은 회색
+    private let upcomingTint = KB.ink.opacity(0.62)
 
     // 캡처 → 거래 추출 상태
     @State private var isExtracting = false
@@ -208,12 +222,12 @@ struct AnalysisView: View {
         case "쇼핑": "handbag"
         case "교통": "bus"
         case "구독": "play.rectangle"
-        case "여가": "film"
+        case "여가", "문화": "film"
         case "출근": "briefcase"
         case "데이트": "heart"
         case "가족": "house"
         case "경조사": "gift"
-        case "자기관리": "cross.case"
+        case "자기관리", "건강": "cross.case"
         default: "questionmark.circle"
         }
     }
@@ -233,46 +247,116 @@ struct AnalysisView: View {
         }
     }
 
-    // MARK: 캘린더 예상 지출
+    // MARK: 7월 지출 — 필수/기타로 묶고, 이미 쓴 돈과 앞으로 예상되는 돈을 색으로 나눈다
+
+    /// 성제 페르소나의 7월 실제 지출을 손으로 정리한 데모 값.
+    /// spent = 이미 쓴 돈(노랑), upcoming = 앞으로 예상되는 돈(짙은 회색).
+    private var essentialBuckets: [SpendBucket] {
+        [
+            SpendBucket(name: "식비", symbol: "fork.knife", spent: 250_000, upcoming: 100_000),
+            SpendBucket(name: "교통", symbol: "bus", spent: 150_000),
+            SpendBucket(name: "유류비", symbol: "fuelpump", spent: 80_000),
+            SpendBucket(name: "통신비", symbol: "antenna.radiowaves.left.and.right", spent: 75_000),
+            SpendBucket(name: "구독료", symbol: "play.rectangle", spent: 92_000,
+                        detail: "유튜브·클로드·코덱스·iCloud 2TB·쿠팡"),
+            SpendBucket(name: "보험료", symbol: "checkmark.shield", spent: 30_000),
+            SpendBucket(name: "병원", symbol: "cross.case", spent: 150_000),
+        ]
+    }
+
+    private var discretionaryBuckets: [SpendBucket] {
+        [
+            SpendBucket(name: "데이트", symbol: "heart", spent: 130_000, upcoming: 70_000),
+            SpendBucket(name: "쇼핑", symbol: "handbag", spent: 180_000),
+            SpendBucket(name: "친목", symbol: "person.2", spent: 165_000),
+            SpendBucket(name: "경조사", symbol: "rosette", spent: 70_000),
+            SpendBucket(name: "문화", symbol: "film", spent: 60_000),
+        ]
+    }
 
     private var breakdownSection: some View {
-        let sorted = model.spendProfile.sorted { $0.monthly > $1.monthly }
-        let maxTotal = max(sorted.first?.monthly ?? 0, 1)
+        let essential = essentialBuckets.filter { $0.total > 0 }
+        let discretionary = discretionaryBuckets.filter { $0.total > 0 }
+        let maxTotal = max((essential + discretionary).map(\.total).max() ?? 1, 1)
+        let grandTotal = (essential + discretionary).reduce(0) { $0 + $1.total }
+        let upcomingTotal = (essential + discretionary).reduce(0) { $0 + $1.upcoming }
         return VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
-                Text("7월 일정별 예상 지출").font(.system(size: 16, weight: .semibold)).foregroundStyle(KB.ink)
+                Text("7월 지출").font(.system(size: 16, weight: .semibold)).foregroundStyle(KB.ink)
                 Spacer()
-                Text("합계 약 \(formatWon(model.spendMonthly))").font(.system(size: 12.5)).foregroundStyle(KB.muted)
+                Text("합계 약 \(formatWon(grandTotal))").font(.system(size: 12.5)).foregroundStyle(KB.muted)
             }
 
-            VStack(spacing: 12) {
-                ForEach(sorted) { cat in
-                    HStack(spacing: 12) {
-                        IconBadge(systemName: cat.symbol, background: KB.greenSoft, size: 38)
-                        VStack(alignment: .leading, spacing: 5) {
-                            HStack {
-                                Text(cat.name).font(.system(size: 14, weight: .medium)).foregroundStyle(KB.ink)
-                                Spacer()
-                                Text(formatWon(cat.monthly)).font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.ink)
-                            }
-                            GeometryReader { geo in
-                                ZStack(alignment: .leading) {
-                                    Capsule().fill(KB.line.opacity(0.5)).frame(height: 6)
-                                    Capsule().fill(KB.yellow)
-                                        .frame(width: geo.size.width * CGFloat(cat.monthly) / CGFloat(maxTotal), height: 6)
-                                }
-                            }
-                            .frame(height: 6)
-                        }
-                    }
-                }
+            HStack(spacing: 14) {
+                legendDot(KB.yellow, "지출 완료")
+                legendDot(upcomingTint, "예상")
+                Spacer()
             }
-            .padding(16)
-            .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KB.line, lineWidth: 1))
 
-            Text("캘린더 제목을 기준으로 계산한 예상액이며 실제 결제와 다를 수 있어요.")
+            groupCard("필수 지출", items: essential, maxTotal: maxTotal)
+            groupCard("기타 지출", items: discretionary, maxTotal: maxTotal)
+
+            Text(upcomingTotal > 0
+                 ? "짙은 회색이 앞으로 나갈 것으로 보이는 \(formatWon(upcomingTotal))이에요."
+                 : "이번 달 예상 지출을 필수와 기타로 나눠 봤어요.")
                 .font(.system(size: 11.5)).foregroundStyle(KB.muted)
+        }
+    }
+
+    private func legendDot(_ color: Color, _ label: String) -> some View {
+        HStack(spacing: 5) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text(label).font(.system(size: 11.5)).foregroundStyle(KB.muted)
+        }
+    }
+
+    private func groupCard(_ title: String, items: [SpendBucket], maxTotal: Int) -> some View {
+        let total = items.reduce(0) { $0 + $1.total }
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text(title).font(.system(size: 14, weight: .bold)).foregroundStyle(KB.ink)
+                Spacer()
+                Text(formatWon(total)).font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+            }
+            ForEach(items) { item in bucketRow(item, maxTotal: maxTotal) }
+        }
+        .padding(16)
+        .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KB.line, lineWidth: 1))
+    }
+
+    private func bucketRow(_ item: SpendBucket, maxTotal: Int) -> some View {
+        HStack(spacing: 12) {
+            IconBadge(systemName: item.symbol, background: KB.greenSoft, size: 38)
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(item.name).font(.system(size: 14, weight: .medium)).foregroundStyle(KB.ink)
+                    Spacer()
+                    if item.upcoming > 0 {
+                        Text("예상 +\(formatWon(item.upcoming))")
+                            .font(.system(size: 10.5, weight: .medium)).foregroundStyle(upcomingTint)
+                    }
+                    Text(formatWon(item.total)).font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.ink)
+                }
+                if let detail = item.detail {
+                    Text(detail).font(.system(size: 10.5)).foregroundStyle(KB.muted)
+                        .lineLimit(1).minimumScaleFactor(0.85)
+                }
+                GeometryReader { geo in
+                    let scale = geo.size.width / CGFloat(maxTotal)
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(KB.line.opacity(0.4)).frame(height: 6)
+                        HStack(spacing: 0) {
+                            Rectangle().fill(KB.yellow).frame(width: max(0, CGFloat(item.spent) * scale))
+                            Rectangle().fill(upcomingTint).frame(width: max(0, CGFloat(item.upcoming) * scale))
+                        }
+                        .frame(height: 6)
+                        .clipShape(Capsule())
+                    }
+                    .frame(height: 6)
+                }
+                .frame(height: 6)
+            }
         }
     }
 
@@ -283,8 +367,8 @@ struct AnalysisView: View {
                 Image(systemName: "sparkles").font(.system(size: 18)).foregroundStyle(KB.ink)
             }
             VStack(alignment: .leading, spacing: 5) {
-                Text("7월은 경조사·쇼핑 지출이 220,000원으로 가장 커요.").font(.system(size: 14, weight: .semibold)).foregroundStyle(KB.ink)
-                Text("정장 150,000원과 교수님 결혼식 70,000원이 대부분이에요. 출근은 점심·교통 비용이 들지 않아 합계에서 뺐고, 금액이 없는 월급날·카드 결제일도 계산에 넣지 않았어요.")
+                Text("이번 달은 식비와 병원비가 크게 나갔어요.").font(.system(size: 14, weight: .semibold)).foregroundStyle(KB.ink)
+                Text("식비·교통·통신·병원처럼 꼭 나가는 돈은 필수 지출로 묶었어요. 짙은 회색은 아직 안 썼지만 앞으로 나갈 것으로 보이는 지출이라, 어디서 더 쓰게 될지 미리 볼 수 있어요.")
                     .font(.system(size: 13)).foregroundStyle(KB.muted).fixedSize(horizontal: false, vertical: true)
             }
         }

@@ -44,6 +44,23 @@ enum SpendDirection: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - 금액 상태 (기획 보고서 7.2 — 확정 지출 / 예약 예산 / 패턴 예상)
+
+/// 확정 지출: 이미 결제했거나 반드시 납부(가용금액에서 전액 차감)
+/// 예약 예산: 캘린더 일정에 배정했지만 아직 결제 전인 가상 예약(전액 예약, 실제 출금 없음)
+/// 패턴 예상: 캘린더엔 없지만 반복될 가능성이 있는 지출(범위로만 표시, upcomingSpends 목록)
+enum SpendState: String {
+    case confirmed, reserved, pattern
+
+    var label: String {
+        switch self {
+        case .confirmed: "확정"
+        case .reserved: "예약"
+        case .pattern: "예상"
+        }
+    }
+}
+
 // MARK: - 하루 일정(타임테이블)
 
 struct DayEvent: Identifiable {
@@ -60,6 +77,9 @@ struct DayEvent: Identifiable {
     var isProtected: Bool = false
     var riskNote: String? = nil     // 위험 일정 한 줄 요약
     var riskDetail: String? = nil   // 상세 설명 + 추천
+    var category: String = "기타"    // 결제 업종(무엇에 썼는지) — 식사·카페·쇼핑·교통 등
+    var purpose: String? = nil      // 생활 목적(왜 썼는지) — 데이트·가족·모임·업무·공부 등
+    var state: SpendState = .confirmed
 
     var amountLow: Int { estimateLow ?? amount }
     var amountHigh: Int { estimateHigh ?? amount }
@@ -97,6 +117,8 @@ struct WeekSpendItem: Identifiable {
     var isEstimated: Bool
     var isProtected: Bool
     var isRisky: Bool
+    var purpose: String?
+    var state: SpendState
 }
 
 // MARK: - 기기 캘린더 행(EventKit 연동용)
@@ -134,6 +156,9 @@ final class AppModel: ObservableObject {
 
     @Published var hasOnboarded = false
     @Published var selectedTab: MainTab = .weekly
+    /// 이미 선택된 주간 탭을 다시 누르면 계획 화면을 처음 상태(주간 메인)로 되돌리는 신호.
+    @Published private(set) var planResetToken = 0
+    func resetPlanView() { planResetToken += 1 }
 
     // 온보딩 입력값 (페르소나 기본값)
     @Published var usesDemoData = true
@@ -225,7 +250,9 @@ final class AppModel: ObservableObject {
                                   amountHigh: event.amountHigh,
                                   isEstimated: event.isEstimated,
                                   isProtected: event.isProtected,
-                                  isRisky: event.riskNote != nil)
+                                  isRisky: event.riskNote != nil,
+                                  purpose: event.purpose,
+                                  state: event.state)
                 )
             }
         }
@@ -277,6 +304,34 @@ final class AppModel: ObservableObject {
     var plannedSpendLow: Int { weekSpendItems.reduce(0) { $0 + $1.amountLow } }
     var plannedSpendHigh: Int { weekSpendItems.reduce(0) { $0 + $1.amountHigh } }
 
+    // MARK: 하루 마감 (기획 보고서 8.2)
+    //
+    // 실서비스에선 KB Pay 결제 기록으로 예약 지출의 실제 결제 여부를 자동으로 안다.
+    // 카드 기록이 붙은 지출은 물어볼 필요 없이 확정되고,
+    // '예정돼 있었는데 카드 기록이 없는' 지출만 남아 "현금으로 결제하셨나요?"라고 되묻는다.
+
+    @Published private(set) var dailyCloseDismissed = false
+
+    /// 카드 기록 없이 예정만 잡혀 있는 오늘 지출 — 현금 결제 여부를 되물어야 하는 항목.
+    var todayCloseItems: [DayEvent] {
+        guard let today = day(number: todayDayNumber) else { return [] }
+        return today.events.filter { $0.amount > 0 && $0.state == .reserved }
+    }
+
+    /// 확인할 게 있는 날에만 카드를 띄운다 — 무조건 알림 금지.
+    var shouldShowDailyClose: Bool { !dailyCloseDismissed && !todayCloseItems.isEmpty }
+
+    /// paidCash=true: 현금으로 결제했다고 확인 → 예약을 확정 지출로 학습한다.
+    /// paidCash=false: 아직 안 썼으니 예약 상태 그대로 두고 카드만 닫는다.
+    func resolveDailyClose(paidCash: Bool) {
+        if paidCash, let i = calendarDays.firstIndex(where: { $0.dayNumber == todayDayNumber }) {
+            for j in calendarDays[i].events.indices where calendarDays[i].events[j].state == .reserved {
+                calendarDays[i].events[j].state = .confirmed
+            }
+        }
+        dailyCloseDismissed = true
+    }
+
     /// 이번 주 위험 일정 (예산 초과)
     var riskyDay: PlanDay? { week.first { $0.hasRisk } }
     var riskyEvent: DayEvent? { riskyDay?.events.first { $0.riskNote != nil } }
@@ -286,9 +341,11 @@ final class AppModel: ObservableObject {
     // MARK: 일정 추가·조정 (AddEventView·위험카드에서 호출)
 
     /// 새 일정을 캘린더와 예산 계산에 함께 반영한다.
+    /// 새로 추가하는 일정은 아직 결제 전이므로 기본 상태는 '예약 예산'이다(실제 출금 없음, 가용금액에서만 제외).
     func addEvent(title: String, day: Int, amount: Int, category: String,
                   basis: String?, predicted: Bool = false, startHour: Double? = nil,
-                  riskNote: String? = nil, riskDetail: String? = nil) {
+                  riskNote: String? = nil, riskDetail: String? = nil,
+                  purpose: String? = nil, state: SpendState = .reserved) {
         guard let i = calendarDays.firstIndex(where: { $0.dayNumber == day }) else { return }
         // 사용자가 시간을 골랐으면 그 시각에, 아니면 겹치지 않는 빈 시간에 넣는다.
         let start = startHour ?? Self.freeSlot(after: calendarDays[i].events)
@@ -296,7 +353,8 @@ final class AppModel: ObservableObject {
                              startHour: start, duration: 2, amount: amount,
                              estimateLow: amount, estimateHigh: amount,
                              estimateBasis: basis, isPredicted: predicted,
-                             riskNote: riskNote, riskDetail: riskDetail)
+                             riskNote: riskNote, riskDetail: riskDetail,
+                             category: category, purpose: purpose, state: state)
         calendarDays[i].events.append(event)
         calendarDays[i].events.sort { $0.startHour < $1.startHour }
 
@@ -396,14 +454,17 @@ final class AppModel: ObservableObject {
         func add(_ day: Int, _ title: String, symbol: String,
                  start: Double, duration: Double,
                  amount: Int = 0, low: Int? = nil, high: Int? = nil,
-                 basis: String? = nil, protected: Bool = false) {
+                 basis: String? = nil, protected: Bool = false,
+                 category: String = "기타", purpose: String? = nil,
+                 state: SpendState = .confirmed) {
             events[day, default: []].append(
                 DayEvent(title: title, symbol: symbol,
                          startHour: start, duration: duration,
                          amount: amount,
                          estimateLow: low, estimateHigh: high,
                          estimateBasis: basis,
-                         isProtected: protected)
+                         isProtected: protected,
+                         category: category, purpose: purpose, state: state)
             )
         }
 
@@ -415,65 +476,91 @@ final class AppModel: ObservableObject {
         }
 
         add(1, "저녁", symbol: "fork.knife", start: 18, duration: 2,
-            amount: 8_000, low: 8_000, high: 8_000, basis: "간단한 식사 기준")
+            amount: 8_000, low: 8_000, high: 8_000, basis: "간단한 식사 기준",
+            category: "외식", purpose: "개인 일정")
         add(2, "SensCoreAI 연구", symbol: "laptopcomputer", start: 19.5, duration: 1)
         add(2, "저녁", symbol: "fork.knife", start: 18.5, duration: 3,
-            amount: 20_000, low: 20_000, high: 20_000, basis: "저녁·카페 1회 기준")
+            amount: 20_000, low: 20_000, high: 20_000, basis: "저녁·카페 1회 기준",
+            category: "외식", purpose: "모임")
         add(3, "월급일", symbol: "banknote", start: 8, duration: 0.5)
         add(3, "해커톤 뒤풀이", symbol: "person.3", start: 19, duration: 3,
-            amount: 40_000, low: 40_000, high: 40_000, basis: "저녁 모임 1회 기준")
+            amount: 40_000, low: 40_000, high: 40_000, basis: "저녁 모임 1회 기준",
+            category: "술·모임", purpose: "모임")
         add(4, "정장 구매", symbol: "tshirt", start: 9, duration: 3,
-            amount: 150_000, low: 150_000, high: 150_000, basis: "확인된 구매 금액")
-        add(4, "교수님 결혼식", symbol: "gift", start: 16.5, duration: 3.25,
-            amount: 70_000, low: 70_000, high: 70_000, basis: "확인된 축의금·교통비")
+            amount: 150_000, low: 150_000, high: 150_000, basis: "확인된 구매 금액",
+            category: "쇼핑", purpose: "개인 일정")
+        add(4, "교수님 결혼식", symbol: "rosette", start: 16.5, duration: 3.25,
+            amount: 70_000, low: 70_000, high: 70_000, basis: "확인된 축의금·교통비",
+            category: "경조사", purpose: "경조사")
         add(5, "자습", symbol: "book.closed", start: 17.5, duration: 3.5,
-            amount: 8_000, low: 8_000, high: 8_000, basis: "식음료 1회 기준")
+            amount: 8_000, low: 8_000, high: 8_000, basis: "식음료 1회 기준",
+            category: "카페", purpose: "공부")
         add(6, "저녁·카공", symbol: "cup.and.saucer", start: 18, duration: 4,
-            amount: 20_000, low: 20_000, high: 20_000, basis: "저녁 + 카페 기준")
+            amount: 20_000, low: 20_000, high: 20_000, basis: "저녁 + 카페 기준",
+            category: "카페", purpose: "공부")
         add(7, "SensCoreAI 연구", symbol: "laptopcomputer", start: 21.75, duration: 1,
-            amount: 5_000, low: 5_000, high: 5_000, basis: "음료 1회 기준")
+            amount: 5_000, low: 5_000, high: 5_000, basis: "음료 1회 기준",
+            category: "카페", purpose: "공부")
         add(8, "선우", symbol: "person.2", start: 18.5, duration: 2.5,
-            amount: 25_000, low: 25_000, high: 25_000, basis: "저녁 약속 1회 기준")
+            amount: 25_000, low: 25_000, high: 25_000, basis: "저녁 약속 1회 기준",
+            category: "외식", purpose: "모임")
         add(10, "데이트", symbol: "heart", start: 18, duration: 4,
-            amount: 100_000, low: 100_000, high: 100_000, basis: "확인된 금액", protected: true)
+            amount: 100_000, low: 100_000, high: 100_000, basis: "확인된 금액", protected: true,
+            category: "데이트", purpose: "데이트")
         add(11, "마인드온", symbol: "person.crop.square", start: 11, duration: 1)
         add(11, "SOL TA", symbol: "person.2", start: 12, duration: 5,
-            amount: 15_000, low: 15_000, high: 15_000, basis: "교통 + 식사 기준")
+            amount: 15_000, low: 15_000, high: 15_000, basis: "교통 + 식사 기준",
+            category: "교통", purpose: "업무")
         add(12, "가족 식사", symbol: "house", start: 13, duration: 2,
-            amount: 20_000, low: 20_000, high: 20_000, basis: "본인 몫 기준", protected: true)
+            amount: 20_000, low: 20_000, high: 20_000, basis: "본인 몫 기준", protected: true,
+            category: "외식", purpose: "가족")
         add(12, "데이트", symbol: "heart", start: 15, duration: 2.2,
-            amount: 30_000, low: 30_000, high: 30_000, basis: "카페·데이트 기준", protected: true)
+            amount: 30_000, low: 30_000, high: 30_000, basis: "카페·데이트 기준", protected: true,
+            category: "카페", purpose: "데이트")
         add(13, "규호 입대 전 저녁", symbol: "person.2", start: 18, duration: 3,
-            amount: 30_000, low: 30_000, high: 30_000, basis: "저녁 모임 1회 기준")
+            amount: 30_000, low: 30_000, high: 30_000, basis: "저녁 모임 1회 기준",
+            category: "외식", purpose: "모임")
         add(14, "국민카드 결제일", symbol: "creditcard", start: 8, duration: 0.5)
         add(14, "오디움 예약", symbol: "ticket", start: 14, duration: 1)
         add(15, "종현·한결", symbol: "person.2", start: 18, duration: 1.5,
-            amount: 25_000, low: 25_000, high: 25_000, basis: "저녁 약속 1회 기준")
+            amount: 25_000, low: 25_000, high: 25_000, basis: "저녁 약속 1회 기준",
+            category: "외식", purpose: "모임")
         add(16, "인포스탁 전사 회식", symbol: "person.3", start: 18, duration: 2.5,
-            amount: 5_000, low: 5_000, high: 5_000, basis: "개인 교통비 기준")
+            amount: 5_000, low: 5_000, high: 5_000, basis: "개인 교통비 기준",
+            category: "교통", purpose: "업무")
         add(17, "제헌절 공부", symbol: "book.closed", start: 8.5, duration: 4.5)
         add(17, "한의원", symbol: "cross.case", start: 10, duration: 1,
-            amount: 20_000, low: 20_000, high: 20_000, basis: "진료비 예상")
+            amount: 20_000, low: 20_000, high: 20_000, basis: "진료비 예상",
+            category: "건강", purpose: "병원")
         add(17, "오디움·안성", symbol: "tram.fill", start: 13, duration: 4.75,
-            amount: 40_000, low: 40_000, high: 40_000, basis: "왕복 교통 + 식사 기준")
+            amount: 40_000, low: 40_000, high: 40_000, basis: "왕복 교통 + 식사 기준",
+            category: "교통", purpose: "여행")
         add(18, "공부", symbol: "book.closed", start: 11.5, duration: 6.5)
         add(18, "성창이와 저녁", symbol: "person.2", start: 18, duration: 2,
-            amount: 25_000, low: 25_000, high: 25_000, basis: "저녁 약속 1회 기준")
+            amount: 25_000, low: 25_000, high: 25_000, basis: "저녁 약속 1회 기준",
+            category: "외식", purpose: "모임")
         add(19, "호프 영화", symbol: "film", start: 10.25, duration: 2.75,
-            amount: 18_000, low: 18_000, high: 18_000, basis: "영화 관람 1회 기준")
+            amount: 18_000, low: 18_000, high: 18_000, basis: "영화 관람 1회 기준",
+            category: "문화", purpose: "문화")
         add(19, "호프 무대인사", symbol: "theatermasks", start: 12.9, duration: 0.3)
         add(19, "밥", symbol: "fork.knife", start: 13.5, duration: 1,
-            amount: 12_000, low: 12_000, high: 12_000, basis: "식사 1회 기준")
+            amount: 12_000, low: 12_000, high: 12_000, basis: "식사 1회 기준",
+            category: "외식", purpose: "개인 일정")
         add(19, "아모레퍼시픽 미술관", symbol: "paintpalette", start: 15, duration: 2,
-            amount: 20_000, low: 20_000, high: 20_000, basis: "관람 + 교통 기준")
-        add(20, "레이저 제모 7회차", symbol: "sparkles", start: 18, duration: 1,
-            amount: 50_000, low: 50_000, high: 50_000, basis: "당일 결제 확인")
+            amount: 20_000, low: 20_000, high: 20_000, basis: "관람 + 교통 기준",
+            category: "문화", purpose: "문화")
+        add(20, "레이저 제모 7회차", symbol: "face.smiling", start: 18, duration: 1,
+            amount: 50_000, low: 50_000, high: 50_000, basis: "당일 결제 확인",
+            category: "자기관리", purpose: "개인 일정")
         add(20, "SensCoreAI 연구", symbol: "laptopcomputer", start: 20, duration: 1,
-            amount: 5_000, low: 5_000, high: 5_000, basis: "음료 1회 기준")
+            amount: 5_000, low: 5_000, high: 5_000, basis: "음료 1회 기준",
+            category: "카페", purpose: "공부")
         add(21, "회의", symbol: "bubble.left.and.bubble.right", start: 21, duration: 1,
             basis: "별도 결제 없음")
-        add(22, "와드", symbol: "person.2", start: 19, duration: 1,
-            amount: 40_000, low: 40_000, high: 40_000, basis: "사용자가 확인한 금액")
+        // 오늘(7/22) 저녁 일정(미용실) — 아직 결제 전이라 '예약 예산' 상태로 둔다. 하루 마감에서 확인하면 확정으로 바뀐다.
+        add(22, "와드", symbol: "scissors", start: 19, duration: 1,
+            amount: 40_000, low: 40_000, high: 40_000, basis: "사용자가 확인한 금액",
+            category: "자기관리", purpose: "개인 일정", state: .reserved)
         add(24, "인포스탁 월급날", symbol: "banknote", start: 8, duration: 0.5)
 
         let weekdays = ["수", "목", "금", "토", "일", "월", "화"]

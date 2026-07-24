@@ -500,16 +500,15 @@ struct SavingsRecommendPage: View {
 
     private var cashflowSummary: some View {
         // 고정비를 빼지 않으면 '여유'가 과장된다 — 확인된 고정비를 한 칸으로 노출한다.
+        // 4칸을 가로로 욱여넣으면 숫자가 줄어들어 읽기 어려워지므로 세로로 한 줄씩 크게 보여준다.
         let free = model.monthlyIncome - BudgetEngine.fixed - model.spendMonthly
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 0) {
-                cashCol("수입", model.monthlyIncome, KB.ink)
-                Text("−").font(.system(size: 13)).foregroundStyle(KB.muted).frame(width: 14)
-                cashCol("고정비", BudgetEngine.fixed, KB.ink)
-                Text("−").font(.system(size: 13)).foregroundStyle(KB.muted).frame(width: 14)
-                cashCol("일정비", model.spendMonthly, KB.ink)
-                Text("=").font(.system(size: 13)).foregroundStyle(KB.muted).frame(width: 14)
-                cashCol("여유", free, KB.green)
+        return VStack(alignment: .leading, spacing: 14) {
+            VStack(spacing: 8) {
+                cashRow("수입", model.monthlyIncome)
+                cashRow("고정비", -BudgetEngine.fixed)
+                cashRow("일정비", -model.spendMonthly)
+                Divider().overlay(KB.line)
+                cashRow("여유", free, emphasized: true)
             }
             HStack(spacing: 6) {
                 Image(systemName: "checkmark.seal.fill").font(.system(size: 12)).foregroundStyle(KB.green)
@@ -525,14 +524,17 @@ struct SavingsRecommendPage: View {
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
     }
 
-    private func cashCol(_ label: String, _ value: Int, _ color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(label).font(.system(size: 11)).foregroundStyle(KB.muted)
-            // 7자리 금액이 3분할 폭을 넘겨 줄바꿈되지 않게 축소 허용
-            Text(formatWon(value)).font(.system(size: 15, weight: .bold)).foregroundStyle(color)
-                .lineLimit(1).minimumScaleFactor(0.7)
+    /// 부호 있는 금액을 한 줄로 크게 보여준다. 음수는 "− 435,000원"처럼 부호를 앞에 떼어 표시해 "-"가 숫자에 붙어 읽기 힘들어지는 걸 막는다.
+    private func cashRow(_ label: String, _ value: Int, emphasized: Bool = false) -> some View {
+        let sign = value < 0 ? "− " : ""
+        return HStack {
+            Text(label).font(.system(size: 14)).foregroundStyle(emphasized ? KB.ink : KB.muted)
+            Spacer()
+            Text(sign + formatWon(abs(value)))
+                .font(.system(size: emphasized ? 19 : 16, weight: emphasized ? .bold : .semibold))
+                .foregroundStyle(emphasized ? KB.green : KB.ink)
+                .monospacedDigit()
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func step(_ n: Int, _ title: String) -> some View {

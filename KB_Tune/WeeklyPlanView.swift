@@ -24,6 +24,7 @@ struct WeeklyPlanView: View {
     @State private var toast: String?
 
     private let switchSpring = Animation.spring(response: 0.38, dampingFraction: 0.86)
+    private let scrollTopID = "planScrollTop"
 
     init(initialMode: Mode = .week) {
         _mode = State(initialValue: initialMode)
@@ -36,33 +37,45 @@ struct WeeklyPlanView: View {
             VStack(spacing: 0) {
                 planToolbar
 
-                ScrollView {
-                    Group {
-                        if let day = selectedDay {
-                            DayTimetableView(day: day,
-                                             onClose: { withAnimation(switchSpring) { selectedDay = nil } },
-                                             onAction: { flash($0) },
-                                             onMove: { ev in
-                                                 model.moveEventToNextWeek(ev, from: day.dayNumber)
-                                                 // selectedDay 는 값 복사본 — 모델 변경 후 다시 읽어야 화면이 갱신된다
-                                                 withAnimation(switchSpring) { selectedDay = model.day(number: day.dayNumber) }
-                                             },
-                                             onKeep: { ev in
-                                                 model.acceptRisk(of: ev, on: day.dayNumber)
-                                                 selectedDay = model.day(number: day.dayNumber)
-                                             })
-                                .transition(.move(edge: .trailing).combined(with: .opacity))
-                        } else if mode == .week {
-                            weekContent
-                                .transition(.opacity)
-                        } else {
-                            monthContent
-                                .transition(.opacity)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        Color.clear.frame(height: 0).id(scrollTopID)   // 맨 위 앵커 — 탭 재선택 시 여기로 되돌아온다
+                        Group {
+                            if let day = selectedDay {
+                                DayTimetableView(day: day,
+                                                 onClose: { withAnimation(switchSpring) { selectedDay = nil } },
+                                                 onAction: { flash($0) },
+                                                 onMove: { ev in
+                                                     model.moveEventToNextWeek(ev, from: day.dayNumber)
+                                                     // selectedDay 는 값 복사본 — 모델 변경 후 다시 읽어야 화면이 갱신된다
+                                                     withAnimation(switchSpring) { selectedDay = model.day(number: day.dayNumber) }
+                                                 },
+                                                 onKeep: { ev in
+                                                     model.acceptRisk(of: ev, on: day.dayNumber)
+                                                     selectedDay = model.day(number: day.dayNumber)
+                                                 })
+                                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                            } else if mode == .week {
+                                weekContent
+                                    .transition(.move(edge: .leading).combined(with: .opacity))
+                            } else {
+                                monthContent
+                                    .transition(.opacity)
+                            }
+                        }
+                        .padding(.horizontal, 24)
+                        .padding(.top, 8)
+                        .padding(.bottom, 32)
+                    }
+                    // 하단 '주간' 탭을 다시 누르면 어디에 있든 주간 메인으로 되돌리고 맨 위로 부드럽게 스크롤한다.
+                    .onChange(of: model.planResetToken) { _, _ in
+                        withAnimation(switchSpring) {
+                            selectedDay = nil
+                            selectedMonthDay = nil
+                            mode = .week
+                            proxy.scrollTo(scrollTopID, anchor: .top)
                         }
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.top, 8)
-                    .padding(.bottom, 32)
                 }
             }
 
@@ -87,12 +100,21 @@ struct WeeklyPlanView: View {
 
     // MARK: - 계획 맥락
 
+    /// 툴바에 띄울 날짜 — 오늘로 고정하지 않고 지금 화면에서 보고 있는 날을 따라간다.
+    private var viewedDay: Int {
+        if let selectedDay { return selectedDay.dayNumber }
+        if mode == .month { return selectedMonthDay ?? model.todayDayNumber }
+        return model.todayDayNumber
+    }
+
     private var planToolbar: some View {
         HStack(spacing: 10) {
-            Text("7월 \(model.todayDayNumber)일 \(weekdayName(model.todayDayNumber))요일")
+            Text("7월 \(viewedDay)일 \(weekdayName(viewedDay))요일")
                 .font(.system(size: 18, weight: .bold))
                 .foregroundStyle(KB.ink)
-                .accessibilityLabel("오늘 7월 \(model.todayDayNumber)일 \(weekdayName(model.todayDayNumber))요일")
+                .accessibilityLabel(viewedDay == model.todayDayNumber
+                                    ? "오늘 7월 \(viewedDay)일 \(weekdayName(viewedDay))요일"
+                                    : "7월 \(viewedDay)일 \(weekdayName(viewedDay))요일")
 
             Spacer(minLength: 4)
 
@@ -141,6 +163,7 @@ struct WeeklyPlanView: View {
     private var weekContent: some View {
         VStack(alignment: .leading, spacing: 22) {
             hero
+            if model.shouldShowDailyClose { dailyCloseCard }
             weekStripPager
             spendTimeline
             if !model.upcomingSpends.isEmpty { predictedSpends }
@@ -148,6 +171,61 @@ struct WeeklyPlanView: View {
             actions
             benefitRow
         }
+    }
+
+    /// 하루 마감 — 예정돼 있었는데 카드 결제 기록이 없는 지출만 뜬다(기획 보고서 8.2).
+    /// KB Pay 연동 시 카드로 결제된 건 자동 확정되므로, 여기선 "현금으로 쓰셨나요?"만 되묻는다.
+    private var dailyCloseCard: some View {
+        let items = model.todayCloseItems
+        let total = items.reduce(0) { $0 + $1.amount }
+        let names = items.map(\.title).joined(separator: "·")
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Image(systemName: "creditcard.trianglebadge.exclamationmark").font(.system(size: 14)).foregroundStyle(KB.ink)
+                Text("결제 기록이 없는 지출이 있어요").font(.system(size: 15, weight: .semibold)).foregroundStyle(KB.ink)
+            }
+            Text("‘\(names)’에 \(formatWon(total)) 쓸 예정이었는데 카드 결제 기록이 없어요. 현금으로 결제하셨나요?")
+                .font(.system(size: 13)).foregroundStyle(KB.muted)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(spacing: 6) {
+                ForEach(items) { ev in
+                    HStack {
+                        Text(ev.title).font(.system(size: 13, weight: .medium)).foregroundStyle(KB.ink)
+                        Spacer()
+                        Text(formatWon(ev.amount)).font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+                    }
+                }
+            }
+            .padding(10)
+            .background(KB.canvas, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            HStack(spacing: 8) {
+                Button {
+                    model.resolveDailyClose(paidCash: true)
+                    flash("현금 지출로 확인했어요. \(formatWon(total))을 이번 달 지출에 반영했어요.")
+                } label: {
+                    Text("현금으로 결제했어요")
+                        .font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.ink)
+                        .frame(maxWidth: .infinity).padding(.vertical, 10)
+                        .background(KB.yellow, in: Capsule())
+                }
+
+                Button {
+                    model.resolveDailyClose(paidCash: false)
+                    flash("아직 안 쓴 걸로 두고 예정 예산은 그대로 둘게요.")
+                } label: {
+                    Text("아직 안 썼어요")
+                        .font(.system(size: 13, weight: .medium)).foregroundStyle(KB.muted)
+                        .frame(maxWidth: .infinity).padding(.vertical, 10)
+                        .background(.white, in: Capsule())
+                        .overlay(Capsule().stroke(KB.line, lineWidth: 1))
+                }
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(16)
+        .elevatedCard(16)
     }
 
     private var hero: some View {
@@ -328,9 +406,17 @@ struct WeeklyPlanView: View {
                     if item.isRisky {
                         Image(systemName: "exclamationmark.circle.fill").font(.system(size: 11)).foregroundStyle(KB.caution)
                     }
+                    if item.state == .reserved { stateBadge(.reserved) }
                 }
-                Text(estimateLabel(low: item.amountLow, high: item.amountHigh, estimated: item.isEstimated))
-                    .money(12.5, weight: .medium).foregroundStyle(KB.muted)
+                HStack(spacing: 6) {
+                    Text(estimateLabel(low: item.amountLow, high: item.amountHigh, estimated: item.isEstimated))
+                        .money(12.5, weight: .medium).foregroundStyle(KB.muted)
+                    if let purpose = item.purpose {
+                        Text(purpose).font(.system(size: 10.5, weight: .medium)).foregroundStyle(KB.muted)
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(KB.line.opacity(0.4), in: Capsule())
+                    }
+                }
             }
             Spacer(minLength: 8)
             Image(systemName: "chevron.right").font(.system(size: 12)).foregroundStyle(KB.muted.opacity(0.6))
@@ -541,7 +627,7 @@ struct WeeklyPlanView: View {
         let day = model.day(number: d)
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
-                Text("7월 \(d)일 \(weekdayName(d))요일")
+                Text("타임테이블")
                     .font(.system(size: 16, weight: .semibold)).foregroundStyle(KB.ink)
                 if d == model.todayDayNumber {
                     Text("오늘").font(.system(size: 10.5, weight: .bold)).foregroundStyle(KB.ink)
@@ -709,14 +795,15 @@ struct DayTimetableView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // 헤더
+            // 헤더 — 화면 성격("타임테이블")을 제목으로, 날짜는 보조 정보로 아래에 둔다.
             HStack(spacing: 10) {
                 Button(action: onClose) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(KB.ink)
                 }
-                Text("7월 \(day.dayNumber)일 \(day.weekday)요일")
+                // 날짜는 상단 툴바가 따라오므로 여기서는 화면 성격만 밝힌다.
+                Text("타임테이블")
                     .font(.system(size: 19, weight: .bold))
                     .foregroundStyle(KB.ink)
                 if day.isToday {
@@ -913,9 +1000,17 @@ struct DayTimetableBody: View {
                     if isRisky {
                         Image(systemName: "exclamationmark.circle.fill").font(.system(size: 12)).foregroundStyle(KB.caution)
                     }
+                    if ev.state == .reserved { stateBadge(.reserved) }
                 }
-                Text("\(hourString(ev.startHour))–\(hourString(ev.startHour + ev.duration))")
-                    .font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                HStack(spacing: 6) {
+                    Text("\(hourString(ev.startHour))–\(hourString(ev.startHour + ev.duration))")
+                        .font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                    if let purpose = ev.purpose {
+                        Text(purpose).font(.system(size: 10, weight: .medium)).foregroundStyle(KB.muted)
+                            .padding(.horizontal, 5).padding(.vertical, 1.5)
+                            .background(KB.line.opacity(0.4), in: Capsule())
+                    }
+                }
                 Text(ev.amount > 0
                      ? estimateLabel(low: ev.amountLow, high: ev.amountHigh, estimated: ev.isEstimated)
                      : "비용 없음")
@@ -965,6 +1060,31 @@ private func formatRange(low: Int, high: Int) -> String {
 private func estimateLabel(low: Int, high: Int, estimated: Bool) -> String {
     let prefix = estimated ? "예상 " : ""
     return prefix + formatRange(low: low, high: high)
+}
+
+/// 확정·예약·예상 상태를 구분하는 작은 배지(기획 보고서 11.1). 확정은 기본 상태라 표시하지 않는다.
+@ViewBuilder
+private func stateBadge(_ state: SpendState) -> some View {
+    switch state {
+    case .reserved:
+        HStack(spacing: 2) {
+            Image(systemName: "clock.fill").font(.system(size: 8))
+            Text("예약").font(.system(size: 9.5, weight: .bold))
+        }
+        .foregroundStyle(KB.ink)
+        .padding(.horizontal, 5).padding(.vertical, 1.5)
+        .background(KB.yellowSoft, in: Capsule())
+    case .pattern:
+        HStack(spacing: 2) {
+            Image(systemName: "wand.and.stars").font(.system(size: 8))
+            Text("예상").font(.system(size: 9.5, weight: .bold))
+        }
+        .foregroundStyle(KB.muted)
+        .padding(.horizontal, 5).padding(.vertical, 1.5)
+        .background(KB.line.opacity(0.35), in: Capsule())
+    case .confirmed:
+        EmptyView()
+    }
 }
 
 /// 바텀시트 공통 컨테이너 (핸들 + 제목 + 콘텐츠)
