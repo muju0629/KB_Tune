@@ -447,6 +447,10 @@ final class AppModel: ObservableObject {
         case "외식": "fork.knife"
         case "쇼핑": "handbag"
         case "교통": "bus"
+        // 카드내역 분류(LocalExtractor)에만 있는 카테고리 — 일정에는 없지만 이용내역 목록에 뜬다.
+        case "배달": "takeoutbag.and.cup.and.straw"
+        case "구독": "arrow.triangle.2.circlepath"
+        case "건강": "cross.case"
         default: "calendar"
         }
     }

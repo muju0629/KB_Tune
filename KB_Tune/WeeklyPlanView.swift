@@ -22,6 +22,7 @@ struct WeeklyPlanView: View {
     @State private var sheet: Sheet?
     @State private var showSuccess = false
     @State private var toast: String?
+    @State private var showBillingDetail = false
 
     private let switchSpring = Animation.spring(response: 0.38, dampingFraction: 0.86)
     private let scrollTopID = "planScrollTop"
@@ -67,6 +68,10 @@ struct WeeklyPlanView: View {
                         .padding(.top, 8)
                         .padding(.bottom, 32)
                     }
+                    // 결제예정 바가 가리지 않게 아래를 비워둔다.
+                    .safeAreaInset(edge: .bottom) {
+                        if mode == .week && selectedDay == nil { billingDock }
+                    }
                     // 하단 '주간' 탭을 다시 누르면 어디에 있든 주간 메인으로 되돌리고 맨 위로 부드럽게 스크롤한다.
                     .onChange(of: model.planResetToken) { _, _ in
                         withAnimation(switchSpring) {
@@ -96,6 +101,10 @@ struct WeeklyPlanView: View {
             }
         }
         .overlay { if showSuccess { successOverlay } }
+        .sheet(isPresented: $showBillingDetail) {
+            BillingDetailSheet().environmentObject(model)
+                .presentationDetents([.medium, .large])
+        }
     }
 
     // MARK: - 계획 맥락
@@ -162,16 +171,37 @@ struct WeeklyPlanView: View {
 
     private var weekContent: some View {
         VStack(alignment: .leading, spacing: 22) {
-            hero
-            if model.shouldShowDailyClose { dailyCloseCard }
-            cardBillingCard
-            weekStripPager
-            spendTimeline
-            if !model.upcomingSpends.isEmpty { predictedSpends }
-            recommendation
-            actions
-            benefitRow
+            hero.appearStagger(0)
+            if model.shouldShowDailyClose { dailyCloseCard.appearStagger(1) }
+            cardBillingCard.appearStagger(2)
+            weekStripPager.appearStagger(3)
+            spendTimeline.appearStagger(4)
+            if !model.upcomingSpends.isEmpty { predictedSpends.appearStagger(5) }
+            recommendation.appearStagger(6)
+            actions.appearStagger(7)
+            benefitRow.appearStagger(8)
         }
+    }
+
+    /// 화면 맨 아래 붙어 있는 결제예정 바 — KB Pay 홈의 시그니처.
+    /// 카드 앱에서 제일 중요한 숫자는 스크롤 위치와 상관없이 늘 보여야 한다.
+    private var billingDock: some View {
+        let b = model.billing
+        return Button {
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) { showBillingDetail = true }
+        } label: {
+            HStack(spacing: 8) {
+                Text("결제예정금액").font(.system(size: 13.5, weight: .semibold)).foregroundStyle(KB.ink)
+                DDayBadge(days: b.daysUntilPay)
+                Spacer()
+                Text(formatWon(b.dueNext)).money(16.5).foregroundStyle(KB.ink)
+                Image(systemName: "chevron.right").font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(KB.ink.opacity(0.55))
+            }
+            .padding(.horizontal, 18).padding(.vertical, 13)
+            .background(KB.yellow)
+        }
+        .buttonStyle(.plain)
     }
 
     /// 하루 마감 — 예정돼 있었는데 카드 결제 기록이 없는 지출만 뜬다(기획 보고서 8.2).
@@ -181,10 +211,9 @@ struct WeeklyPlanView: View {
         let total = items.reduce(0) { $0 + $1.amount }
         let names = items.map(\.title).joined(separator: "·")
         return VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 6) {
-                Image(systemName: "creditcard.trianglebadge.exclamationmark").font(.system(size: 14)).foregroundStyle(KB.ink)
-                Text("결제 기록이 없는 지출이 있어요").font(.system(size: 15, weight: .semibold)).foregroundStyle(KB.ink)
-            }
+            LabelBadge(text: "확인 필요", color: KB.caution)
+            Text("결제 기록이 없는 지출이 있어요")
+                .font(.system(size: 15, weight: .semibold)).foregroundStyle(KB.ink)
             Text("‘\(names)’에 \(formatWon(total)) 쓸 예정이었는데 카드 결제 기록이 없어요. 현금으로 결제하셨나요?")
                 .font(.system(size: 13)).foregroundStyle(KB.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -238,17 +267,18 @@ struct WeeklyPlanView: View {
         let b = model.billing
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 6) {
-                Image(systemName: "creditcard.fill").font(.system(size: 14)).foregroundStyle(KB.ink)
-                Text("\(b.payLabel)에 빠질 카드값").font(.system(size: 15, weight: .semibold)).foregroundStyle(KB.ink)
+                LabelBadge(text: "카드값", color: KB.tangerine)
+                DDayBadge(days: b.daysUntilPay)
                 Spacer()
                 Text("KB ALL").font(.system(size: 10.5, weight: .semibold)).foregroundStyle(KB.ink)
                     .padding(.horizontal, 7).padding(.vertical, 3)
                     .background(KB.yellowSoft, in: Capsule())
             }
 
-            Text(formatWon(b.dueNext))
-                .font(.system(size: 30, weight: .bold)).foregroundStyle(KB.ink)
-                .monospacedDigit()
+            Text("\(b.payLabel)에 빠질 카드값")
+                .font(.system(size: 15, weight: .semibold)).foregroundStyle(KB.ink)
+
+            CountUpWon(value: b.dueNext, size: 30)
 
             Text("이용기간 \(b.periodLabel)에 \(b.count)건 \(formatWon(b.usage))을 썼어요. 그중 \(formatWon(b.deferred))은 할부라 \(b.nextPayLabel)로 넘어가요.")
                 .font(.system(size: 13)).foregroundStyle(KB.muted).lineSpacing(3)
@@ -300,9 +330,7 @@ struct WeeklyPlanView: View {
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(KB.muted)
 
-            Text(formatWon(roundedWeeklyBudget))
-                .money(46, weight: .heavy)
-                .foregroundStyle(KB.ink)
+            CountUpWon(value: roundedWeeklyBudget, size: 46, weight: .heavy, duration: 0.85)
                 .padding(.trailing, 2)
                 .background(alignment: .bottom) {
                     KB.yellow.frame(height: 13)
@@ -495,8 +523,8 @@ struct WeeklyPlanView: View {
     /// 확정이 아니므로 예산에서 미리 빼지 않고, 반영 여부를 사용자가 고른다.
     private var predictedSpends: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 6) {
-                Image(systemName: "wand.and.stars").font(.system(size: 13)).foregroundStyle(KB.ink)
+            HStack(spacing: 7) {
+                LabelBadge(text: "AI 예측", color: KB.violet)
                 Text("이런 소비가 예상돼요").font(.system(size: 16, weight: .semibold)).foregroundStyle(KB.ink)
                 Spacer()
                 Text("캘린더에 없는 지출").font(.system(size: 11)).foregroundStyle(KB.muted)

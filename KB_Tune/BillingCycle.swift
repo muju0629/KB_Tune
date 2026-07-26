@@ -45,6 +45,7 @@ struct BillingSummary {
     var carryover: Int      // 그 다음 결제일로 넘어가는 할부 잔액
     var installments: [CardTransaction]
     var daysUntilClose: Int  // 이용기간 마감까지 남은 일수 (0 = 오늘 마감)
+    var daysUntilPay: Int    // 결제일까지 남은 일수
     var periodLabel: String  // "6/27~7/26"
     var closeLabel: String   // "7월 26일"
     var payLabel: String     // "8월 14일"
@@ -102,6 +103,8 @@ enum BillingCycle {
             carryover: carryover,
             installments: transactions.filter(\.isInstallment),
             daysUntilClose: max(0, closingDay - today),
+            // 결제일은 다음 달 14일 — 7월(31일)이 끝나고 14일 더.
+            daysUntilPay: (DemoClock.daysInMonth - today) + payDay,
             periodLabel: "6/\(closingDay + 1)~7/\(closingDay)",
             closeLabel: "7월 \(closingDay)일",
             payLabel: "8월 \(payDay)일",

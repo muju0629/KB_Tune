@@ -23,6 +23,44 @@ enum KB {
 
     // 종이 위에 카드를 얇은 테두리 대신 '깊이'로 띄우는 그림자.
     static let cardShadow = Color(hex: 0x2A2822).opacity(0.07)
+
+    // KB Pay 3.0의 라벨 뱃지 색. 카테고리를 색으로 먼저 알려주고 제목을 읽게 한다.
+    static let violet = Color(hex: 0x7A5CF0)       // AI·개인화 (My혜택·KB금융그룹 계열)
+    static let tangerine = Color(hex: 0xF07C1E)    // 추천·이벤트
+    static let info = Color(hex: 0x2A72E5)         // 강조 수치 — KB Pay가 금액 하이라이트에 쓰는 파랑
+}
+
+// MARK: - 라벨 뱃지 (KB Pay 3.0 문법)
+
+/// 카드 좌상단에 붙는 컬러 pill. "이게 어떤 종류의 정보인지"를 색으로 먼저 알린다.
+struct LabelBadge: View {
+    let text: String
+    var color: Color = KB.violet
+    var filled = true
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 11, weight: .bold))
+            .foregroundStyle(filled ? .white : color)
+            .padding(.horizontal, 9).padding(.vertical, 4)
+            .background(filled ? color : color.opacity(0.12), in: Capsule())
+    }
+}
+
+/// D-3 · D-DAY 처럼 남은 날을 세는 뱃지. 결제일·마감일이 임박할수록 색이 올라간다.
+struct DDayBadge: View {
+    let days: Int
+
+    private var label: String { days == 0 ? "D-DAY" : (days > 0 ? "D-\(days)" : "D+\(-days)") }
+    private var tint: Color { days <= 0 ? KB.caution : (days <= 3 ? KB.tangerine : KB.muted) }
+
+    var body: some View {
+        Text(label)
+            .font(.system(size: 10, weight: .heavy)).monospacedDigit()
+            .foregroundStyle(tint)
+            .padding(.horizontal, 6).padding(.vertical, 2.5)
+            .background(tint.opacity(0.13), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+    }
 }
 
 extension View {
@@ -36,6 +74,65 @@ extension View {
     func elevatedCard(_ radius: CGFloat = 18, fill: Color = .white) -> some View {
         background(fill, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
             .shadow(color: KB.cardShadow, radius: 12, x: 0, y: 5)
+    }
+
+    /// 화면에 들어올 때 순서대로 떠오르는 카드. index가 클수록 조금씩 늦게 나타난다.
+    /// 한꺼번에 나타나면 어디부터 읽어야 할지 알 수 없어서, 읽는 순서를 모션으로 안내한다.
+    func appearStagger(_ index: Int, base: Double = 0.05) -> some View {
+        modifier(StaggerAppear(index: index, base: base))
+    }
+}
+
+/// 카드 등장 연출 — 살짝 아래에서 떠오르며 페이드인.
+struct StaggerAppear: ViewModifier {
+    let index: Int
+    let base: Double
+    @State private var shown = false
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(shown ? 1 : 0)
+            .offset(y: shown ? 0 : 14)
+            .onAppear {
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.85)
+                    .delay(Double(index) * base)) { shown = true }
+            }
+    }
+}
+
+/// 0에서 목표값까지 굴러 올라가는 금액. 큰 숫자가 그냥 박혀 있는 것보다
+/// "지금 계산해서 내놓은 값"이라는 인상을 준다.
+struct CountUpWon: View {
+    let value: Int
+    var size: CGFloat = 30
+    var weight: Font.Weight = .bold
+    var tint: Color = KB.ink
+    var duration: Double = 0.7
+
+    @State private var shown = 0
+
+    var body: some View {
+        Text(formatWon(shown))
+            .money(size, weight: weight)
+            .foregroundStyle(tint)
+            .contentTransition(.numericText())
+            .onAppear { run() }
+            .onChange(of: value) { _, _ in run() }
+    }
+
+    private func run() {
+        shown = 0
+        let steps = 18
+        for i in 1...steps {
+            let t = Double(i) / Double(steps)
+            // 끝으로 갈수록 느려지게 — 숫자가 자리를 잡는 느낌
+            let eased = 1 - pow(1 - t, 3)
+            DispatchQueue.main.asyncAfter(deadline: .now() + duration * t) {
+                withAnimation(.easeOut(duration: 0.12)) {
+                    shown = Int(Double(value) * eased)
+                }
+            }
+        }
     }
 }
 
