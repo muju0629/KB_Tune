@@ -15,6 +15,7 @@ import SwiftUI
 struct BillingDetailSheet: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
+    @State private var expanded: UUID?
 
     var body: some View {
         let b = model.billing
@@ -123,7 +124,20 @@ struct BillingDetailSheet: View {
 
             ForEach(Array(BillingCycle.transactions.sorted { $0.day > $1.day }.enumerated()),
                     id: \.element.id) { i, tx in
-                transactionRow(tx)
+                Button {
+                    withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
+                        expanded = (expanded == tx.id) ? nil : tx.id
+                    }
+                } label: {
+                    VStack(spacing: 0) {
+                        transactionRow(tx)
+                        if expanded == tx.id, let match = MatchEngine.bestMatch(for: tx, in: model) {
+                            matchDetail(match)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+
                 if i < BillingCycle.transactions.count - 1 {
                     Divider().overlay(KB.line).padding(.leading, 44)
                 }
@@ -132,6 +146,89 @@ struct BillingDetailSheet: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .elevatedCard(16)
+    }
+
+    // MARK: 일정-거래 매칭 근거 (기획 보고서 8.1)
+
+    /// 점수만 던지면 신뢰가 안 생긴다. 어느 기준에서 몇 점이 나왔는지,
+    /// 그리고 못 쓴 기준이 무엇인지까지 펼쳐 보여준다.
+    private func matchDetail(_ m: MatchResult) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 7) {
+                LabelBadge(text: m.verdict.label, color: verdictColor(m.verdict))
+                Text(m.event.title).font(.system(size: 13.5, weight: .semibold)).foregroundStyle(KB.ink)
+                Spacer()
+                Text("\(m.score)점").money(14).foregroundStyle(verdictColor(m.verdict))
+            }
+
+            // 점수 막대 — 80/50 임계선을 같이 그려 어디쯤인지 바로 보이게
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(KB.line.opacity(0.5))
+                    Capsule().fill(verdictColor(m.verdict))
+                        .frame(width: geo.size.width * CGFloat(m.score) / 100)
+                    ForEach([50, 80], id: \.self) { mark in
+                        Rectangle().fill(KB.ink.opacity(0.25)).frame(width: 1)
+                            .offset(x: geo.size.width * CGFloat(mark) / 100)
+                    }
+                }
+            }
+            .frame(height: 6)
+
+            VStack(spacing: 5) {
+                ForEach(m.criteria) { c in
+                    HStack(alignment: .top, spacing: 6) {
+                        Text(c.name).font(.system(size: 11.5, weight: .medium)).foregroundStyle(KB.ink)
+                            .frame(width: 62, alignment: .leading)
+                        Text(c.note).font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 6)
+                        Text(c.max == 0 ? "제외" : "\(c.earned)/\(c.max)")
+                            .font(.system(size: 11, weight: .semibold)).monospacedDigit()
+                            .foregroundStyle(c.max == 0 ? KB.muted : (c.earned > 0 ? KB.green : KB.muted))
+                    }
+                }
+            }
+
+            Text("장소·이동 정보가 없어 \(MatchEngine.missingCriteria.joined(separator: "·")) 기준은 뺐어요. 남은 기준만으로 100점 환산한 값이에요.")
+                .font(.system(size: 10.5)).foregroundStyle(KB.muted).lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if m.verdict == .confirm {
+                HStack(spacing: 7) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Text("맞아요, 연결할게요")
+                            .font(.system(size: 12.5, weight: .semibold)).foregroundStyle(KB.ink)
+                            .frame(maxWidth: .infinity).padding(.vertical, 9)
+                            .background(KB.yellow, in: Capsule())
+                    }
+                    Button {
+                        withAnimation { expanded = nil }
+                    } label: {
+                        Text("관련 없어요")
+                            .font(.system(size: 12.5, weight: .medium)).foregroundStyle(KB.muted)
+                            .frame(maxWidth: .infinity).padding(.vertical, 9)
+                            .background(.white, in: Capsule())
+                            .overlay(Capsule().stroke(KB.line, lineWidth: 1))
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(13)
+        .background(KB.canvas, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(.bottom, 9)
+        .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+
+    private func verdictColor(_ v: MatchEngine.Verdict) -> Color {
+        switch v {
+        case .auto: KB.green
+        case .confirm: KB.tangerine
+        case .unrelated: KB.muted
+        }
     }
 
     private func transactionRow(_ tx: CardTransaction) -> some View {
@@ -144,7 +241,7 @@ struct BillingDetailSheet: View {
                 Text(tx.merchant).font(.system(size: 14, weight: .medium)).foregroundStyle(KB.ink)
                     .lineLimit(1)
                 HStack(spacing: 5) {
-                    Text("07.\(String(format: "%02d", tx.day))")
+                    Text("07.\(String(format: "%02d", tx.day))\(tx.timeLabel.map { " " + $0 } ?? "")")
                         .font(.system(size: 11)).foregroundStyle(KB.muted).monospacedDigit()
                     Text("·").font(.system(size: 11)).foregroundStyle(KB.muted)
                     // 네이버페이·KICC 같은 결제대행은 가맹점을 알 수 없어 '기타'로 떨어진다.
@@ -173,9 +270,18 @@ struct BillingDetailSheet: View {
                 if tx.isInstallment {
                     Text("\(tx.installmentMonths)개월 무이자")
                         .font(.system(size: 10, weight: .semibold)).foregroundStyle(KB.tangerine)
+                } else if let m = MatchEngine.bestMatch(for: tx, in: model), m.verdict != .unrelated {
+                    // 어떤 일정과 이어질 것 같은지 한 줄로. 자세한 근거는 탭하면 펼쳐진다.
+                    HStack(spacing: 3) {
+                        Image(systemName: "link").font(.system(size: 8, weight: .bold))
+                        Text(m.event.title).lineLimit(1)
+                    }
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(verdictColor(m.verdict))
                 }
             }
         }
         .padding(.vertical, 9)
+        .contentShape(Rectangle())
     }
 }

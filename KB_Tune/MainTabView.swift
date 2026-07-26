@@ -38,11 +38,12 @@ struct CustomTabBar: View {
     var onReselect: (MainTab) -> Void
     @Namespace private var highlight
 
-    private let items: [(tab: MainTab, label: String, icon: String)] = [
-        (.weekly,   "주간",     "calendar.day.timeline.left"),
-        (.chat,     "대화",     "bubble.left.and.bubble.right"),
-        (.analysis, "분석",     "chart.bar.xaxis"),
-        (.products, "카드·적금", "creditcard"),
+    // 선택되면 채워진 아이콘으로 바뀐다 — KB Pay를 비롯한 금융 앱의 공통 문법.
+    private let items: [(tab: MainTab, label: String, icon: String, onIcon: String)] = [
+        (.weekly,   "주간",     "calendar.day.timeline.left", "calendar.day.timeline.left"),
+        (.chat,     "대화",     "bubble.left.and.bubble.right", "bubble.left.and.bubble.right.fill"),
+        (.analysis, "분석",     "chart.bar.xaxis", "chart.bar.xaxis"),
+        (.products, "카드·적금", "creditcard", "creditcard.fill"),
     ]
 
     private let slide = Animation.spring(response: 0.34, dampingFraction: 0.8)
@@ -55,10 +56,12 @@ struct CustomTabBar: View {
                     if selected == item.tab { onReselect(item.tab) } else { selected = item.tab }
                 } label: {
                     VStack(spacing: 3) {
-                        Image(systemName: item.icon)
+                        Image(systemName: isOn ? item.onIcon : item.icon)
                             .font(.system(size: 18, weight: isOn ? .semibold : .regular))
+                            .contentTransition(.symbolEffect(.replace.offUp))
+                            .symbolEffect(.bounce, value: isOn)
                         Text(item.label)
-                            .font(.system(size: 10, weight: .medium))
+                            .font(.system(size: 10, weight: isOn ? .semibold : .medium))
                     }
                     .foregroundStyle(isOn ? KB.ink : KB.muted)
                     .frame(maxWidth: .infinity)

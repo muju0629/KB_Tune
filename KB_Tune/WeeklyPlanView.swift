@@ -69,9 +69,15 @@ struct WeeklyPlanView: View {
                         .padding(.bottom, 32)
                     }
                     // 결제예정 바가 가리지 않게 아래를 비워둔다.
+                    // 월간·타임테이블로 넘어가면 아래로 미끄러져 나간다.
                     .safeAreaInset(edge: .bottom) {
-                        if mode == .week && selectedDay == nil { billingDock }
+                        if mode == .week && selectedDay == nil {
+                            billingDock
+                                .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
                     }
+                    .animation(switchSpring, value: mode)
+                    .animation(switchSpring, value: selectedDay?.dayNumber)
                     // 하단 '주간' 탭을 다시 누르면 어디에 있든 주간 메인으로 되돌리고 맨 위로 부드럽게 스크롤한다.
                     .onChange(of: model.planResetToken) { _, _ in
                         withAnimation(switchSpring) {

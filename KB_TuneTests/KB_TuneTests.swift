@@ -177,6 +177,65 @@ struct KB_TuneTests {
         #expect(BillingCycle.projectedDue(adding: 50_000, on: 27, today: 26) == due)
     }
 
+    // MARK: 일정-거래 매칭 (보고서 8.1)
+
+    /// 예약만 잡히고 금액을 모르는 일정에 결제가 붙는 게 이 기능의 핵심 시나리오다.
+    /// 7/14 오디움 예약(14:00) ← 네이버페이 23,600원(13:38).
+    @Test func matchesReservationToPaymentByTime() {
+        let model = onJuly22 { AppModel() }
+        let tx = try! #require(BillingCycle.transactions.first {
+            $0.day == 14 && $0.merchant == "네이버페이"
+        })
+
+        let m = try! #require(MatchEngine.bestMatch(for: tx, in: model))
+
+        #expect(m.event.title == "오디움 예약")
+        #expect(m.verdict == .confirm)          // 50~79점 → 사용자에게 확인 요청
+        #expect(m.score >= 50 && m.score < 80)
+    }
+
+    /// 장소·이동 기준이 없으므로 만점은 100이 아니다. 남은 기준으로 환산해야
+    /// 보고서의 80/50 임계값을 그대로 쓸 수 있다.
+    @Test func scoreIsNormalizedOverAvailableCriteria() {
+        let model = onJuly22 { AppModel() }
+        let tx = try! #require(BillingCycle.transactions.first {
+            $0.day == 14 && $0.merchant == "네이버페이"
+        })
+        let m = try! #require(MatchEngine.bestMatch(for: tx, in: model))
+
+        #expect(m.available < 100)              // 장소(20)·이동(10)이 빠졌다
+        #expect(m.score == Int((Double(m.earned) / Double(m.available) * 100).rounded()))
+        // 금액을 모르는 일정은 그 기준이 감점이 아니라 '제외'로 처리된다
+        #expect(m.criteria.contains { $0.name == "금액 유사성" && $0.max == 0 })
+    }
+
+    /// 출근처럼 하루를 덮는 일정은 후보에서 빼야 한다.
+    /// 안 그러면 그날 아무 결제나 시간 점수를 다 먹는다.
+    @Test func allDayBackgroundEventsAreNotMatchCandidates() {
+        let model = onJuly22 { AppModel() }
+        // 7/13 12:27 네이버페이 — 그 시각엔 '인포스탁 인턴'(8:30~17:30)만 걸친다
+        let tx = try! #require(BillingCycle.transactions.first {
+            $0.day == 13 && $0.merchant == "네이버페이"
+        })
+
+        let m = MatchEngine.bestMatch(for: tx, in: model)
+        #expect(m?.event.title != "인포스탁 인턴")
+        #expect(m?.verdict != .auto)
+    }
+
+    /// 양쪽 다 '기타'인 건 업종이 맞은 게 아니라 둘 다 모르는 것 — 만점을 주면 안 된다.
+    @Test func unknownCategoriesDoNotCountAsAMatch() {
+        let model = onJuly22 { AppModel() }
+        let tx = try! #require(BillingCycle.transactions.first {
+            $0.day == 14 && $0.merchant == "네이버페이"
+        })
+        let m = try! #require(MatchEngine.bestMatch(for: tx, in: model))
+        let category = try! #require(m.criteria.first { $0.name == "업종 일치" })
+
+        #expect(category.earned < category.max)
+        #expect(category.earned > 0)            // 틀렸다고 0점을 주지도 않는다
+    }
+
     // MARK: 실시간 날짜
 
     /// 주 범위는 월요일에 시작해 7월 밖으로 넘어가지 않는다.

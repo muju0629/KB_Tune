@@ -21,10 +21,19 @@ struct CardTransaction: Identifiable {
     var day: Int                    // 2026년 7월 기준 일자
     var merchant: String
     var amount: Int                 // 이용금액 (할부면 총액)
+    /// 승인 시각(0~24, 소수는 분). 일정-거래 매칭의 시간 근접성 판정에 쓴다.
+    /// nil이면 시각을 모르는 건이라 그 기준을 빼고 점수를 낸다.
+    var hour: Double? = nil
     var installmentMonths: Int = 1  // 1 = 일시불
     var isKBPay: Bool = false
     /// 몇 건을 묶은 항목인지. 합계로만 넣은 항목이 건수를 1건으로 세지 않게 한다.
     var count: Int = 1
+
+    /// "18:33"
+    var timeLabel: String? {
+        guard let hour else { return nil }
+        return String(format: "%02d:%02d", Int(hour), Int((hour - Double(Int(hour))) * 60 + 0.5))
+    }
 
     var isInstallment: Bool { installmentMonths > 1 }
 
@@ -67,20 +76,20 @@ enum BillingCycle {
     /// 사용자의 KB ALL 카드(2054) 이용내역 · 이용기간 26.06.27~26.07.26.
     /// 카드사 앱 기준 총 14건 633,220원.
     static let transactions: [CardTransaction] = [
-        CardTransaction(day: 23, merchant: "쿠팡이츠", amount: 19_100),
-        CardTransaction(day: 23, merchant: "유튜브 프리미엄", amount: 14_900),
-        CardTransaction(day: 20, merchant: "네이버페이", amount: 30_000),
-        CardTransaction(day: 20, merchant: "쿠팡이츠", amount: 13_900),
-        CardTransaction(day: 20, merchant: "KICC(서울시인터넷)", amount: 50_000, isKBPay: true),
-        CardTransaction(day: 14, merchant: "네이버페이", amount: 23_600),
-        CardTransaction(day: 14, merchant: "쿠팡(와우 멤버십)", amount: 7_890),
-        CardTransaction(day: 13, merchant: "네이버페이", amount: 63_000),
-        CardTransaction(day: 12, merchant: "쿠팡(쿠페이)", amount: 21_160),
-        CardTransaction(day: 9, merchant: "쿠팡(쿠페이)", amount: 36_570),
-        CardTransaction(day: 9, merchant: "인터넷상거래", amount: 181_180,
+        CardTransaction(day: 23, merchant: "쿠팡이츠", amount: 19_100, hour: 18.583),
+        CardTransaction(day: 23, merchant: "유튜브 프리미엄", amount: 14_900, hour: 16.1),
+        CardTransaction(day: 20, merchant: "네이버페이", amount: 30_000, hour: 21.767),
+        CardTransaction(day: 20, merchant: "쿠팡이츠", amount: 13_900, hour: 18.55),
+        CardTransaction(day: 20, merchant: "KICC(서울시인터넷)", amount: 50_000, hour: 10.967, isKBPay: true),
+        CardTransaction(day: 14, merchant: "네이버페이", amount: 23_600, hour: 13.633),
+        CardTransaction(day: 14, merchant: "쿠팡(와우 멤버십)", amount: 7_890, hour: 9.633),
+        CardTransaction(day: 13, merchant: "네이버페이", amount: 63_000, hour: 12.45),
+        CardTransaction(day: 12, merchant: "쿠팡(쿠페이)", amount: 21_160, hour: 21.233),
+        CardTransaction(day: 9, merchant: "쿠팡(쿠페이)", amount: 36_570, hour: 20.6),
+        CardTransaction(day: 9, merchant: "인터넷상거래", amount: 181_180, hour: 13.367,
                         installmentMonths: 2, isKBPay: true),
         // 카드사 앱 총액(633,220원 · 14건)과 맞추기 위한 나머지 3건.
-        // 스크린샷에 안 잡힌 구간이라 개별 내역 대신 합계로만 둔다.
+        // 스크린샷에 안 잡힌 구간이라 개별 내역 대신 합계로만 둔다(시각도 모른다).
         CardTransaction(day: 6, merchant: "기타 3건", amount: 171_920, count: 3),
     ]
 
