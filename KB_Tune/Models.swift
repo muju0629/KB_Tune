@@ -4,7 +4,7 @@
 //
 //  데이터 모델 + 앱 상태.
 //  캘린더 기반 페르소나: 성제 · 대학생 · 인포스탁 인턴 · AI 연구 병행
-//  기준일 2026-07-22(수) · 일정기간 2026년 7월
+//  기준일은 앱을 켤 때 실제 날짜에서 읽는다(DemoClock) · 일정기간 2026년 7월
 //
 
 import SwiftUI
@@ -189,8 +189,30 @@ final class AppModel: ObservableObject {
         return tags
     }
 
-    // 계획 상태 (방향은 월초에 한 번 결정)
+    // 계획 상태. 방향은 온보딩에서 묻지 않고 앱이 정한다 — 목표 확률만 보면 알 수 있는 걸
+    // 사용자에게 되묻지 않기 위해서다. 정한 뒤엔 설정에서 언제든 바꿀 수 있다.
     @Published var direction: SpendDirection = .maintain
+
+    /// 저축 목표가 위태로우면 '줄이기'로 시작한다.
+    /// '늘리기'는 앱이 먼저 권하지 않는다 — 더 쓰라고 떠미는 금융 조언은 하지 않는다.
+    static let atRiskProbability = 60
+
+    func decideDirection() {
+        direction = probability(for: .maintain) < Self.atRiskProbability ? .reduce : .maintain
+    }
+
+    /// 방향을 왜 그렇게 잡았는지 한 줄로 설명한다.
+    var directionReason: String {
+        let p = probability
+        switch direction {
+        case .reduce:
+            return "저축 목표 달성 확률이 \(p)%라 '줄이기'로 시작할게요. 설정에서 바꿀 수 있어요."
+        case .maintain:
+            return "저축 목표 달성 확률이 \(p)%라 '유지'로 시작할게요. 설정에서 바꿀 수 있어요."
+        case .increase:
+            return "'늘리기'로 계획했어요. 목표 확률은 \(p)%예요."
+        }
+    }
 
     // 앱에서 새로 추가한 일정의 예상액 합계.
     // 시드 캘린더의 확정 일정은 BudgetEngine 상수(committedThisWeek 등)에 이미 반영돼 있어,
@@ -213,13 +235,24 @@ final class AppModel: ObservableObject {
                                  savingsGoal: savingsGoal)
     }
 
-    let referenceDateLabel = "2026년 7월 22일 수요일"
+    /// KB Pay 이용내역 연결 여부(온보딩에서 동의). 데모라 실제 계정에 접속하지는 않는다.
+    @Published var kbPayLinked = false
+
+    // MARK: 신용카드 청구 (기획 보고서 7.3 '카드 결제예정액')
+
+    /// 이번 이용기간 요약 — 얼마 썼고, 다음 결제일에 얼마가 빠지고, 얼마가 다음 달로 밀리는지.
+    var billing: BillingSummary { BillingCycle.summary(today: todayDayNumber) }
+
+    /// 이용기간 마감일에 쓴 돈은 다음 결제일에, 하루만 넘겨 쓰면 그 다음 결제일에 청구된다.
+    var isBillingCloseDay: Bool { todayDayNumber == BillingCycle.closingDay }
+
+    var referenceDateLabel: String { DemoClock.fullLabel(of: todayDayNumber) }
     let analysisPeriod = "2026년 7월 캘린더"
 
     // MARK: 7월 캘린더 일정
 
     @Published var calendarDays: [PlanDay] = AppModel.makeJulyCalendar()
-    let currentWeekRange = 20...26
+    var currentWeekRange: ClosedRange<Int> { DemoClock.weekRange(containing: todayDayNumber) }
     var week: [PlanDay] { calendarDays.filter { currentWeekRange.contains($0.dayNumber) } }
 
     /// 월요일 시작, 7월과 겹치는 주 단위 날짜 창. 각 주는 7칸(월~일)이고 7월 밖은 nil.
@@ -421,9 +454,10 @@ final class AppModel: ObservableObject {
     // MARK: 월간 (2026년 7월)
 
     let monthLabel = "2026년 7월"
-    let daysInMonth = 31
+    let daysInMonth = DemoClock.daysInMonth
     let firstWeekdayOffset = 2        // 7/1 = 수요일 (월요일 시작 기준 빈칸 2)
-    let todayDayNumber = 22
+    /// 앱을 켤 때 실제 날짜에서 읽는다. 세션 중엔 고정(달이 넘어가도 화면이 흔들리지 않게).
+    let todayDayNumber = DemoClock.today
     var julyEstimateLow: Int { calendarDays.reduce(0) { $0 + $1.spendLow } }
     var julyEstimateHigh: Int { calendarDays.reduce(0) { $0 + $1.spendHigh } }
     var monthEndRemainingLow: Int {
@@ -557,17 +591,17 @@ final class AppModel: ObservableObject {
             category: "카페", purpose: "공부")
         add(21, "회의", symbol: "bubble.left.and.bubble.right", start: 21, duration: 1,
             basis: "별도 결제 없음")
-        // 오늘(7/22) 저녁 일정(미용실) — 아직 결제 전이라 '예약 예산' 상태로 둔다. 하루 마감에서 확인하면 확정으로 바뀐다.
+        // 7/22 저녁 일정(미용실) — 아직 결제 전이라 '예약 예산' 상태로 둔다. 하루 마감에서 확인하면 확정으로 바뀐다.
         add(22, "와드", symbol: "scissors", start: 19, duration: 1,
             amount: 40_000, low: 40_000, high: 40_000, basis: "사용자가 확인한 금액",
             category: "자기관리", purpose: "개인 일정", state: .reserved)
         add(24, "인포스탁 월급날", symbol: "banknote", start: 8, duration: 0.5)
 
-        let weekdays = ["수", "목", "금", "토", "일", "월", "화"]
-        return (1...31).map { day in
-            PlanDay(weekday: weekdays[(day - 1) % 7],
+        let today = DemoClock.today
+        return (1...DemoClock.daysInMonth).map { day in
+            PlanDay(weekday: DemoClock.weekday(of: day),
                     dateLabel: "7/\(day)", dayNumber: day,
-                    isToday: day == 22,
+                    isToday: day == today,
                     events: events[day, default: []].sorted { $0.startHour < $1.startHour })
         }
     }

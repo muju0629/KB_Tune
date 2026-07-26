@@ -40,11 +40,16 @@ struct AddEventView: View {
     // 7월(오늘~월말) 범위 안에서만 고르게 한다 — 데모 캘린더가 2026년 7월이라서.
     private static let cal = Calendar(identifier: .gregorian)
     private static var defaultDate: Date {
-        cal.date(from: DateComponents(year: 2026, month: 7, day: 25, hour: 19, minute: 0))!
+        // 기본값은 오늘 저녁 — 월말을 넘지 않게 자른다.
+        let day = min(DemoClock.today, DemoClock.daysInMonth)
+        return cal.date(from: DateComponents(year: DemoClock.demoYear, month: DemoClock.demoMonth,
+                                             day: day, hour: 19, minute: 0))!
     }
     private static var dateRange: ClosedRange<Date> {
-        let lower = cal.date(from: DateComponents(year: 2026, month: 7, day: 22, hour: 0, minute: 0))!
-        let upper = cal.date(from: DateComponents(year: 2026, month: 7, day: 31, hour: 23, minute: 59))!
+        let lower = cal.date(from: DateComponents(year: DemoClock.demoYear, month: DemoClock.demoMonth,
+                                                 day: DemoClock.today, hour: 0, minute: 0))!
+        let upper = cal.date(from: DateComponents(year: DemoClock.demoYear, month: DemoClock.demoMonth,
+                                                 day: DemoClock.daysInMonth, hour: 23, minute: 59))!
         return lower...upper
     }
     private var dayNumber: Int { Self.cal.component(.day, from: date) }
@@ -260,6 +265,26 @@ struct AddEventView: View {
         }
     }
 
+    /// 카드로 결제한다고 보면 이 지출이 어느 결제일에 얹히는지 (기획 보고서 7.3).
+    /// 이용기간(26일)을 넘겨 쓰면 한 달 뒤 결제일로 밀린다 — 그 차이를 여기서 보여준다.
+    @ViewBuilder
+    private var cardImpactRow: some View {
+        let b = model.billing
+        if dayNumber <= BillingCycle.closingDay {
+            impactRow("\(b.payLabel) 카드값",
+                      from: formatWon(b.dueNext),
+                      to: formatWon(BillingCycle.projectedDue(adding: amount, on: dayNumber)),
+                      warn: false, tint: KB.ink)
+        } else {
+            HStack {
+                Text("\(b.nextPayLabel) 카드값").font(.system(size: 13)).foregroundStyle(KB.muted)
+                Spacer()
+                Text("+\(formatWon(amount))").font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(KB.ink)
+            }
+        }
+    }
+
     // MARK: - 2단계: 추정 결과 + 영향 + 조정안
 
     private var resultStep: some View {
@@ -325,6 +350,7 @@ struct AddEventView: View {
                           warn: after < 0)
                 impactRow("적금 목표 확률", from: "\(probBefore)%", to: "\(probAfter)%",
                           warn: (probBefore - probAfter) >= 10)
+                cardImpactRow
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -390,14 +416,17 @@ struct AddEventView: View {
         }
     }
 
-    private func impactRow(_ label: String, from: String, to: String, warn: Bool) -> some View {
+    /// - Parameter tint: 기본은 warn 여부로 초록/주의색. 좋고 나쁨을 말할 수 없는 값
+    ///   (예: 카드값은 쓰면 늘어나는 게 당연하다)은 중립색을 직접 넘긴다.
+    private func impactRow(_ label: String, from: String, to: String,
+                           warn: Bool, tint: Color? = nil) -> some View {
         HStack {
             Text(label).font(.system(size: 13.5)).foregroundStyle(KB.ink)
             Spacer()
             Text(from).font(.system(size: 13)).foregroundStyle(KB.muted).strikethrough()
             Image(systemName: "arrow.right").font(.system(size: 10)).foregroundStyle(KB.muted)
             Text(to).font(.system(size: 15, weight: .bold))
-                .foregroundStyle(warn ? KB.caution : KB.green)
+                .foregroundStyle(tint ?? (warn ? KB.caution : KB.green))
                 .monospacedDigit()
         }
     }

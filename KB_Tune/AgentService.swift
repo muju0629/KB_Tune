@@ -107,7 +107,7 @@ final class AgentService: ObservableObject {
         let body: [String: Any] = [
             "message": message,
             "profile": profile,
-            "today": 22,
+            "today": DemoClock.today,
         ]
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
 

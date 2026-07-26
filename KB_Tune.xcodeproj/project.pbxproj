@@ -397,7 +397,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "이번 주 일정과 예상 지출을 함께 계산하기 위해 캘린더를 읽어옵니다.";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "일정을 읽어 예상 지출을 계산하고, 예산을 배정한 일정은 캘린더에 다시 적기 위해 접근합니다.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -429,7 +429,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "이번 주 일정과 예상 지출을 함께 계산하기 위해 캘린더를 읽어옵니다.";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "일정을 읽어 예상 지출을 계산하고, 예산을 배정한 일정은 캘린더에 다시 적기 위해 접근합니다.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

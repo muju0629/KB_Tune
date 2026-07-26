@@ -57,9 +57,16 @@ final class CalendarStore: ObservableObject {
         case .some(false):
             access = .denied
             lastError = nil
-        case .none:   // 타임아웃 — 응답 없음
-            access = .notDetermined
-            lastError = "캘린더 권한 응답이 없어요. 다시 시도하거나, 설정 앱에서 캘린더 접근을 켜주세요."
+        case .none:
+            // 타임아웃. 사용자가 뒤늦게 허용했을 수 있으니 시스템 상태를 다시 읽는다 —
+            // 안 그러면 실제로는 허용됐는데 화면은 계속 '연결 안 됨'으로 남는다.
+            refreshAccessStatus()
+            if access == .authorized {
+                lastError = nil
+                fetchThisWeek()
+            } else {
+                lastError = "캘린더 권한 응답이 없어요. 다시 시도하거나, 설정 앱에서 캘린더 접근을 켜주세요."
+            }
         }
     }
 

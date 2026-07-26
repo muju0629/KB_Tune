@@ -305,12 +305,15 @@ struct CardDetailView: View {
     let eval: CardEval
     let alternative: CardEval?
 
+    @EnvironmentObject private var model: AppModel
+    @StateObject private var advisor = CardAdvisor()
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header
+                aiReasonCard
                 benefitBox
-                fitLine
                 if !eval.unmet.isEmpty { checklist }
                 if let alt = alternative, alt.id != eval.id { altBox(alt) }
                 cautions
@@ -321,6 +324,46 @@ struct CardDetailView: View {
         .background(KB.canvas)
         .navigationTitle(eval.product.kind.label)
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await advisor.explain(eval, reco: RecoEngine.evalCards(model), model: model)
+        }
+    }
+
+    /// "왜 이 카드인가"를 사람 말로. 아래 순혜택 표가 그 근거다.
+    private var aiReasonCard: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            HStack(spacing: 7) {
+                Text("AI 추천 이유")
+                    .font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
+                    .padding(.horizontal, 9).padding(.vertical, 4)
+                    .background(Color(hex: 0x7A5CF0), in: Capsule())
+                Spacer()
+                if advisor.isStreaming {
+                    ProgressView().tint(KB.muted).scaleEffect(0.7)
+                } else {
+                    Text(advisor.source == .agent ? "에이전트 요약" : "기기 계산")
+                        .font(.system(size: 10.5)).foregroundStyle(KB.muted)
+                }
+            }
+
+            Text(advisor.summary.isEmpty ? "추천 근거를 정리하고 있어요…" : advisor.summary)
+                .font(.system(size: 14.5, weight: .medium)).foregroundStyle(KB.ink)
+                .lineSpacing(4)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider().overlay(KB.line)
+
+            HStack(alignment: .top, spacing: 7) {
+                Image(systemName: "function").font(.system(size: 11)).foregroundStyle(KB.muted)
+                Text(eval.fitCopy)
+                    .font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                    .lineSpacing(2).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KB.line, lineWidth: 1))
     }
 
     private var header: some View {
@@ -386,18 +429,6 @@ struct CardDetailView: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(KB.greenSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-    }
-
-    // 추천 이유 한 줄(개인화). 리스트에 없던 근거를 여기서만.
-    private var fitLine: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "person.crop.circle.badge.checkmark").font(.system(size: 14)).foregroundStyle(KB.ink)
-            Text(eval.fitCopy).font(.system(size: 13.5)).foregroundStyle(KB.ink)
-                .lineSpacing(2).fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(KB.yellowSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     // 확인이 필요한 조건만(충족 정보는 위 순혜택·칩으로 이미 전달).

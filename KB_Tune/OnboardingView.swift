@@ -2,7 +2,11 @@
 //  OnboardingView.swift
 //  KB_Tune
 //
-//  7월 캘린더를 바탕으로 수입·저축 목표와 지킬 소비를 확인하는 4단계 온보딩.
+//  7월 캘린더를 바탕으로 수입·저축 목표와 지킬 소비를 확인하는 3단계 온보딩.
+//
+//  소비 방향(줄이기·유지·늘리기)은 묻지 않는다. 목표 달성 확률만 계산하면 알 수 있는 걸
+//  시작하자마자 되물으면, 아직 아무 숫자도 못 본 사용자가 답할 근거가 없다.
+//  앱이 정해서 완료 화면에서 근거와 함께 알려주고, 바꾸는 건 설정에 둔다.
 //
 
 import SwiftUI
@@ -12,12 +16,14 @@ struct OnboardingView: View {
     var onFinish: () -> Void
     var onBack: (() -> Void)? = nil   // 첫 화면에서 뒤로 = 시작화면으로
 
-    /// 0~3 = 질문 단계, 4 = 에이전트 빌드 연출, 5 = 완료
+    /// 0~2 = 질문 단계, 3 = 에이전트 빌드 연출, 4 = 완료
     @State private var step = 0
     @State private var forward = true
     @State private var buildStep = 0
+    @State private var showKBPayConsent = false
+    @StateObject private var calendar = CalendarStore()
 
-    private let questionCount = 4
+    private let questionCount = 3
     private let stepSpring = Animation.spring(response: 0.42, dampingFraction: 0.86)
 
     var body: some View {
@@ -29,8 +35,7 @@ struct OnboardingView: View {
                 case 0: stepConnect
                 case 1: stepIncomeGoal
                 case 2: stepKeeps
-                case 3: stepDirection
-                case 4: stepBuilding
+                case 3: stepBuilding
                 default: stepDone
                 }
             }
@@ -115,38 +120,74 @@ struct OnboardingView: View {
         .padding(.bottom, 10)
     }
 
-    // MARK: ① 캘린더 확인
+    // MARK: ① 일정·소비 연결
 
     private var stepConnect: some View {
         VStack(spacing: 0) {
-            header("7월 일정을\n먼저 확인할게요", "인턴 출근일과 약속을 보고 필요한 금액을 미리 계산해요.")
+            header("일정과 소비를\n연결할게요", "둘을 함께 봐야 앞으로 얼마를 쓰게 될지 계산할 수 있어요.")
 
-            Spacer()
-            Image(systemName: "calendar.badge.clock")
-                .font(.system(size: 60, weight: .thin))
-                .foregroundStyle(KB.yellow)
+            VStack(spacing: 11) {
+                ConnectRow(symbol: "calendar",
+                           tint: KB.green,
+                           title: "캘린더",
+                           detail: "일정을 읽고, 예산을 잡은 일정은 캘린더에 다시 적어요",
+                           state: calendarRowState) {
+                    Task { await calendar.connect() }
+                }
+
+                ConnectRow(symbol: "creditcard",
+                           tint: KB.ink,
+                           title: "KB Pay 이용내역",
+                           detail: "카드 이용내역을 읽어 소비 패턴을 분석해요",
+                           state: model.kbPayLinked ? .linked : .idle) {
+                    showKBPayConsent = true
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 22)
+
+            if let err = calendar.lastError {
+                Text(err)
+                    .font(.system(size: 12)).foregroundStyle(KB.caution)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 24).padding(.top, 10)
+            }
+
             Spacer()
 
             VStack(spacing: 12) {
                 Button {
                     model.usesDemoData = true
                     next()
-                } label: { Text("7월 일정으로 시작하기") }
+                } label: { Text(connectedCount > 0 ? "다음" : "7월 데모 일정으로 시작하기") }
                 .buttonStyle(PrimaryButtonStyle())
-
-                Button {
-                    model.usesDemoData = true
-                    next()
-                } label: { Text("내 캘린더 연결 (준비 중)") }
-                .buttonStyle(SecondaryButtonStyle())
-                .disabled(true)
-                .opacity(0.55)
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 8)
 
-            agentHint("일정별 예상 금액은 언제든 수정할 수 있어요")
+            agentHint(connectedCount == 0
+                      ? "연결하지 않아도 7월 데모 일정으로 둘러볼 수 있어요"
+                      : "연결한 자료로 일정별 예상 금액을 계산할게요")
         }
+        .sheet(isPresented: $showKBPayConsent) {
+            KBPayConsentSheet { model.kbPayLinked = true }
+                .presentationDetents([.large])
+        }
+        // 설정 앱에서 권한을 켜고 돌아온 경우도 반영한다.
+        .onAppear { calendar.refreshAccessStatus() }
+    }
+
+    private var calendarRowState: ConnectRow.State {
+        if calendar.isLoading { return .loading }
+        switch calendar.access {
+        case .authorized: return .linked
+        case .denied: return .denied
+        case .notDetermined: return .idle
+        }
+    }
+
+    private var connectedCount: Int {
+        (calendar.access == .authorized ? 1 : 0) + (model.kbPayLinked ? 1 : 0)
     }
 
     // MARK: ② 수입 · 저축 목표 (세로 다이얼 2개)
@@ -228,7 +269,7 @@ struct OnboardingView: View {
             Spacer()
 
             // 더 필요한 소비(protectedTags)는 hobbies에서 자동 파생 — 별도 저장 없음
-            Button { next() } label: { Text("다음") }
+            Button { next() } label: { Text("7월 계획 계산하기") }
                 .buttonStyle(PrimaryButtonStyle())
                 .disabled(model.hobbies.isEmpty)
                 .opacity(model.hobbies.isEmpty ? 0.5 : 1)
@@ -238,51 +279,6 @@ struct OnboardingView: View {
             agentHint(model.hobbies.isEmpty
                       ? "고른 소비는 예산을 조정할 때 줄이지 않아요"
                       : "\(model.hobbies.sorted().joined(separator: "·")) — 더 필요한 소비로 기억할게요")
-        }
-    }
-
-    // MARK: ④ 소비 방향 (월초 1회 결정)
-
-    private var stepDirection: some View {
-        VStack(spacing: 0) {
-            header("7월 소비 방향을\n정해볼까요?", "일정이 바뀌면 주간 금액도 함께 다시 계산돼요.")
-
-            VStack(spacing: 12) {
-                ForEach(SpendDirection.allCases) { dir in
-                    Button {
-                        withAnimation(.snappy(duration: 0.2)) { model.direction = dir }
-                    } label: {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(dir.label).font(.system(size: 16, weight: .semibold))
-                                Text("이번 주 \(formatWon(model.weeklyBudget(for: dir))) · 목표 확률 \(model.probability(for: dir))%")
-                                    .font(.system(size: 12.5)).foregroundStyle(KB.muted)
-                            }
-                            Spacer()
-                            Image(systemName: model.direction == dir ? "checkmark.circle.fill" : "circle")
-                                .font(.system(size: 22))
-                                .foregroundStyle(model.direction == dir ? KB.ink : KB.line)
-                        }
-                        .padding(16)
-                        .background(model.direction == dir ? KB.yellowSoft : .white,
-                                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(model.direction == dir ? KB.yellow : KB.line, lineWidth: 1.5))
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(KB.ink)
-                }
-            }
-            .sensoryFeedback(.selection, trigger: model.direction)
-            .padding(.horizontal, 24)
-            .padding(.top, 24)
-
-            Spacer()
-
-            Button { next() } label: { Text("7월 계획 계산하기") }
-                .buttonStyle(PrimaryButtonStyle())
-                .padding(.horizontal, 24)
-                .padding(.bottom, 24)
         }
     }
 
@@ -298,6 +294,7 @@ struct OnboardingView: View {
             hobbyText,
             "수입 \(formatWon(model.monthlyIncome)) · 저축 \(formatWon(model.savingsGoal)) 반영",
             "\(model.protectedList) 소비는 줄이지 않게 설정",
+            "목표 확률로 이번 달 소비 방향 결정",
         ]
     }
 
@@ -356,11 +353,13 @@ struct OnboardingView: View {
         .task {
             for i in 1...buildRows.count {
                 try? await Task.sleep(nanoseconds: 550_000_000)
+                // 마지막 줄에 맞춰 방향을 정한다 — 연출과 실제 계산이 어긋나지 않게.
+                if i == buildRows.count { model.decideDirection() }
                 withAnimation(.spring(response: 0.3)) { buildStep = i }
             }
             try? await Task.sleep(nanoseconds: 650_000_000)
             forward = true
-            withAnimation(stepSpring) { step = 5 }
+            withAnimation(stepSpring) { step = questionCount + 2 }
         }
     }
 
@@ -388,6 +387,8 @@ struct OnboardingView: View {
                            text: "\(model.protectedList) 소비는 더 필요한 소비라 줄이지 않아요")
                 summaryRow(symbol: "banknote",
                            text: "월 수입 \(formatWon(model.monthlyIncome)) · 저축 목표 \(formatWon(model.savingsGoal))")
+                summaryRow(symbol: "dial.medium",
+                           text: model.directionReason)
             }
             .padding(18)
             .frame(maxWidth: .infinity, alignment: .leading)

@@ -164,6 +164,7 @@ struct WeeklyPlanView: View {
         VStack(alignment: .leading, spacing: 22) {
             hero
             if model.shouldShowDailyClose { dailyCloseCard }
+            cardBillingCard
             weekStripPager
             spendTimeline
             if !model.upcomingSpends.isEmpty { predictedSpends }
@@ -226,6 +227,71 @@ struct WeeklyPlanView: View {
         }
         .padding(16)
         .elevatedCard(16)
+    }
+
+    /// 다음 결제일에 실제로 빠질 카드값 (기획 보고서 7.3 '카드 결제예정액').
+    ///
+    /// 카드사 앱은 '이용금액'만 보여줘서 할부가 다음 달로 얼마나 밀리는지 알기 어렵다.
+    /// 여기선 이용금액과 실제 청구액을 나눠 보여주고, 이용기간 마감이 임박하면
+    /// 하루 차이로 결제일이 한 달 밀린다는 점을 알려준다.
+    private var cardBillingCard: some View {
+        let b = model.billing
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Image(systemName: "creditcard.fill").font(.system(size: 14)).foregroundStyle(KB.ink)
+                Text("\(b.payLabel)에 빠질 카드값").font(.system(size: 15, weight: .semibold)).foregroundStyle(KB.ink)
+                Spacer()
+                Text("KB ALL").font(.system(size: 10.5, weight: .semibold)).foregroundStyle(KB.ink)
+                    .padding(.horizontal, 7).padding(.vertical, 3)
+                    .background(KB.yellowSoft, in: Capsule())
+            }
+
+            Text(formatWon(b.dueNext))
+                .font(.system(size: 30, weight: .bold)).foregroundStyle(KB.ink)
+                .monospacedDigit()
+
+            Text("이용기간 \(b.periodLabel)에 \(b.count)건 \(formatWon(b.usage))을 썼어요. 그중 \(formatWon(b.deferred))은 할부라 \(b.nextPayLabel)로 넘어가요.")
+                .font(.system(size: 13)).foregroundStyle(KB.muted).lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if !b.installments.isEmpty {
+                VStack(spacing: 6) {
+                    ForEach(b.installments) { tx in
+                        HStack {
+                            Text("\(tx.merchant) \(tx.installmentMonths)개월")
+                                .font(.system(size: 12.5, weight: .medium)).foregroundStyle(KB.ink)
+                                .lineLimit(1)
+                            Spacer(minLength: 8)
+                            Text("월 \(formatWon(tx.installmentAmount(round: 1)))")
+                                .font(.system(size: 12.5, weight: .semibold)).foregroundStyle(KB.caution)
+                        }
+                    }
+                }
+                .padding(10)
+                .background(KB.canvas, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: model.isBillingCloseDay ? "exclamationmark.circle.fill" : "info.circle")
+                    .font(.system(size: 12)).foregroundStyle(model.isBillingCloseDay ? KB.caution : KB.muted)
+                Text(billingCloseNote(b))
+                    .font(.system(size: 12)).foregroundStyle(model.isBillingCloseDay ? KB.caution : KB.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .elevatedCard(16)
+    }
+
+    private func billingCloseNote(_ b: BillingSummary) -> String {
+        if model.isBillingCloseDay {
+            return "오늘이 이용기간 마지막 날이에요. 오늘 쓰면 \(b.payLabel)에, 내일 쓰면 \(b.nextPayLabel)에 빠져나가요."
+        }
+        if b.daysUntilClose > 0 {
+            return "\(b.closeLabel)까지 \(b.daysUntilClose)일 남았어요. 그때까지 쓴 돈이 \(b.payLabel)에 한 번에 빠져요."
+        }
+        return "이번 이용기간은 마감됐어요. 지금 쓰는 돈은 \(b.nextPayLabel)에 빠져나가요."
     }
 
     private var hero: some View {
@@ -531,7 +597,7 @@ struct WeeklyPlanView: View {
                         .fixedSize(horizontal: false, vertical: true)
                     // 주간 합계는 지나간 날까지 포함 — 남은 금액과 창이 달라 함께 밝힌다.
                     Text(model.remainingThisWeek > 0
-                         ? "7월 22일 기준 아직 안 쓴 건 \(formatWon(model.remainingThisWeek))이에요."
+                         ? "7월 \(model.todayDayNumber)일 기준 아직 안 쓴 건 \(formatWon(model.remainingThisWeek))이에요."
                          : "이번 주 남은 확정 일정은 없어요.")
                         .font(.subheadline)
                         .foregroundStyle(KB.muted)
@@ -744,7 +810,10 @@ struct WeeklyPlanView: View {
                 VStack(spacing: 8) {
                     calculationRow("월 고정비", formatWon(BudgetEngine.fixed))
                     calculationRow("적금 목표", formatWon(model.savingsGoal))
-                    calculationRow("7월 21일까지 일정비", formatWon(BudgetEngine.variableSpentToDate))
+                    calculationRow("7월 \(model.todayDayNumber - 1)일까지 일정비", formatWon(BudgetEngine.variableSpentToDate))
+                    if BudgetEngine.installmentCarryover > 0 {
+                        calculationRow("할부로 다음 달에 넘어갈 돈", formatWon(BudgetEngine.installmentCarryover))
+                    }
                     calculationRow("이번 주 남은 확정 일정", formatWon(BudgetEngine.committedThisWeek))
                     if model.userAddedThisWeek > 0 {
                         calculationRow("앱에서 추가한 일정", formatWon(model.userAddedThisWeek))
@@ -752,7 +821,7 @@ struct WeeklyPlanView: View {
                     Divider().overlay(KB.line)
                     calculationRow("추가 사용 가능액", formatWon(model.weeklyBudget), emphasized: true)
                 }
-                Text("\(formatWon(BudgetEngine.remainingBudget(income: model.monthlyIncome, savingsGoal: model.savingsGoal))) ÷ 남은 2주 − 확정 일정 \(formatWon(BudgetEngine.committedThisWeek + model.userAddedThisWeek))")
+                Text("\(formatWon(BudgetEngine.remainingBudget(income: model.monthlyIncome, savingsGoal: model.savingsGoal))) ÷ 남은 \(BudgetEngine.remainingWeeks)주 − 확정 일정 \(formatWon(BudgetEngine.committedThisWeek + model.userAddedThisWeek))")
                     .font(.system(size: 11.5))
                     .foregroundStyle(KB.muted)
                 Button { showSuccess = false } label: { Text("확인") }

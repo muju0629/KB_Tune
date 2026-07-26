@@ -13,18 +13,43 @@ import Foundation
 
 enum BudgetEngine {
 
-    // 성제의 2026년 7월 캘린더 기준. 고정비·단건 지출은 본인 확인값(07-22), 수입·저축은 데모 가정.
+    // 성제의 2026년 7월 캘린더 기준. 고정비·단건 지출은 본인 확인값, 수입·저축은 데모 가정.
     static let income = 2_200_000               // 미확인 — 데모 가정(설정에서 수정)
     static let fixed = 435_000                  // 통신 7.5 + 교통 15 + 유류 6 + 구독 3 + 청약 10 + 보험 2 (확인값)
     static let savingsGoal = 800_000            // 미확인 — 데모 가정
-    static let variableSpentToDate = 761_000    // 7/1~21 일정비 (출근 무비용 · 확인 단가 반영)
-    static let committedThisWeek = 40_000       // 7/22 와드 (출근·회의는 비용 없음)
-    static let committedFuture = 40_000         // 7/22~31 확정 일정 = 와드뿐
     static let candidateAmount = 0              // 미확정 일정은 기본 계산에서 제외
-    static let daysInMonth = 31
-    static let today = 22
+    static let daysInMonth = DemoClock.daysInMonth
     static let discretionaryDaily = 7_500.0     // 일정 밖 소액지출 데모 가정
     static let sigma = 100_000.0                // 추정 오차를 넉넉히 반영
+
+    /// 오늘 — 앱을 켤 때 실제 날짜에서 읽는다.
+    static var today: Int { DemoClock.today }
+
+    // 아래 세 값은 예전엔 7/22 기준 상수였다. 오늘이 실시간으로 움직이니 시드 캘린더에서
+    // 직접 계산한다 — 그래야 날짜가 바뀌어도 화면 숫자와 엔진이 어긋나지 않는다.
+    // (앱에서 새로 추가한 일정은 여기 없고 extraCommitted 로 따로 얹는다.)
+    private static let seed = AppModel.makeJulyCalendar()
+
+    /// 오늘 이전에 이미 쓴 일정비
+    static var variableSpentToDate: Int {
+        seed.filter { $0.dayNumber < today }.reduce(0) { $0 + $1.spendTotal }
+    }
+    /// 이번 주에 아직 남아 있는 확정 일정
+    static var committedThisWeek: Int {
+        let week = DemoClock.weekRange(containing: today)
+        return seed.filter { week.contains($0.dayNumber) && $0.dayNumber >= today }
+            .reduce(0) { $0 + $1.spendTotal }
+    }
+    /// 오늘부터 월말까지 남은 확정 일정
+    static var committedFuture: Int {
+        seed.filter { $0.dayNumber >= today }.reduce(0) { $0 + $1.spendTotal }
+    }
+
+    /// 다음 달로 넘어가는 할부 잔액 (기획 보고서 7.3 '카드 결제예정액').
+    ///
+    /// 일시불은 쓴 시점에 이미 일정비로 잡혀 있어 여기서 또 빼면 이중차감이 된다.
+    /// 할부만 "이번 달 소비엔 안 잡혔는데 다음 달 카드값으로 나갈 돈"이라 따로 차감한다.
+    static var installmentCarryover: Int { BillingCycle.summary().carryover }
 
     // 소비 방향 계수(위험 성향)
     static func weeklyFactor(_ d: SpendDirection) -> Double {
@@ -39,9 +64,11 @@ enum BudgetEngine {
         income - fixed - savingsGoal
     }
 
+    /// 이번 달 남은 예산. 할부 이월분은 다음 달 카드값으로 이미 예약된 돈이라 여기서 뺀다.
     static func remainingBudget(income: Int = income,
                                 savingsGoal: Int = savingsGoal) -> Int {
-        disposableMonth(income: income, savingsGoal: savingsGoal) - variableSpentToDate
+        disposableMonth(income: income, savingsGoal: savingsGoal)
+            - variableSpentToDate - installmentCarryover
     }
 
     static var remainingWeeks: Int { Int(ceil(Double(daysInMonth - today + 1) / 7.0)) } // 2

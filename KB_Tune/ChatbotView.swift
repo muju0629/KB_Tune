@@ -389,6 +389,20 @@ struct ChatbotView: View {
         formatWonRange(low, high)
     }
 
+    /// 오늘 기준 이번 주에 남은 확정 일정을 그대로 읽어준다 — 날짜가 바뀌면 문장도 바뀐다.
+    private var remainingWeekReason: String {
+        let events = model.week
+            .filter { $0.dayNumber >= model.todayDayNumber }
+            .flatMap(\.events)
+            .filter { $0.amount > 0 }
+        guard !events.isEmpty else {
+            return "7월 \(model.todayDayNumber)일 기준 이번 주에 남은 확정 일정은 없어요. 출근과 회의는 비용이 들지 않아요."
+        }
+        let names = events.map(\.title).joined(separator: "·")
+        let total = events.reduce(0) { $0 + $1.amount }
+        return "7월 \(model.todayDayNumber)일 기준 이번 주 남은 확정 일정은 ‘\(names)’ \(formatWon(total))이에요. 출근과 회의는 비용이 들지 않아요."
+    }
+
     // MARK: 로컬 스크립트 에이전트 (백엔드가 없을 때)
 
     private func agentReply(to text: String) -> ChatMessage {
@@ -463,7 +477,7 @@ struct ChatbotView: View {
             return ChatMessage(
                 role: .agent,
                 conclusion: "이번 주에는 약 \(formatWon(roundedWeeklyBudget))을 더 써도 돼요.",
-                reason: "7월 22일 기준 이번 주 남은 확정 일정은 ‘와드’ 40,000원뿐이에요. 출근과 회의는 비용이 들지 않아요.",
+                reason: remainingWeekReason,
                 impact: "이번 주 일정비 \(rangeText(low: model.plannedSpendLow, high: model.plannedSpendHigh)) 예상",
                 basis: "월수입 \(formatWon(model.monthlyIncome)) · 저축 \(formatWon(model.savingsGoal)) · 확인된 일정 금액 기준"
             )

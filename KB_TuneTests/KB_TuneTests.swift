@@ -8,20 +8,45 @@
 import Testing
 @testable import KB_Tune
 
+/// 오늘 날짜가 실시간이라(DemoClock) 날짜에 기댄 기대값은 기준일을 고정해야 한다.
+/// 전역 상태를 건드리므로 직렬 실행한다.
+@Suite(.serialized)
 struct KB_TuneTests {
 
+    /// 기준일 7/22로 고정한 뒤 본문을 실행하고 원래대로 되돌린다.
+    private func onJuly22<T>(_ body: () throws -> T) rethrows -> T {
+        DemoClock.fixedToday = 22
+        defer { DemoClock.fixedToday = nil }
+        return try body()
+    }
+
     @Test func budgetUsesCalendarPersona() {
-        // 07-22 확인값: 고정비 435,000(통신7.5+교통15+유류6+구독3+청약10+보험2) · 일정비 761,000 · 와드 40,000
-        #expect(BudgetEngine.fixed == 435_000)
-        #expect(BudgetEngine.remainingBudget() == 204_000)
-        #expect(BudgetEngine.weeklyAvailable(.maintain) == 62_000)
-        #expect(BudgetEngine.weeklyAvailable(.reduce) == 47_720)
-        #expect(BudgetEngine.weeklyAvailable(.increase) == 80_360)
-        #expect(BudgetEngine.probability(.maintain) == 81)
+        onJuly22 {
+            // 07-22 확인값: 고정비 435,000(통신7.5+교통15+유류6+구독3+청약10+보험2) · 일정비 761,000 · 와드 40,000
+            #expect(BudgetEngine.fixed == 435_000)
+            #expect(BudgetEngine.variableSpentToDate == 761_000)
+            #expect(BudgetEngine.committedThisWeek == 40_000)
+            // 965,000 − 일정비 761,000 − 할부 이월 90,590
+            #expect(BudgetEngine.remainingBudget() == 113_410)
+            #expect(BudgetEngine.weeklyAvailable(.maintain) == 16_705)
+            #expect(BudgetEngine.weeklyAvailable(.maintain) < BudgetEngine.weeklyAvailable(.increase))
+            #expect(BudgetEngine.weeklyAvailable(.reduce) < BudgetEngine.weeklyAvailable(.maintain))
+        }
+    }
+
+    /// 할부는 다음 달 카드값으로 이미 예약된 돈이라 이번 달 예산에서 빠진다.
+    @Test func installmentCarryoverReducesBudget() {
+        onJuly22 {
+            let carryover = BudgetEngine.installmentCarryover
+            #expect(carryover == 90_590)
+            // 이월분이 없다면 그만큼 더 쓸 수 있었다
+            #expect(BudgetEngine.disposableMonth() - BudgetEngine.variableSpentToDate
+                    - carryover == BudgetEngine.remainingBudget())
+        }
     }
 
     @Test func julyCalendarTotalsAreConfirmedValues() {
-        let model = AppModel()
+        let model = onJuly22 { AppModel() }
 
         #expect(model.calendarDays.count == 31)
         #expect(model.todayDayNumber == 22)
@@ -80,32 +105,101 @@ struct KB_TuneTests {
     }
 
     @Test func upcomingSpendsCoverCalendarGaps() {
-        let model = AppModel()
-        let keys = model.upcomingSpends.map(\.pattern.key)
+        onJuly22 {
+            let model = AppModel()
+            let keys = model.upcomingSpends.map(\.pattern.key)
 
-        // 캘린더에 없지만 주기가 이번 주에 돌아오는 지출
-        #expect(keys.contains("쿠팡 장보기"))
-        #expect(keys.contains("주말 데이트"))
-        // 이번 주 캘린더에 이미 있는 '와드'는 중복 제안하지 않는다
-        #expect(!keys.contains("와드"))
+            // 캘린더에 없지만 주기가 이번 주에 돌아오는 지출
+            #expect(keys.contains("쿠팡 장보기"))
+            #expect(keys.contains("주말 데이트"))
+            // 이번 주 캘린더에 이미 있는 '와드'는 중복 제안하지 않는다
+            #expect(!keys.contains("와드"))
 
-        // 예측은 확정이 아니므로 기본 예산을 건드리지 않는다
-        #expect(model.weeklyBudget == 62_000)
-        #expect(model.weeklyBudgetAfterPredictions < model.weeklyBudget)
+            // 예측은 확정이 아니므로 기본 예산을 건드리지 않는다
+            #expect(model.weeklyBudget == 16_705)
+            #expect(model.weeklyBudgetAfterPredictions < model.weeklyBudget)
+        }
     }
 
     @Test func acceptingPredictionMovesMoneyOutOfBudget() {
-        let model = AppModel()
-        let before = model.weeklyBudget
-        let spend = try! #require(model.upcomingSpends.first { $0.pattern.key == "쿠팡 장보기" })
+        let model = onJuly22 { AppModel() }
+        let spend = onJuly22 { try! #require(model.upcomingSpends.first { $0.pattern.key == "쿠팡 장보기" }) }
 
-        model.acceptPrediction(spend)
-
-        #expect(model.weeklyBudget == before - spend.amount)
+        onJuly22 {
+            let before = model.weeklyBudget
+            model.acceptPrediction(spend)
+            #expect(model.weeklyBudget == max(0, before - spend.amount))
+        }
         #expect(!model.upcomingSpends.contains { $0.pattern.key == "쿠팡 장보기" })
         let added = model.day(number: spend.expectedDay)?.events.first { $0.title == "쿠팡 장보기" }
         #expect(added?.isPredicted == true)      // 예측 금액이라 '예상'으로 표시된다
         #expect(added?.amount == 35_000)
+    }
+
+    // MARK: 신용카드 청구 사이클
+
+    /// 카드사 앱 화면(26.06.27~26.07.26 · 14건 · 633,220원)과 숫자가 맞아야 한다.
+    @Test func billingSummaryMatchesCardStatement() {
+        let b = BillingCycle.summary(today: 26)
+
+        #expect(b.usage == 633_220)
+        #expect(b.count == 14)                 // '기타 3건'은 1건이 아니라 3건으로 센다
+        #expect(b.periodLabel == "6/27~7/26")
+        #expect(b.payLabel == "8월 14일")
+    }
+
+    /// 이용금액과 실제 청구액은 다르다 — 할부가 다음 결제일로 밀리기 때문이다.
+    @Test func installmentSplitsAcrossTwoPayDates() {
+        let b = BillingCycle.summary(today: 26)
+
+        // 인터넷상거래 181,180원 무이자 2개월 → 90,590 × 2
+        #expect(b.carryover == 90_590)
+        #expect(b.deferred == 90_590)
+        #expect(b.dueNext == 542_630)
+        #expect(b.dueNext + b.carryover == b.usage)   // 새는 돈 없이 두 결제일로 나뉜다
+    }
+
+    /// 나누어떨어지지 않는 할부는 나머지를 1회차에 붙여 총액이 보존돼야 한다.
+    @Test func installmentRoundingKeepsTotal() {
+        let tx = CardTransaction(day: 1, merchant: "테스트", amount: 100_000, installmentMonths: 3)
+        let rounds = (1...3).map { tx.installmentAmount(round: $0) }
+
+        #expect(rounds.reduce(0, +) == 100_000)
+        #expect(rounds[0] == 33_334)   // 33,333 + 나머지 1
+        #expect(rounds[1] == 33_333)
+    }
+
+    /// 이용기간 마감일을 넘겨 쓰면 이번 결제일이 아니라 다음 결제일로 넘어간다.
+    @Test func spendingAfterClosingDayMovesToNextCycle() {
+        let due = BillingCycle.summary(today: 26).dueNext
+
+        #expect(BillingCycle.projectedDue(adding: 50_000, on: 26, today: 26) == due + 50_000)
+        #expect(BillingCycle.projectedDue(adding: 50_000, on: 27, today: 26) == due)
+    }
+
+    // MARK: 실시간 날짜
+
+    /// 주 범위는 월요일에 시작해 7월 밖으로 넘어가지 않는다.
+    @Test func weekRangeStartsOnMondayAndStaysInJuly() {
+        #expect(DemoClock.weekRange(containing: 22) == 20...26)   // 7/22 수 → 20(월)~26(일)
+        #expect(DemoClock.weekRange(containing: 26) == 20...26)   // 7/26 일 → 같은 주
+        #expect(DemoClock.weekRange(containing: 27) == 27...31)   // 다음 주는 월말에서 잘린다
+        #expect(DemoClock.weekRange(containing: 1) == 1...5)      // 7/1 수 → 앞쪽도 잘린다
+    }
+
+    /// 2026년 7월 1일은 수요일 — 요일 계산의 기준점이 맞아야 캘린더가 어긋나지 않는다.
+    @Test func weekdayMatchesJuly2026() {
+        #expect(DemoClock.weekday(of: 1) == "수")
+        #expect(DemoClock.weekday(of: 22) == "수")
+        #expect(DemoClock.weekday(of: 26) == "일")
+        #expect(DemoClock.fullLabel(of: 26) == "2026년 7월 26일 일요일")
+    }
+
+    /// 캘린더의 '오늘' 표시는 하나뿐이고 실제 날짜를 따라간다.
+    @Test func calendarMarksTodayFromClock() {
+        let days = onJuly22 { AppModel.makeJulyCalendar() }
+        #expect(days.filter(\.isToday).count == 1)
+        #expect(days.first(where: \.isToday)?.dayNumber == 22)
     }
 
     @Test func confirmedAmountsAreNotLabelledAsEstimates() {
