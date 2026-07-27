@@ -145,12 +145,12 @@ struct WeeklyPlanView: View {
 
     private var planToolbar: some View {
         HStack(spacing: 10) {
-            Text("7월 \(viewedDay)일 \(weekdayName(viewedDay))요일")
+            Text("\(DemoClock.dayLabel(of: viewedDay)) \(weekdayName(viewedDay))요일")
                 .font(.kb(18, .bold))
                 .foregroundStyle(KB.ink)
                 .accessibilityLabel(viewedDay == model.todayDayNumber
-                                    ? "오늘 7월 \(viewedDay)일 \(weekdayName(viewedDay))요일"
-                                    : "7월 \(viewedDay)일 \(weekdayName(viewedDay))요일")
+                                    ? "오늘 \(DemoClock.dayLabel(of: viewedDay)) \(weekdayName(viewedDay))요일"
+                                    : "\(DemoClock.dayLabel(of: viewedDay)) \(weekdayName(viewedDay))요일")
 
             Spacer(minLength: 4)
 
@@ -361,11 +361,11 @@ struct WeeklyPlanView: View {
 
                 VStack(spacing: 7) {
                     ledgerRow("한 주 배분", next.baseAllowance, note: nil)
-                    ledgerRow(next.rollover >= 0 ? "7월에서 넘어옴" : "7월에 미리 쓴 몫",
+                    ledgerRow(next.rollover >= 0 ? "\(thisMonth)월에서 넘어옴" : "\(thisMonth)월에 미리 쓴 몫",
                               next.rollover,
                               note: next.rollover >= 0
                                     ? "이번 주를 아낄수록 이 금액이 커져요"
-                                    : "7월에 넘겨 쓴 만큼 8월 첫 주에서 빠져요",
+                                    : "\(thisMonth)월에 넘겨 쓴 만큼 \(thisMonth + 1)월 첫 주에서 빠져요",
                               tint: next.rollover >= 0 ? KB.green : KB.caution)
                     Divider().overlay(KB.line)
                     HStack {
@@ -464,6 +464,9 @@ struct WeeklyPlanView: View {
             .padding(.top, 4)
         }
     }
+
+    /// 오늘이 든 달 — 이월 문구가 달 이름을 말할 때 쓴다.
+    private var thisMonth: Int { DemoClock.month(of: model.todayDayNumber) }
 
     private var heroStatusText: String {
         guard model.weeklyBudget == 0 else { return "이번 주에 추가로 쓸 수 있어요" }
@@ -737,7 +740,7 @@ struct WeeklyPlanView: View {
 
     private func canMoveToNextWeek(_ item: WeekSpendItem) -> Bool {
         item.amount > 0 && !item.isProtected && item.dayNumber >= model.todayDayNumber
-            && item.dayNumber + 7 <= model.daysInMonth
+            && item.dayNumber + 7 <= DemoClock.lastDay
     }
 
     /// 캘린더엔 없지만 과거 주기상 이번 주에 나갈 것 같은 지출.
@@ -898,18 +901,25 @@ struct WeeklyPlanView: View {
 
     private var monthContent: some View {
         VStack(alignment: .leading, spacing: 18) {
-            // 헤더
-            VStack(alignment: .leading, spacing: 4) {
-                Text(model.monthLabel)
-                    .font(.kb(24, .bold)).foregroundStyle(KB.ink)
-                Text("캘린더 일정으로 계산한 예상 금액이에요")
-                    .font(.kb(13)).foregroundStyle(KB.muted)
+            // 헤더 — 달을 오갈 수 있다. 8월은 이번 달에 아낀 만큼을 이월받아 시작한다.
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(model.monthLabel)
+                            .font(.kb(24, .bold)).foregroundStyle(KB.ink)
+                        Text("캘린더 일정으로 계산한 예상 금액이에요")
+                            .font(.kb(13)).foregroundStyle(KB.muted)
+                    }
+                    Spacer()
+                    monthStepper
+                }
             }
 
             // 요약 — 캘린더 바로 위
             VStack(spacing: 0) {
-                summaryLine("7월 예상 지출",
-                            formatRange(low: model.julyEstimateLow, high: model.julyEstimateHigh),
+                summaryLine("\(model.viewingMonth)월 예상 지출",
+                            formatRange(low: model.viewingMonthEstimateLow,
+                                        high: model.viewingMonthEstimateHigh),
                             highlight: true)
                 Divider().overlay(KB.line)
                 summaryLine("이번 주 예상 지출",
@@ -968,10 +978,33 @@ struct WeeklyPlanView: View {
         .transition(.opacity)
     }
 
-    /// 7월 날짜 → 요일 (7/1 = 수)
-    private func weekdayName(_ d: Int) -> String {
-        let names = ["월", "화", "수", "목", "금", "토", "일"]
-        return names[(model.firstWeekdayOffset + d - 1) % 7]
+    private func weekdayName(_ d: Int) -> String { DemoClock.weekday(of: d) }
+
+    /// 달 넘기기. 데모 캘린더가 담고 있는 달(7·8월) 안에서만 움직인다.
+    private var monthStepper: some View {
+        HStack(spacing: 4) {
+            ForEach(DemoClock.months, id: \.self) { m in
+                let on = model.viewingMonth == m
+                Button {
+                    withAnimation(.snappy(duration: 0.25)) {
+                        model.viewingMonth = m
+                        selectedMonthDay = nil
+                    }
+                } label: {
+                    Text("\(m)월")
+                        .font(.kb(13, on ? .semibold : .regular))
+                        .foregroundStyle(KB.ink)
+                        .padding(.horizontal, 12).padding(.vertical, 7)
+                        .background {
+                            if on { Capsule().fill(KB.yellow) }
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("month-\(m)")
+            }
+        }
+        .padding(3)
+        .background(Capsule().fill(KB.line.opacity(0.35)))
     }
 
     private var monthGrid: some View {
@@ -984,9 +1017,13 @@ struct WeeklyPlanView: View {
             }
             let columns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 7)
             LazyVGrid(columns: columns, spacing: 6) {
-                // 7/1 = 수요일 → 월·화 빈칸
-                ForEach(0..<model.firstWeekdayOffset, id: \.self) { _ in Color.clear.frame(height: 44) }
-                ForEach(1...model.daysInMonth, id: \.self) { d in
+                // 그 달 1일이 월요일에서 밀린 만큼 앞을 비운다.
+                // 식별자를 음수로 두는 이유는 아래 날짜 칸(1일부터)과 겹치지 않게 하려는 것이다 —
+                // 겹치면 SwiftUI가 둘 중 하나를 버려서 1일이 사라진다.
+                ForEach(-model.firstWeekdayOffset ..< 0, id: \.self) { _ in
+                    Color.clear.frame(height: 44)
+                }
+                ForEach(Array(model.viewingMonthRange), id: \.self) { d in
                     monthDayCell(d)
                 }
             }
@@ -1004,7 +1041,7 @@ struct WeeklyPlanView: View {
             withAnimation(.snappy(duration: 0.25)) { selectedMonthDay = d }
         } label: {
             VStack(spacing: 2) {
-                Text("\(d)")
+                Text("\(DemoClock.dayOfMonth(of: d))")
                     .font(.kb(13.5, isToday ? .bold : .regular))
                     .foregroundStyle(KB.ink)
                     .frame(width: 30, height: 30)

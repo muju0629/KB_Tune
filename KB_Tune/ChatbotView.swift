@@ -665,11 +665,11 @@ struct ChatbotView: View {
             .flatMap(\.events)
             .filter { $0.amount > 0 }
         guard !events.isEmpty else {
-            return "7월 \(model.todayDayNumber)일 기준 이번 주에 남은 확정 일정은 없어요. 출근과 회의는 비용이 들지 않아요."
+            return "\(DemoClock.dayLabel(of: model.todayDayNumber)) 기준 이번 주에 남은 확정 일정은 없어요. 출근과 회의는 비용이 들지 않아요."
         }
         let names = events.map(\.title).joined(separator: "·")
         let total = events.reduce(0) { $0 + $1.amount }
-        return "7월 \(model.todayDayNumber)일 기준 이번 주 남은 확정 일정은 ‘\(names)’ \(formatWon(total))이에요. 출근과 회의는 비용이 들지 않아요."
+        return "\(DemoClock.dayLabel(of: model.todayDayNumber)) 기준 이번 주 남은 확정 일정은 ‘\(names)’ \(formatWon(total))이에요. 출근과 회의는 비용이 들지 않아요."
     }
 
     // MARK: 로컬 스크립트 에이전트 (백엔드가 없을 때)
@@ -707,7 +707,7 @@ struct ChatbotView: View {
     private var upcomingTotal: Int { upcomingEvents.reduce(0) { $0 + $1.amount } }
 
     private var upcomingSummary: String {
-        upcomingEvents.map { "7/\($0.day) \($0.title) \(formatWon($0.amount))" }
+        upcomingEvents.map { "\(DemoClock.shortLabel(of: $0.day)) \($0.title) \(formatWon($0.amount))" }
             .joined(separator: " · ")
     }
 
@@ -752,7 +752,7 @@ struct ChatbotView: View {
                 conclusion: "‘\(candidate.event.title)’을 다음 주로 옮기는 게 가장 자연스러워요.",
                 reason: "지켜두기로 한 소비는 건드리지 않고, 날짜를 바꿀 수 있는 일정부터 골랐어요.",
                 impact: "옮기면 이번 주 추가 사용 가능액이 \(formatWon(candidate.event.amount)) 늘어요",
-                basis: "7월 \(candidate.day)일 일정 · 현재 금액 \(formatWon(candidate.event.amount))",
+                basis: "\(DemoClock.dayLabel(of: candidate.day)) 일정 · 현재 금액 \(formatWon(candidate.event.amount))",
                 actions: .moveEvent(day: candidate.day, eventID: candidate.event.id,
                                     title: candidate.event.title, amount: candidate.event.amount)
             )

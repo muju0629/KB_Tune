@@ -72,11 +72,6 @@ enum OCRService {
                 .joined(separator: "  ")
         }.joined(separator: "\n")
     }
-
-    /// 여러 장을 순서대로 인식해 하나의 텍스트로.
-    nonisolated static func recognizeAll(_ images: [UIImage]) -> String {
-        images.map { recognize($0) }.joined(separator: "\n")
-    }
 }
 
 // MARK: - 로컬 파서 (백엔드 없을 때 폴백 · 백엔드와 동일 규칙)

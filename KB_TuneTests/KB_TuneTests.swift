@@ -112,7 +112,10 @@ struct KB_TuneTests {
     @Test func julyCalendarTotalsAreConfirmedValues() {
         let model = onJuly22 { AppModel() }
 
-        #expect(model.calendarDays.count == 31)
+        // 캘린더는 7·8월 두 달을 담는다(통산 62일). 7월만 세면 31일.
+        #expect(model.calendarDays.count == 62)
+        #expect(model.days(of: 7).count == 31)
+        #expect(model.days(of: 8).count == 31)
         #expect(model.todayDayNumber == 22)
         // 금액이 모두 확정돼 low == high — 범위가 사라진다.
         // 881,000 = 기존 확인값 801,000 + 데모 일정(7/30 피자 52,000 · 7/31 킥오프 28,000)
@@ -374,7 +377,7 @@ struct KB_TuneTests {
 
     /// 캘린더의 '오늘' 표시는 하나뿐이고 실제 날짜를 따라간다.
     @Test func calendarMarksTodayFromClock() {
-        let days = onJuly22 { AppModel.makeJulyCalendar() }
+        let days = onJuly22 { AppModel.makeCalendar() }
         #expect(days.filter(\.isToday).count == 1)
         #expect(days.first(where: \.isToday)?.dayNumber == 22)
     }

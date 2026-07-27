@@ -90,11 +90,12 @@ final class CalendarStore: ObservableObject {
 
     // MARK: 쓰기 — 앱에서 잡은 일정을 기기 캘린더에 남긴다
 
+    /// `day`는 7월 1일을 1로 세는 통산일이라, 실제 달력으로 되돌려서 쓴다.
     private func date(day: Int, hour: Double) -> Date? {
         var comps = DateComponents()
         comps.year = DemoClock.demoYear
-        comps.month = DemoClock.demoMonth
-        comps.day = day
+        comps.month = DemoClock.month(of: day)
+        comps.day = DemoClock.dayOfMonth(of: day)
         comps.hour = Int(hour)
         comps.minute = Int((hour - Double(Int(hour))) * 60)
         return Calendar(identifier: .gregorian).date(from: comps)
@@ -179,11 +180,19 @@ final class CalendarStore: ObservableObject {
                     symbol: "calendar",
                     dayLabel: formatter.string(from: ek.startDate),
                     fromDeviceCalendar: true,
-                    dayOfMonth: Calendar.current.component(.day, from: ek.startDate)
+                    dayOfMonth: Self.serialDay(of: ek.startDate)
                 )
             }
         _ = dayOfMonth
         didFetch = true
+    }
+
+    /// 기기 캘린더의 실제 날짜를 앱이 쓰는 통산일로 옮긴다. 데모 기간 밖이면 0.
+    static func serialDay(of date: Date) -> Int {
+        let c = Calendar(identifier: .gregorian).dateComponents([.year, .month, .day], from: date)
+        guard c.year == DemoClock.demoYear, let m = c.month, let d = c.day,
+              DemoClock.months.contains(m) else { return 0 }
+        return DemoClock.serial(month: m, day: d)
     }
 
     /// 이번 주(오늘 기준) 기기 캘린더 일정 로드

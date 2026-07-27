@@ -274,21 +274,28 @@ final class AppModel: ObservableObject {
         monthlyIncome - BudgetEngine.fixed - savingsGoal - BudgetEngine.installmentCarryover
     }
 
-    /// 지난달에서 넘어온 금액. 데모는 7월부터 시작해 0이지만,
-    /// 8월 계획을 볼 때는 7월 마지막 주 잔액이 여기로 들어온다.
+    /// 데모 첫 달(7월) 이전에서 넘어온 금액. 8월 장부의 시작값은 여기가 아니라
+    /// 7월 마지막 주 잔액에서 온다 — 아낀 만큼이 다음 달로 넘어가는 게 이 앱의 약속이다.
     @Published var openingRollover = 0
 
-    var weekBudgets: [WeekBudget] {
+    func weekBudgets(of month: Int) -> [WeekBudget] {
         var spendByWeek: [Int: Int] = [:]
-        for (i, range) in WeekLedger.weekRanges().enumerated() {
+        for (i, range) in WeekLedger.weekRanges(month: month).enumerated() {
             spendByWeek[i] = calendarDays
                 .filter { range.contains($0.dayNumber) }
                 .reduce(0) { $0 + $1.spendTotal }
         }
+        let carriedIn = month == DemoClock.firstMonth
+            ? openingRollover
+            : WeekLedger.closingRollover(weekBudgets(of: month - 1))
         return WeekLedger.build(disposable: monthlyDisposable,
                                 spendByWeek: spendByWeek,
-                                openingRollover: openingRollover)
+                                openingRollover: carriedIn,
+                                month: month)
     }
+
+    /// 오늘이 든 달의 장부
+    var weekBudgets: [WeekBudget] { weekBudgets(of: DemoClock.month(of: todayDayNumber)) }
 
     var thisWeekBudget: WeekBudget? {
         weekBudgets.first { $0.days.contains(todayDayNumber) }
@@ -300,12 +307,16 @@ final class AppModel: ObservableObject {
     /// 다음 달 첫 주가 어떻게 시작되는지.
     /// 고정비·적금은 그대로 두고, 이번 달에 남긴 금액만 얹어서 보여준다.
     var nextMonthFirstWeek: WeekBudget {
-        WeekLedger.nextMonthOpening(
+        let next = DemoClock.month(of: todayDayNumber) + 1
+        if DemoClock.months.contains(next), let first = weekBudgets(of: next).first {
+            return first
+        }
+        return WeekLedger.nextMonthOpening(
             disposable: monthlyIncome - BudgetEngine.fixed - savingsGoal,
             carriedIn: closingRollover)
     }
 
-    var nextMonthLabel: String { "\(DemoClock.demoMonth + 1)월" }
+    var nextMonthLabel: String { "\(DemoClock.month(of: todayDayNumber) + 1)월" }
 
     /// 지금 여력으로 매달 넣을 수 있는 적금액. 남은 예산에서 다음 달 할부까지 뺀 뒤
     /// 만원 단위로 내림한다 — 딱 맞게 잡으면 한 번만 흔들려도 못 넣게 된다.
@@ -333,20 +344,24 @@ final class AppModel: ObservableObject {
 
     // MARK: 7월 캘린더 일정
 
-    @Published var calendarDays: [PlanDay] = AppModel.makeJulyCalendar()
+    @Published var calendarDays: [PlanDay] = AppModel.makeCalendar()
     var currentWeekRange: ClosedRange<Int> { DemoClock.weekRange(containing: todayDayNumber) }
     var week: [PlanDay] { calendarDays.filter { currentWeekRange.contains($0.dayNumber) } }
 
-    /// 월요일 시작, 7월과 겹치는 주 단위 날짜 창. 각 주는 7칸(월~일)이고 7월 밖은 nil.
+    /// 월요일 시작, 그 달과 겹치는 주 단위 날짜 창. 각 주는 7칸(월~일)이고 달 밖은 nil.
     /// 주간 날짜 스트립을 가로로 넘겨(3주차·4주차…) 보기 위한 창.
-    var julyWeeks: [[Int?]] {
-        var slots: [Int?] = Array(repeating: nil, count: firstWeekdayOffset)  // 월·화 빈칸
-        slots += (1...daysInMonth).map { Optional($0) }
+    func monthWeeks(of month: Int) -> [[Int?]] {
+        let bounds = DemoClock.range(of: month)
+        var slots: [Int?] = Array(repeating: nil, count: DemoClock.firstWeekdayOffset(of: month))
+        slots += bounds.map { Optional($0) }
         while slots.count % 7 != 0 { slots.append(nil) }
         return stride(from: 0, to: slots.count, by: 7).map { Array(slots[$0..<$0 + 7]) }
     }
 
-    /// 오늘이 포함된 주의 인덱스 (0-based). "7월 N주차"의 N은 이 인덱스 + 1.
+    /// 오늘이 든 달의 주 격자
+    var julyWeeks: [[Int?]] { monthWeeks(of: DemoClock.month(of: todayDayNumber)) }
+
+    /// 오늘이 포함된 주의 인덱스 (0-based). "N주차"의 N은 이 인덱스 + 1.
     var currentWeekIndex: Int {
         julyWeeks.firstIndex { $0.contains(todayDayNumber) } ?? 0
     }
@@ -518,7 +533,7 @@ final class AppModel: ObservableObject {
     /// 지켜두기로 한 소비와, 옮기면 이번 달을 넘어가는 일정은 제외한다.
     var movableEventThisWeek: (day: Int, event: DayEvent)? {
         for day in week.sorted(by: { $0.dayNumber < $1.dayNumber })
-            where day.dayNumber >= todayDayNumber && day.dayNumber + 7 <= daysInMonth {
+            where day.dayNumber >= todayDayNumber && day.dayNumber + 7 <= DemoClock.lastDay {
             if let event = day.events.first(where: { $0.amount > 0 && !$0.isProtected }) {
                 return (day.dayNumber, event)
             }
@@ -560,7 +575,7 @@ final class AppModel: ObservableObject {
         moved.riskNote = nil
         moved.riskDetail = nil
 
-        let target = min(dayNumber + 7, daysInMonth)
+        let target = min(dayNumber + 7, DemoClock.lastDay)
         if let k = calendarDays.firstIndex(where: { $0.dayNumber == target }) {
             calendarDays[k].events.append(moved)
             calendarDays[k].events.sort { $0.startHour < $1.startHour }
@@ -607,15 +622,26 @@ final class AppModel: ObservableObject {
         }
     }
 
-    // MARK: 월간 (2026년 7월)
+    // MARK: 월간
 
-    let monthLabel = "2026년 7월"
-    let daysInMonth = DemoClock.daysInMonth
-    let firstWeekdayOffset = 2        // 7/1 = 수요일 (월요일 시작 기준 빈칸 2)
+    /// 월간 화면에서 보고 있는 달. 기본은 오늘이 든 달.
+    @Published var viewingMonth = DemoClock.month(of: DemoClock.today)
+
+    var monthLabel: String { DemoClock.monthLabel(of: viewingMonth) }
+    var viewingMonthRange: ClosedRange<Int> { DemoClock.range(of: viewingMonth) }
+    var firstWeekdayOffset: Int { DemoClock.firstWeekdayOffset(of: viewingMonth) }
     /// 앱을 켤 때 실제 날짜에서 읽는다. 세션 중엔 고정(달이 넘어가도 화면이 흔들리지 않게).
     let todayDayNumber = DemoClock.today
-    var julyEstimateLow: Int { calendarDays.reduce(0) { $0 + $1.spendLow } }
-    var julyEstimateHigh: Int { calendarDays.reduce(0) { $0 + $1.spendHigh } }
+
+    /// 그 달의 일정만 — 합계는 달마다 따로 세야 한다.
+    func days(of month: Int) -> [PlanDay] {
+        let bounds = DemoClock.range(of: month)
+        return calendarDays.filter { bounds.contains($0.dayNumber) }
+    }
+    var julyEstimateLow: Int { days(of: DemoClock.firstMonth).reduce(0) { $0 + $1.spendLow } }
+    var julyEstimateHigh: Int { days(of: DemoClock.firstMonth).reduce(0) { $0 + $1.spendHigh } }
+    var viewingMonthEstimateLow: Int { days(of: viewingMonth).reduce(0) { $0 + $1.spendLow } }
+    var viewingMonthEstimateHigh: Int { days(of: viewingMonth).reduce(0) { $0 + $1.spendHigh } }
     var monthEndRemainingLow: Int {
         max(0, monthlyIncome - BudgetEngine.fixed - savingsGoal - julyEstimateHigh)
     }
@@ -638,7 +664,7 @@ final class AppModel: ObservableObject {
 
     // MARK: 캘린더 원본을 앱 데모 데이터로 변환
 
-    static func makeJulyCalendar() -> [PlanDay] {
+    static func makeCalendar() -> [PlanDay] {
         var events: [Int: [DayEvent]] = [:]
 
         func add(_ day: Int, _ title: String, symbol: String,
@@ -760,10 +786,12 @@ final class AppModel: ObservableObject {
             amount: 28_000, low: 28_000, high: 28_000, basis: "사용자가 확인한 금액",
             category: "외식", purpose: "모임", state: .reserved)
 
+        // 8월은 비워 둔 채로 만든다 — 없는 일정을 지어내지 않는다.
+        // 일정을 옮기거나 새로 넣으면 그때 채워지고, 주차 예산은 7월 잔액을 이월받는다.
         let today = DemoClock.today
-        return (1...DemoClock.daysInMonth).map { day in
+        return (1...DemoClock.lastDay).map { day in
             PlanDay(weekday: DemoClock.weekday(of: day),
-                    dateLabel: "7/\(day)", dayNumber: day,
+                    dateLabel: DemoClock.shortLabel(of: day), dayNumber: day,
                     isToday: day == today,
                     events: events[day, default: []].sorted { $0.startHour < $1.startHour })
         }

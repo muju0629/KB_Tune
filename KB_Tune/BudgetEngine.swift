@@ -18,7 +18,6 @@ enum BudgetEngine {
     static let fixed = 435_000                  // 통신 7.5 + 교통 15 + 유류 6 + 구독 3 + 청약 10 + 보험 2 (확인값)
     static let savingsGoal = 800_000            // 미확인 — 데모 가정
     static let candidateAmount = 0              // 미확정 일정은 기본 계산에서 제외
-    static let daysInMonth = DemoClock.daysInMonth
     static let discretionaryDaily = 7_500.0     // 일정 밖 소액지출 데모 가정
     static let sigma = 100_000.0                // 추정 오차를 넉넉히 반영
 
@@ -30,13 +29,17 @@ enum BudgetEngine {
     // "지웠는데 왜 안 줄지?"가 된다. 그래서 AppModel 이 자기 calendarDays 에서 뽑아 넘긴다.
     //
     // 시드 기준 값은 호출부가 값을 안 넘겼을 때의 기본값으로만 남긴다.
-    private static let seed = AppModel.makeJulyCalendar()
+    private static let seed = AppModel.makeCalendar()
+
+    /// 오늘이 든 달의 범위. 예산은 달 단위라 8월 일정이 7월 계산에 섞이면 안 된다.
+    static var thisMonth: ClosedRange<Int> { DemoClock.range(of: DemoClock.month(of: today)) }
 
     /// 오늘 이전에 이미 쓴 일정비 (기본값 — 보통은 AppModel 이 실제 값을 넘긴다)
     static var variableSpentToDate: Int { spentToDate(in: seed) }
 
     static func spentToDate(in days: [PlanDay]) -> Int {
-        days.filter { $0.dayNumber < today }.reduce(0) { $0 + $1.spendTotal }
+        days.filter { thisMonth.contains($0.dayNumber) && $0.dayNumber < today }
+            .reduce(0) { $0 + $1.spendTotal }
     }
     /// 이번 주에 아직 남아 있는 확정 일정
     static func committedThisWeek(in days: [PlanDay]) -> Int {
@@ -46,7 +49,8 @@ enum BudgetEngine {
     }
     /// 오늘부터 월말까지 남은 확정 일정
     static func committedFuture(in days: [PlanDay]) -> Int {
-        days.filter { $0.dayNumber >= today }.reduce(0) { $0 + $1.spendTotal }
+        days.filter { thisMonth.contains($0.dayNumber) && $0.dayNumber >= today }
+            .reduce(0) { $0 + $1.spendTotal }
     }
 
     /// 다음 달로 넘어가는 할부 잔액 (기획 보고서 7.3 '카드 결제예정액').
@@ -77,7 +81,7 @@ enum BudgetEngine {
             - (spentToDate ?? variableSpentToDate) - installmentCarryover
     }
 
-    static var remainingWeeks: Int { max(1, Int(ceil(Double(daysInMonth - today + 1) / 7.0))) }
+    static var remainingWeeks: Int { max(1, Int(ceil(Double(thisMonth.upperBound - today + 1) / 7.0))) }
 
     /// 이번 주 사용 가능액 = 주예산 × 방향계수 − 이번 주 확정지출
     /// - extraCommitted: 아직 캘린더에 넣지 않은 후보 일정(영향 미리보기용).
@@ -101,7 +105,7 @@ enum BudgetEngine {
                             extraCommitted: Int = 0,
                             income: Int = income,
                             savingsGoal: Int = savingsGoal) -> Int {
-        let daysLeft = Double(daysInMonth - today + 1)
+        let daysLeft = Double(thisMonth.upperBound - today + 1)
         let discretionary = discretionaryDaily * daysLeft * discretionaryFactor(d)
         let committed = Double((committedFuture ?? Self.committedFuture(in: seed)) + extraCommitted)
         let mu = committed + discretionary

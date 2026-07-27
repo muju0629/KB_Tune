@@ -21,13 +21,14 @@ import Foundation
 
 struct WeekBudget: Identifiable {
     let index: Int                 // 0-based. 화면의 "N주차"는 index + 1
+    var month: Int = DemoClock.firstMonth
     let days: ClosedRange<Int>     // 이 달에서 이 주가 걸치는 날짜
     let baseAllowance: Int         // 이 달에 쓸 수 있는 돈 ÷ 주 수
     let rollover: Int              // 지난주에서 넘어온 금액(음수면 넘겨 쓴 것)
     let plannedSpend: Int          // 이 주에 잡힌 일정비
 
     var id: Int { index }
-    var label: String { "\(DemoClock.demoMonth)월 \(index + 1)주차" }
+    var label: String { "\(month)월 \(index + 1)주차" }
 
     /// 이번 주에 실제로 배분된 금액
     var allowance: Int { baseAllowance + rollover }
@@ -41,10 +42,12 @@ struct WeekBudget: Identifiable {
 enum WeekLedger {
 
     /// 한 달을 월요일 시작 주 단위로 쪼갠다. 달의 첫날·마지막 날이 낀 주는 잘린 채로 둔다.
-    static func weekRanges(daysInMonth: Int = DemoClock.daysInMonth) -> [ClosedRange<Int>] {
+    /// 날짜는 통산일이라 8월도 같은 방식으로 나뉜다.
+    static func weekRanges(month: Int = DemoClock.firstMonth) -> [ClosedRange<Int>] {
+        let bounds = DemoClock.range(of: month)
         var ranges: [ClosedRange<Int>] = []
-        var day = 1
-        while day <= daysInMonth {
+        var day = bounds.lowerBound
+        while day <= bounds.upperBound {
             let range = DemoClock.weekRange(containing: day)
             ranges.append(range)
             day = range.upperBound + 1
@@ -59,8 +62,8 @@ enum WeekLedger {
     static func build(disposable: Int,
                       spendByWeek: [Int: Int],
                       openingRollover: Int = 0,
-                      daysInMonth: Int = DemoClock.daysInMonth) -> [WeekBudget] {
-        let ranges = weekRanges(daysInMonth: daysInMonth)
+                      month: Int = DemoClock.firstMonth) -> [WeekBudget] {
+        let ranges = weekRanges(month: month)
         guard !ranges.isEmpty else { return [] }
 
         let base = disposable / ranges.count
@@ -68,7 +71,7 @@ enum WeekLedger {
         var result: [WeekBudget] = []
 
         for (i, range) in ranges.enumerated() {
-            let week = WeekBudget(index: i, days: range, baseAllowance: base,
+            let week = WeekBudget(index: i, month: month, days: range, baseAllowance: base,
                                   rollover: carried, plannedSpend: spendByWeek[i] ?? 0)
             result.append(week)
             carried = week.carriesForward
@@ -89,7 +92,7 @@ enum WeekLedger {
     static func nextMonthOpening(disposable: Int,
                                  carriedIn: Int,
                                  weeksInNextMonth: Int = 5) -> WeekBudget {
-        WeekBudget(index: 0, days: 1...7,
+        WeekBudget(index: 0, month: DemoClock.months.last ?? DemoClock.firstMonth, days: 1...7,
                    baseAllowance: disposable / max(1, weeksInNextMonth),
                    rollover: carriedIn,
                    plannedSpend: 0)

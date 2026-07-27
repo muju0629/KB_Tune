@@ -99,7 +99,8 @@ struct AnalysisView: View {
                         ForEach(store.shots) { shot in thumbnail(shot) }
                     }
                 }
-                Text("저장된 캡처 \(store.shots.count)장").font(.kb(11.5)).foregroundStyle(KB.muted)
+                Text("저장된 캡처 \(store.shots.count)장 · 최근 \(ImageStore.maxShots)장까지 보관")
+                    .font(.kb(11.5)).foregroundStyle(KB.muted)
             }
         }
     }
@@ -241,11 +242,28 @@ struct AnalysisView: View {
     }
 
     /// 온디바이스 Vision OCR → 백엔드 구조화(실패 시 로컬 파서)
+    ///
+    /// 한 번 읽은 캡처는 결과를 캐시해 두고 다시 읽지 않는다. 예전에는 누를 때마다
+    /// 저장된 전체를 다시 OCR해서, 캡처가 쌓일수록 느려지고 서버로 보내는 글자 수도 함께 늘었다.
     private func runExtraction() {
         isExtracting = true
-        let images = store.shots.map(\.image)
+        let shots = store.shots
         Task {
-            let text = await Task.detached { OCRService.recognizeAll(images) }.value
+            var texts: [String] = []
+            for shot in shots {
+                if let cached = store.cachedText(for: shot.id) {
+                    texts.append(cached)
+                    continue
+                }
+                let image = shot.image
+                let text = await Task.detached { OCRService.recognize(image) }.value
+                store.cacheText(text, for: shot.id)
+                texts.append(text)
+            }
+            // 서버는 20,000자를 넘으면 요청 전체를 거절한다. 보관 상한(20장) 덕에 닿을 일은
+            // 거의 없지만, 글자가 유난히 많은 캡처가 섞였을 때를 대비해 최근 것 위주로 자른다.
+            let text = String(texts.joined(separator: "\n").suffix(19_000))
+
             var result = await agent.extract(text: text)
             if result == nil { result = LocalExtractor.parse(text) }   // 백엔드 없어도 동작
             withAnimation(.snappy(duration: 0.25)) {

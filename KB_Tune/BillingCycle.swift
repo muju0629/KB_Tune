@@ -113,7 +113,7 @@ enum BillingCycle {
             installments: transactions.filter(\.isInstallment),
             daysUntilClose: max(0, closingDay - today),
             // 결제일은 다음 달 14일 — 7월(31일)이 끝나고 14일 더.
-            daysUntilPay: (DemoClock.daysInMonth - today) + payDay,
+            daysUntilPay: (DemoClock.lastDayOfMonth(containing: DemoClock.today) - today) + payDay,
             periodLabel: "6/\(closingDay + 1)~7/\(closingDay)",
             closeLabel: "7월 \(closingDay)일",
             payLabel: "8월 \(payDay)일",

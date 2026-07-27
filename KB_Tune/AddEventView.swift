@@ -37,22 +37,25 @@ struct AddEventView: View {
 
     private let spring = Animation.spring(response: 0.38, dampingFraction: 0.86)
 
-    // 7월(오늘~월말) 범위 안에서만 고르게 한다 — 데모 캘린더가 2026년 7월이라서.
+    // 오늘부터 데모 캘린더 마지막 날(8월 말)까지 고르게 한다.
     private static let cal = Calendar(identifier: .gregorian)
-    private static var defaultDate: Date {
-        // 기본값은 오늘 저녁 — 월말을 넘지 않게 자른다.
-        let day = min(DemoClock.today, DemoClock.daysInMonth)
-        return cal.date(from: DateComponents(year: DemoClock.demoYear, month: DemoClock.demoMonth,
-                                             day: day, hour: 19, minute: 0))!
+
+    /// 통산일을 실제 달력 날짜로 — 날짜 선택기는 진짜 Date 를 다뤄야 해서.
+    private static func date(_ day: Int, hour: Int, minute: Int) -> Date {
+        cal.date(from: DateComponents(year: DemoClock.demoYear,
+                                      month: DemoClock.month(of: day),
+                                      day: DemoClock.dayOfMonth(of: day),
+                                      hour: hour, minute: minute))!
     }
+    private static var defaultDate: Date { date(DemoClock.today, hour: 19, minute: 0) }
     private static var dateRange: ClosedRange<Date> {
-        let lower = cal.date(from: DateComponents(year: DemoClock.demoYear, month: DemoClock.demoMonth,
-                                                 day: DemoClock.today, hour: 0, minute: 0))!
-        let upper = cal.date(from: DateComponents(year: DemoClock.demoYear, month: DemoClock.demoMonth,
-                                                 day: DemoClock.daysInMonth, hour: 23, minute: 59))!
-        return lower...upper
+        date(DemoClock.today, hour: 0, minute: 0)...date(DemoClock.lastDay, hour: 23, minute: 59)
     }
-    private var dayNumber: Int { Self.cal.component(.day, from: date) }
+    /// 고른 날짜를 다시 통산일로 되돌린다.
+    private var dayNumber: Int {
+        DemoClock.serial(month: Self.cal.component(.month, from: date),
+                         day: Self.cal.component(.day, from: date))
+    }
     private var startHour: Double {
         Double(Self.cal.component(.hour, from: date)) + Double(Self.cal.component(.minute, from: date)) / 60
     }
@@ -309,7 +312,7 @@ struct AddEventView: View {
                     }
                 }
                 Text(title).font(.kb(17, .bold)).foregroundStyle(KB.ink)
-                Text("7월 \(dayNumber)일").font(.kb(12.5)).foregroundStyle(KB.muted)
+                Text(DemoClock.dayLabel(of: dayNumber)).font(.kb(12.5)).foregroundStyle(KB.muted)
 
                 HStack {
                     Text(formatWon(amount))
@@ -453,7 +456,7 @@ struct AddEventView: View {
             Spacer(minLength: 40)
             Image(systemName: "checkmark.circle.fill").font(.system(size: 54)).foregroundStyle(KB.green)
             Text("일정을 추가했어요").font(.kb(20, .bold)).foregroundStyle(KB.ink)
-            Text("7월 \(dayNumber)일 ‘\(title)’ \(formatWon(amount))을 반영했어요.\n이번 주에는 \(formatWon(model.weeklyBudget))까지 쓸 수 있어요.")
+            Text("\(DemoClock.dayLabel(of: dayNumber)) ‘\(title)’ \(formatWon(amount))을 반영했어요.\n이번 주에는 \(formatWon(model.weeklyBudget))까지 쓸 수 있어요.")
                 .font(.kb(13.5)).foregroundStyle(KB.muted)
                 .multilineTextAlignment(.center).lineSpacing(3)
             Spacer()
