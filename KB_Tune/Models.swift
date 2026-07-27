@@ -246,6 +246,9 @@ final class AppModel: ObservableObject {
     /// 이용기간 마감일에 쓴 돈은 다음 결제일에, 하루만 넘겨 쓰면 그 다음 결제일에 청구된다.
     var isBillingCloseDay: Bool { todayDayNumber == BillingCycle.closingDay }
 
+    /// 챗봇에서 적금을 물어보고 상품 화면으로 넘어왔는지. 넘어간 화면이 소비하고 되돌린다.
+    @Published var wantsSavings = false
+
     var referenceDateLabel: String { DemoClock.fullLabel(of: todayDayNumber) }
     let analysisPeriod = "2026년 7월 캘린더"
 

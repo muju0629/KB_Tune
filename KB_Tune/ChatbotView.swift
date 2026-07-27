@@ -255,6 +255,7 @@ struct ChatbotView: View {
         case .openProducts:
             HStack(spacing: 8) {
                 smallAction("적금 보러 가기", filled: true) {
+                    model.wantsSavings = true    // 넘어간 화면이 적금 쪽을 열어둔다
                     withAnimation(.easeInOut(duration: 0.3)) { model.selectedTab = .products }
                 }
                 smallAction("나중에", filled: false) { flash("필요할 때 다시 물어봐 주세요.") }
@@ -295,23 +296,30 @@ struct ChatbotView: View {
 
     // MARK: 추천 질문 칩
 
+    /// 아직 물어보지 않은 질문만 최대 2개. 대화가 진행될수록 다음 단계가 앞으로 나온다.
+    private var remainingSuggestions: [String] {
+        let asked = Set(messages.filter { $0.role == .user }.map(\.conclusion))
+        return suggestions.filter { !asked.contains($0) }.prefix(2).map { $0 }
+    }
+
+    /// 가로 스크롤을 쓰지 않는다 — 페이지형 탭 안에서 가로 스와이프는 탭 전환에 먹혀,
+    /// 칩을 넘기려던 손짓이 화면을 바꿔버린다. 줄바꿈으로 감싸면 그 충돌 자체가 없다.
     private var chips: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(suggestions, id: \.self) { q in
-                    Button { send(q) } label: {
-                        Text(q).font(.system(size: 13)).foregroundStyle(KB.ink)
-                            .padding(.horizontal, 14).padding(.vertical, 9)
-                            .background(.white, in: Capsule())
-                            .overlay(Capsule().stroke(KB.line, lineWidth: 1))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isThinking)
+        FlowLayout(spacing: 8) {
+            ForEach(remainingSuggestions, id: \.self) { q in
+                Button { send(q) } label: {
+                    Text(q).font(.system(size: 13)).foregroundStyle(KB.ink)
+                        .padding(.horizontal, 14).padding(.vertical, 9)
+                        .background(.white, in: Capsule())
+                        .overlay(Capsule().stroke(KB.line, lineWidth: 1))
                 }
+                .buttonStyle(.plain)
+                .disabled(isThinking)
             }
-            .padding(.horizontal, 18)
         }
+        .padding(.horizontal, 18)
         .padding(.vertical, 10)
+        .animation(.snappy(duration: 0.25), value: remainingSuggestions)
     }
 
     // MARK: 입력창
@@ -538,14 +546,20 @@ struct ChatbotView: View {
             )
         }
 
-        // ⑤ 적금 — 지금 여력으로 넣을 수 있는 금액을 말하고 상품 탭으로 넘긴다.
+        // ⑤ 적금 — 여력이 없으면 없다고 말한다. 금융 앱이 무리한 저축을 권하면 안 된다.
         if q.contains("적금") || q.contains("통장") || q.contains("저축") && q.contains("만들") {
+            let remaining = BudgetEngine.remainingBudget(income: model.monthlyIncome,
+                                                         savingsGoal: model.savingsGoal)
+            let roomy = model.probability >= AppModel.atRiskProbability && remaining > b.carryover
             return ChatMessage(
                 role: .agent,
-                conclusion: "지금 계획이면 적금을 하나 더 만들 여지가 있어요.",
-                reason: "이번 달 남은 예산이 \(formatWon(BudgetEngine.remainingBudget(income: model.monthlyIncome, savingsGoal: model.savingsGoal)))이고, 목표 확률은 \(model.probability)%예요.",
-                impact: "\(b.nextPayLabel)에 카드 할부 \(formatWon(b.carryover))이 빠지는 것까지 고려해서 금액을 정하는 게 좋아요",
-                basis: "월수입 \(formatWon(model.monthlyIncome)) · 저축 목표 \(formatWon(model.savingsGoal))",
+                conclusion: roomy
+                    ? "지금 계획이면 적금을 하나 더 만들 여지가 있어요."
+                    : "지금 새로 시작하기엔 빠듯해요. 상품을 미리 봐두고, 시작 시점만 뒤로 잡는 걸 추천해요.",
+                reason: "이번 달 남은 예산이 \(formatWon(remaining))이고 목표 확률은 \(model.probability)%예요."
+                    + (roomy ? "" : " 이미 넣고 있는 \(formatWon(model.savingsGoal))부터 지키는 게 먼저예요."),
+                impact: "\(b.nextPayLabel)에 카드 할부 \(formatWon(b.carryover))이 빠지니, 그게 끝난 뒤가 여유로워요",
+                basis: "월수입 \(formatWon(model.monthlyIncome)) · 저축 목표 \(formatWon(model.savingsGoal)) · 카드 할부 잔여 \(formatWon(b.carryover))",
                 actions: .openProducts
             )
         }

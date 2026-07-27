@@ -199,6 +199,41 @@ struct SecondaryButtonStyle: ButtonStyle {
 
 // MARK: - 공용 소형 컴포넌트
 
+/// 폭이 모자라면 다음 줄로 넘기는 가로 배치.
+/// 페이지형 탭 안에서는 가로 ScrollView가 탭 전환 제스처와 부딪히므로,
+/// 넘길 게 있으면 스크롤 대신 줄을 바꾼다.
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var x: CGFloat = 0, y: CGFloat = 0, lineHeight: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > maxWidth {
+                x = 0; y += lineHeight + spacing; lineHeight = 0
+            }
+            x += size.width + spacing
+            lineHeight = max(lineHeight, size.height)
+        }
+        return CGSize(width: maxWidth, height: y + lineHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize,
+                       subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX, y = bounds.minY, lineHeight: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x > bounds.minX, x + size.width > bounds.maxX {
+                x = bounds.minX; y += lineHeight + spacing; lineHeight = 0
+            }
+            view.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            lineHeight = max(lineHeight, size.height)
+        }
+    }
+}
+
 /// 아이콘 원형 배경 (이벤트 노드 · 상품 행)
 struct IconBadge: View {
     let systemName: String

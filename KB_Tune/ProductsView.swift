@@ -59,6 +59,14 @@ struct ProductsHome: View {
         .background(KB.canvas)
         .navigationTitle("내 소비에 맞는 금융상품")
         .navigationBarTitleDisplayMode(.inline)
+        // 적금을 물어보고 넘어왔으면 적금 쪽이 열려 있어야 한다.
+        // 카드 화면을 먼저 보여주고 다시 누르게 하면 대화의 맥락이 끊긴다.
+        .onChange(of: model.wantsSavings) { _, wants in
+            if wants {
+                withAnimation(.snappy(duration: 0.25)) { segment = 1 }
+                model.wantsSavings = false
+            }
+        }
     }
 
     private var segmentToggle: some View {
