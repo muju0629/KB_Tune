@@ -8,6 +8,7 @@ LLM_BACKEND 로 언어 생성 방식을 고른다. 기본은 'offline' — 유�
 """
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
@@ -22,17 +23,60 @@ if _extra_env and Path(_extra_env).expanduser().is_file():
 # 기본값 offline → 아무 설정 없이 실행하면 유료 API를 절대 부르지 않음.
 LLM_BACKEND = os.getenv("LLM_BACKEND", "offline").lower()
 
+
+def _checked_llm_url(raw: str, var: str) -> str:
+    """LLM 엔드포인트는 https 또는 루프백만 허용한다.
+
+    이 통로로 가처분소득·카드 청구액·일정 제목이 나간다. 환경변수 오설정 하나로
+    평문 http나 엉뚱한 호스트로 흐르면 그대로 유출이라, 뜰 때 막는다(fail-closed).
+    LAN에 둔 로컬 모델 서버를 http로 쓰려면 KB_TUNE_ALLOW_INSECURE_LLM_URL=1.
+    """
+    if os.getenv("KB_TUNE_ALLOW_INSECURE_LLM_URL", "").lower() in ("1", "true", "yes"):
+        return raw
+    if raw.startswith("https://") or (urlparse(raw).hostname or "") in ("localhost", "127.0.0.1", "::1"):
+        return raw
+    raise ValueError(
+        f"{var} 는 https 여야 합니다(현재: {raw}). 루프백이 아닌 평문 http로는 재무 데이터를 "
+        "보내지 않습니다. 로컬 네트워크의 모델 서버를 쓰려면 KB_TUNE_ALLOW_INSECURE_LLM_URL=1."
+    )
+
+
 # --- 로컬 모델(OpenAI 호환 서버) ---
 # Ollama: http://localhost:11434/v1 · Bonsai(llama-server): http://localhost:8080/v1
-LOCAL_LLM_BASE_URL = os.getenv("LOCAL_LLM_BASE_URL", "http://localhost:11434/v1")
+LOCAL_LLM_BASE_URL = _checked_llm_url(
+    os.getenv("LOCAL_LLM_BASE_URL", "http://localhost:11434/v1"), "LOCAL_LLM_BASE_URL")
 LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL", "qwen2.5:3b")
 
 # --- Claude(유료, 선택) ---
 CLAUDE_MODEL = os.getenv("KB_TUNE_MODEL", "claude-opus-5")
 
 # --- OpenAI(선택) ---
-OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+OPENAI_BASE_URL = _checked_llm_url(
+    os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"), "OPENAI_BASE_URL")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.4")
+
+
+# --- 보안 ---
+# 요청 인증 키. 비워두면 무인증으로 동작한다(설정 없이 바로 실행 가능해야 하므로).
+# 공개된 곳에 배포할 때는 반드시 채운다.
+def api_auth_key() -> str | None:
+    return os.getenv("KB_TUNE_API_KEY") or None
+
+
+# 브라우저에서 부를 일이 없으면 비워둔다(네이티브 앱은 CORS 영향을 받지 않음).
+ALLOWED_ORIGINS = [o.strip() for o in os.getenv("KB_TUNE_ALLOWED_ORIGINS", "").split(",") if o.strip()]
+
+# 본문 상한. 기본 2MB — base64 이미지 한 장이 들어갈 만큼만.
+MAX_BODY_BYTES = int(os.getenv("KB_TUNE_MAX_BODY_BYTES", "2000000"))
+
+# 프록시(Render 등) 뒤일 때만 켠다. 켜면 X-Forwarded-For 를 클라이언트 IP로 믿는다.
+TRUST_PROXY = os.getenv("KB_TUNE_TRUST_PROXY", "").lower() in ("1", "true", "yes")
+
+# 속도 제한(분당). LLM 쪽은 비용이 걸려 있어 따로 잡는다.
+RATE_LLM = int(os.getenv("KB_TUNE_RATE_LLM", "20"))              # 클라이언트당 / 60초
+RATE_LLM_GLOBAL = int(os.getenv("KB_TUNE_RATE_LLM_GLOBAL", "200"))  # 전체 합 / 60초
+RATE_EVAL = int(os.getenv("KB_TUNE_RATE_EVAL", "3"))             # 클라이언트당 / 300초
+RATE_CHEAP = int(os.getenv("KB_TUNE_RATE_CHEAP", "120"))         # 클라이언트당 / 60초
 
 
 def api_key() -> str | None:

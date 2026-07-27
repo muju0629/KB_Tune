@@ -1,18 +1,24 @@
 """요청/응답 스키마. 엔진 출력(결정론적 숫자)과 LLM 출력(언어)을 명확히 분리한다."""
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Annotated, Literal, Optional
 
 from pydantic import BaseModel, Field
 
 Direction = Literal["reduce", "maintain", "increase"]
 
+# 외부에서 들어오는 값의 상한. 없으면 프롬프트·메모리·API 비용이 요청자 마음대로 커진다.
+# 사람이 실제로 쓸 수 있는 범위보다 넉넉하되, 무한하지는 않게 잡는다.
+Won = Annotated[int, Field(ge=0, le=100_000_000)]
+ShortText = Annotated[str, Field(max_length=40)]
+Day = Annotated[int, Field(ge=1, le=31)]
+
 
 # ---------- 입력 ----------
 
 class FixedCost(BaseModel):
-    name: str
-    amount: int
+    name: ShortText
+    amount: Won
 
 
 class Transaction(BaseModel):
@@ -39,14 +45,17 @@ class PlannedEvent(BaseModel):
 
 
 class Profile(BaseModel):
-    name: str = "성제"
-    role: str = "대학생 · 인포스탁 인턴"
-    age: int | None = None
-    monthly_income: int = 2_200_000
-    savings_goal: int = 800_000
-    fixed_costs: list[FixedCost] = Field(default_factory=list)
+    """예산 계산에 실제로 쓰이는 값만 받는다.
+
+    이름·나이는 엔진도 프롬프트도 쓰지 않아서 아예 필드를 두지 않았다.
+    안 쓰는 개인정보는 받지 않는 게 가장 확실한 보호다(추가로 보내와도 무시된다).
+    """
+    role: Annotated[str, Field(max_length=60)] = "대학생 · 인포스탁 인턴"
+    monthly_income: Won = 2_200_000
+    savings_goal: Won = 800_000
+    fixed_costs: Annotated[list[FixedCost], Field(max_length=30)] = Field(default_factory=list)
     direction: Direction = "maintain"
-    protected_categories: list[str] = Field(default_factory=list)
+    protected_categories: Annotated[list[ShortText], Field(max_length=30)] = Field(default_factory=list)
 
 
 class CardBilling(BaseModel):
@@ -67,10 +76,14 @@ class CardBilling(BaseModel):
 
 class UpcomingEvent(BaseModel):
     """오늘 이후로 잡혀 있는 지출 일정."""
-    day: int
-    title: str
-    amount: int
-    category: str = "기타"
+    # title 은 사용자가 캘린더에 직접 쓴 자유 문자열이다.
+    # 프롬프트에 들어가기 전 security.safe_text 로 한 번 더 무해화한다.
+    # 기본값이 빈 문자열인 건 앱이 동의 없이는 제목을 보내지 않기 때문이다 —
+    # 제목이 없으면 유형과 금액만으로 답을 만든다.
+    day: Day
+    title: Annotated[str, Field(max_length=80)] = ""
+    amount: Won
+    category: ShortText = "기타"
 
 
 class AppNumbers(BaseModel):
@@ -91,10 +104,10 @@ class AppNumbers(BaseModel):
 class PlanRequest(BaseModel):
     """미지정 시 데모 페르소나 사용. 일부 필드만 덮어쓸 수 있음."""
     profile: Optional[Profile] = None
-    today: int = 22  # 2026년 7월 캘린더 기준일
+    today: Day = 22  # 2026년 7월 캘린더 기준일
     include_candidate: bool = False  # 위험 후보 일정을 계획에 반영할지
     card: Optional[CardBilling] = None
-    upcoming: list[UpcomingEvent] = Field(default_factory=list)
+    upcoming: Annotated[list[UpcomingEvent], Field(max_length=200)] = Field(default_factory=list)
     app_numbers: Optional[AppNumbers] = None
 
 
@@ -103,7 +116,7 @@ class CoachRequest(PlanRequest):
 
 
 class ChatRequest(PlanRequest):
-    message: str
+    message: Annotated[str, Field(min_length=1, max_length=2_000)]
 
 
 # ---------- 엔진 출력(결정론적) ----------
@@ -188,8 +201,8 @@ class EvalResult(BaseModel):
 # ---------- AI 기능 1: 일정 → 예상 지출 추정 ----------
 
 class EstimateRequest(BaseModel):
-    title: str
-    day: int | None = None
+    title: Annotated[str, Field(min_length=1, max_length=80)]
+    day: Day | None = None
 
 
 class EstimateResult(BaseModel):
@@ -207,8 +220,10 @@ class EstimateResult(BaseModel):
 # ---------- AI 기능 2: 캡처 이미지 → 거래 추출 ----------
 
 class ExtractRequest(BaseModel):
-    text: str | None = None          # iOS Vision(온디바이스 OCR) 결과
-    image_base64: str | None = None  # 이미지 직접 전달(LLM 비전, 키 필요)
+    # 상한은 본문 크기 제한(config.MAX_BODY_BYTES)의 2차 방어선이다.
+    # Content-Length 없이 오는 chunked 요청은 미들웨어가 못 막으므로 여기서 잘린다.
+    text: Annotated[str, Field(max_length=20_000)] | None = None          # iOS Vision(온디바이스 OCR) 결과
+    image_base64: Annotated[str, Field(max_length=1_400_000)] | None = None  # 이미지 직접 전달(LLM 비전, 키 필요)
 
 
 class ExtractedTransaction(BaseModel):
@@ -228,7 +243,8 @@ class ExtractResult(BaseModel):
 # ---------- AI 기능 3: 거래 → 카테고리 자동 분류 ----------
 
 class CategorizeRequest(BaseModel):
-    merchants: list[str]
+    # 개수 상한이 없으면 한 번의 요청으로 LLM 프롬프트를 무한정 키울 수 있다.
+    merchants: Annotated[list[ShortText], Field(max_length=100)]
 
 
 class CategoryGuess(BaseModel):

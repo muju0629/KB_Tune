@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- 서버 주소와 인증 키는 소스에 박지 않고 빌드 설정에서 주입한다.
+	     값을 안 주면 빈 문자열이 되고, 앱은 로컬 개발 서버(http://localhost:8000)로 떨어진다.
+	     주입 방법: xcodebuild ... KB_TUNE_API_BASE_URL=https://... KB_TUNE_API_KEY=...
+	     또는 저장소에 안 올리는 xcconfig 파일에 두 값을 적는다. -->
+	<key>KBTuneAPIBaseURL</key>
+	<string>$(KB_TUNE_API_BASE_URL)</string>
+	<key>KBTuneAPIKey</key>
+	<string>$(KB_TUNE_API_KEY)</string>
+</dict>
+</plist>

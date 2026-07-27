@@ -7,9 +7,7 @@
 from .models import FixedCost, PlannedEvent, Profile, Transaction
 
 PROFILE = Profile(
-    name="성제",
     role="대학생 · 인포스탁 인턴",
-    age=None,
     monthly_income=2_200_000,       # 근무 일정 기준 데모 가정값(설정에서 수정 가능)
     savings_goal=800_000,
     fixed_costs=[                   # 07-22 본인 확인값, 합계 435,000

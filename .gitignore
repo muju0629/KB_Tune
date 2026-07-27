@@ -14,3 +14,6 @@ __pycache__/
 *.pyc
 .venv/
 .env
+
+# 로컬 빌드 설정(배포 주소·API 키). 저장소에 올리지 않는다.
+Config/Local.xcconfig
