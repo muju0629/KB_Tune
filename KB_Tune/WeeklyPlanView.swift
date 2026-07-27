@@ -24,6 +24,15 @@ struct WeeklyPlanView: View {
     @State private var toast: String?
     @State private var showBillingDetail = false
 
+    /// 수정 중인 일정. 어느 날의 어떤 일정인지 함께 들고 있어야 모델을 고칠 수 있다.
+    struct EditTarget: Identifiable {
+        let event: DayEvent
+        let day: Int
+        var id: UUID { event.id }
+    }
+    @State private var editing: EditTarget?
+    @StateObject private var calendar = CalendarStore()
+
     private let switchSpring = Animation.spring(response: 0.38, dampingFraction: 0.86)
     private let scrollTopID = "planScrollTop"
 
@@ -110,6 +119,14 @@ struct WeeklyPlanView: View {
         .sheet(isPresented: $showBillingDetail) {
             BillingDetailSheet().environmentObject(model)
                 .presentationDetents([.medium, .large])
+        }
+        .sheet(item: $editing) { target in
+            EventEditSheet(event: target.event, dayNumber: target.day, calendar: calendar) { message in
+                // 하루 화면을 보고 있었다면 값 복사본이라 다시 읽어야 갱신된다.
+                if selectedDay != nil { selectedDay = model.day(number: target.day) }
+                flash(message)
+            }
+            .environmentObject(model)
         }
     }
 
@@ -484,6 +501,22 @@ struct WeeklyPlanView: View {
                         }
                     } label: { timelineItemRow(item) }
                     .buttonStyle(.plain)
+                    // 길게 눌러 바로 고치거나 지운다 — 하루 화면까지 들어가지 않아도 되게.
+                    .contextMenu {
+                        Button {
+                            if let ev = model.day(number: item.dayNumber)?
+                                .events.first(where: { $0.title == item.title }) {
+                                editing = EditTarget(event: ev, day: item.dayNumber)
+                            }
+                        } label: { Label("시간·금액 수정", systemImage: "pencil") }
+
+                        Button(role: .destructive) {
+                            if let ev = model.day(number: item.dayNumber)?
+                                .events.first(where: { $0.title == item.title }) {
+                                editing = EditTarget(event: ev, day: item.dayNumber)
+                            }
+                        } label: { Label("삭제", systemImage: "trash") }
+                    }
                     .accessibilityLabel("\(item.dayLabel), \(item.title), \(estimateLabel(low: item.amountLow, high: item.amountHigh, estimated: item.isEstimated))")
                     .accessibilityValue(item.isRisky ? "예산 조정 필요" : item.isProtected ? "더 필요한 소비로 남겨둔 일정" : "예정 지출")
                     .accessibilityHint("두 번 탭하여 하루 일정을 봅니다")
@@ -845,18 +878,15 @@ struct WeeklyPlanView: View {
                 VStack(spacing: 8) {
                     calculationRow("월 고정비", formatWon(BudgetEngine.fixed))
                     calculationRow("적금 목표", formatWon(model.savingsGoal))
-                    calculationRow("7월 \(model.todayDayNumber - 1)일까지 일정비", formatWon(BudgetEngine.variableSpentToDate))
+                    calculationRow("7월 \(model.todayDayNumber - 1)일까지 일정비", formatWon(model.spentToDate))
                     if BudgetEngine.installmentCarryover > 0 {
                         calculationRow("할부로 다음 달에 넘어갈 돈", formatWon(BudgetEngine.installmentCarryover))
                     }
-                    calculationRow("이번 주 남은 확정 일정", formatWon(BudgetEngine.committedThisWeek))
-                    if model.userAddedThisWeek > 0 {
-                        calculationRow("앱에서 추가한 일정", formatWon(model.userAddedThisWeek))
-                    }
+                    calculationRow("이번 주 남은 확정 일정", formatWon(model.committedThisWeek))
                     Divider().overlay(KB.line)
                     calculationRow("추가 사용 가능액", formatWon(model.weeklyBudget), emphasized: true)
                 }
-                Text("\(formatWon(BudgetEngine.remainingBudget(income: model.monthlyIncome, savingsGoal: model.savingsGoal))) ÷ 남은 \(BudgetEngine.remainingWeeks)주 − 확정 일정 \(formatWon(BudgetEngine.committedThisWeek + model.userAddedThisWeek))")
+                Text("\(formatWon(model.remainingBudget)) ÷ 남은 \(BudgetEngine.remainingWeeks)주 − 확정 일정 \(formatWon(model.committedThisWeek))")
                     .font(.system(size: 11.5))
                     .foregroundStyle(KB.muted)
                 Button { showSuccess = false } label: { Text("확인") }

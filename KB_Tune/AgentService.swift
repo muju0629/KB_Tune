@@ -136,10 +136,10 @@ final class AgentService: ObservableObject {
         let appNumbers: [String: Any] = [
             "weekly_available": model.weeklyBudget,
             "probability": model.probability,
-            "remaining_budget": BudgetEngine.remainingBudget(income: model.monthlyIncome,
-                                                             savingsGoal: model.savingsGoal),
-            "spent_to_date": BudgetEngine.variableSpentToDate,
+            "remaining_budget": model.remainingBudget,
+            "spent_to_date": model.spentToDate,
             "installment_carryover": BudgetEngine.installmentCarryover,
+            "month_end_remaining": model.monthEndRemainingLow,
         ]
 
         let body: [String: Any] = [

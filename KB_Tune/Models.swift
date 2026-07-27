@@ -80,6 +80,10 @@ struct DayEvent: Identifiable {
     var category: String = "기타"    // 결제 업종(무엇에 썼는지) — 식사·카페·쇼핑·교통 등
     var purpose: String? = nil      // 생활 목적(왜 썼는지) — 데이트·가족·모임·업무·공부 등
     var state: SpendState = .confirmed
+    /// 기기 캘린더에 쓴 이벤트의 식별자. 앱이 직접 쓴 일정만 값이 있고,
+    /// 지울 때 이 값이 있는 경우에만 기기 캘린더에서도 지운다 —
+    /// 사용자가 캘린더 앱에서 만든 일정을 앱이 함부로 지우면 안 되기 때문이다.
+    var calendarEventID: String? = nil
 
     var amountLow: Int { estimateLow ?? amount }
     var amountHigh: Int { estimateHigh ?? amount }
@@ -214,25 +218,43 @@ final class AppModel: ObservableObject {
         }
     }
 
-    // 앱에서 새로 추가한 일정의 예상액 합계.
-    // 시드 캘린더의 확정 일정은 BudgetEngine 상수(committedThisWeek 등)에 이미 반영돼 있어,
-    // 여기 합산분만 extraCommitted 로 얹으면 사용 가능액·확률이 이중계산 없이 갱신된다.
-    @Published private(set) var userAddedThisWeek = 0   // 오늘~이번 주(26일)
-    @Published private(set) var userAddedTotal = 0      // 오늘~월말
+    // 예산 계산의 입력은 전부 지금 화면의 캘린더에서 나온다.
+    // 그래야 일정을 추가하든 지우든 시간을 바꾸든 금액이 곧바로 따라 움직인다.
+    var spentToDate: Int { BudgetEngine.spentToDate(in: calendarDays) }
+    var committedThisWeek: Int { BudgetEngine.committedThisWeek(in: calendarDays) }
+    var committedFuture: Int { BudgetEngine.committedFuture(in: calendarDays) }
 
     var weeklyBudget: Int { weeklyBudget(for: direction) }
     var probability: Int { probability(for: direction) }
-    func weeklyBudget(for direction: SpendDirection) -> Int {
+
+    /// - extraCommitted: 아직 캘린더에 넣지 않은 후보 일정(추가 화면의 영향 미리보기용).
+    func weeklyBudget(for direction: SpendDirection, extraCommitted: Int = 0) -> Int {
         BudgetEngine.weeklyAvailable(direction,
-                                     extraCommitted: userAddedThisWeek,
+                                     spentToDate: spentToDate,
+                                     committedThisWeek: committedThisWeek,
+                                     extraCommitted: extraCommitted,
                                      income: monthlyIncome,
                                      savingsGoal: savingsGoal)
     }
-    func probability(for direction: SpendDirection) -> Int {
+    func probability(for direction: SpendDirection, extraCommitted: Int = 0) -> Int {
         BudgetEngine.probability(direction,
-                                 extraCommitted: userAddedTotal,
+                                 spentToDate: spentToDate,
+                                 committedFuture: committedFuture,
+                                 extraCommitted: extraCommitted,
                                  income: monthlyIncome,
                                  savingsGoal: savingsGoal)
+    }
+
+    var remainingBudget: Int {
+        BudgetEngine.remainingBudget(income: monthlyIncome, savingsGoal: savingsGoal,
+                                     spentToDate: spentToDate)
+    }
+
+    /// 지금 여력으로 매달 넣을 수 있는 적금액. 남은 예산에서 다음 달 할부까지 뺀 뒤
+    /// 만원 단위로 내림한다 — 딱 맞게 잡으면 한 번만 흔들려도 못 넣게 된다.
+    var suggestedSavingsAmount: Int {
+        let room = remainingBudget - BudgetEngine.installmentCarryover
+        return max(0, (room / 2 / 10_000) * 10_000)
     }
 
     /// KB Pay 이용내역 연결 여부(온보딩에서 동의). 데모라 실제 계정에 접속하지는 않는다.
@@ -393,11 +415,42 @@ final class AppModel: ObservableObject {
                              category: category, purpose: purpose, state: state)
         calendarDays[i].events.append(event)
         calendarDays[i].events.sort { $0.startHour < $1.startHour }
+        // 예산 계산은 calendarDays 에서 파생되므로 따로 합산해 둘 필요가 없다.
+    }
 
-        if day >= todayDayNumber {
-            userAddedTotal += amount
-            if currentWeekRange.contains(day) { userAddedThisWeek += amount }
-        }
+    /// 일정을 지운다. 예산 계산은 캘린더에서 파생되므로 금액은 곧바로 따라 바뀐다.
+    /// - Returns: 기기 캘린더에서도 지워야 할 이벤트 식별자(앱이 쓴 일정일 때만).
+    @discardableResult
+    func deleteEvent(_ event: DayEvent, on dayNumber: Int) -> String? {
+        guard let i = calendarDays.firstIndex(where: { $0.dayNumber == dayNumber }),
+              let j = calendarDays[i].events.firstIndex(where: { $0.id == event.id }) else { return nil }
+        let removed = calendarDays[i].events.remove(at: j)
+        return removed.calendarEventID
+    }
+
+    /// 시작 시각을 옮긴다. 하루 안에서만 움직이므로 금액 합계는 그대로지만,
+    /// 다른 일정과의 순서·겹침이 바뀌므로 정렬은 다시 한다.
+    func updateEventTime(_ event: DayEvent, on dayNumber: Int, startHour: Double) {
+        guard let i = calendarDays.firstIndex(where: { $0.dayNumber == dayNumber }),
+              let j = calendarDays[i].events.firstIndex(where: { $0.id == event.id }) else { return }
+        calendarDays[i].events[j].startHour = max(0, min(startHour, 23.5))
+        calendarDays[i].events.sort { $0.startHour < $1.startHour }
+    }
+
+    /// 금액을 고친다 — 예상액을 실제에 맞출 때.
+    func updateEventAmount(_ event: DayEvent, on dayNumber: Int, amount: Int) {
+        guard let i = calendarDays.firstIndex(where: { $0.dayNumber == dayNumber }),
+              let j = calendarDays[i].events.firstIndex(where: { $0.id == event.id }) else { return }
+        calendarDays[i].events[j].amount = max(0, amount)
+        calendarDays[i].events[j].estimateLow = max(0, amount)
+        calendarDays[i].events[j].estimateHigh = max(0, amount)
+    }
+
+    /// 기기 캘린더에 쓴 뒤 돌려받은 식별자를 일정에 붙여둔다 — 나중에 지울 때 필요하다.
+    func attachCalendarID(_ id: String, to event: DayEvent, on dayNumber: Int) {
+        guard let i = calendarDays.firstIndex(where: { $0.dayNumber == dayNumber }),
+              let j = calendarDays[i].events.firstIndex(where: { $0.id == event.id }) else { return }
+        calendarDays[i].events[j].calendarEventID = id
     }
 
     /// 위험 일정을 7일 뒤로 옮기고 경고를 지운다. 이번 주 부담에서 빠져 사용 가능액이 회복된다.
@@ -412,9 +465,6 @@ final class AppModel: ObservableObject {
         if let k = calendarDays.firstIndex(where: { $0.dayNumber == target }) {
             calendarDays[k].events.append(moved)
             calendarDays[k].events.sort { $0.startHour < $1.startHour }
-        }
-        if currentWeekRange.contains(dayNumber), !currentWeekRange.contains(target) {
-            userAddedThisWeek = max(0, userAddedThisWeek - moved.amount)
         }
     }
 

@@ -22,15 +22,62 @@ struct KB_TuneTests {
 
     @Test func budgetUsesCalendarPersona() {
         onJuly22 {
+            let model = AppModel()
             // 07-22 확인값: 고정비 435,000(통신7.5+교통15+유류6+구독3+청약10+보험2) · 일정비 761,000 · 와드 40,000
             #expect(BudgetEngine.fixed == 435_000)
-            #expect(BudgetEngine.variableSpentToDate == 761_000)
-            #expect(BudgetEngine.committedThisWeek == 40_000)
+            #expect(model.spentToDate == 761_000)
+            #expect(model.committedThisWeek == 40_000)
             // 965,000 − 일정비 761,000 − 할부 이월 90,590
-            #expect(BudgetEngine.remainingBudget() == 113_410)
-            #expect(BudgetEngine.weeklyAvailable(.maintain) == 16_705)
-            #expect(BudgetEngine.weeklyAvailable(.maintain) < BudgetEngine.weeklyAvailable(.increase))
-            #expect(BudgetEngine.weeklyAvailable(.reduce) < BudgetEngine.weeklyAvailable(.maintain))
+            #expect(model.remainingBudget == 113_410)
+            #expect(model.weeklyBudget(for: .maintain) == 16_705)
+            #expect(model.weeklyBudget(for: .maintain) < model.weeklyBudget(for: .increase))
+            #expect(model.weeklyBudget(for: .reduce) < model.weeklyBudget(for: .maintain))
+        }
+    }
+
+    /// 일정을 지우면 예산이 그 자리에서 따라 바뀌어야 한다.
+    /// 예전엔 고정된 시드에서 계산해 지워도 금액이 그대로였다 — 그 회귀를 막는다.
+    @Test func deletingEventFreesBudgetImmediately() {
+        let model = onJuly22 { AppModel() }
+
+        onJuly22 {
+            let before = model.weeklyBudget
+            let ward = try! #require(model.day(number: 22)?.events.first { $0.title == "와드" })
+
+            model.deleteEvent(ward, on: 22)
+
+            #expect(model.committedThisWeek == 0)
+            #expect(model.weeklyBudget == before + ward.amount)
+            #expect(model.day(number: 22)?.events.contains { $0.title == "와드" } == false)
+        }
+    }
+
+    /// 금액을 고치면 차액만큼만 움직인다.
+    @Test func editingAmountMovesBudgetByTheDifference() {
+        let model = onJuly22 { AppModel() }
+
+        onJuly22 {
+            let before = model.weeklyBudget
+            let ward = try! #require(model.day(number: 22)?.events.first { $0.title == "와드" })
+
+            model.updateEventAmount(ward, on: 22, amount: ward.amount - 10_000)
+
+            #expect(model.weeklyBudget == before + 10_000)
+        }
+    }
+
+    /// 시간만 옮기면 금액 합계는 그대로다.
+    @Test func movingEventTimeKeepsTheTotal() {
+        let model = onJuly22 { AppModel() }
+
+        onJuly22 {
+            let before = model.weeklyBudget
+            let ward = try! #require(model.day(number: 22)?.events.first { $0.title == "와드" })
+
+            model.updateEventTime(ward, on: 22, startHour: 21)
+
+            #expect(model.weeklyBudget == before)
+            #expect(model.day(number: 22)?.events.first { $0.title == "와드" }?.startHour == 21)
         }
     }
 
@@ -40,8 +87,9 @@ struct KB_TuneTests {
             let carryover = BudgetEngine.installmentCarryover
             #expect(carryover == 90_590)
             // 이월분이 없다면 그만큼 더 쓸 수 있었다
-            #expect(BudgetEngine.disposableMonth() - BudgetEngine.variableSpentToDate
-                    - carryover == BudgetEngine.remainingBudget())
+            let model = AppModel()
+            #expect(BudgetEngine.disposableMonth() - model.spentToDate
+                    - carryover == model.remainingBudget)
         }
     }
 

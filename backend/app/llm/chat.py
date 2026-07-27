@@ -25,9 +25,46 @@ def chat_stream(plan: PlanResult, message: str, card=None, upcoming=None, app=No
         if backend == "local":
             yield from _local_stream(plan, message, card, upcoming, app)
             return
+        if backend == "openai":
+            yield from _openai_stream(plan, message, card, upcoming, app)
+            return
     except Exception:
         pass  # 어떤 실패든 템플릿으로
     yield from _template_stream(plan, message, card, app)
+
+
+def _sse_deltas(response) -> Iterator[str]:
+    """OpenAI 호환 스트리밍 응답에서 본문 조각만 뽑는다."""
+    for line in response.iter_lines():
+        if not line or not line.startswith("data:"):
+            continue
+        data = line[len("data:"):].strip()
+        if data == "[DONE]":
+            break
+        try:
+            delta = json.loads(data)["choices"][0]["delta"].get("content")
+        except Exception:
+            continue
+        if delta:
+            yield delta
+
+
+def _openai_stream(plan: PlanResult, message: str, card=None, upcoming=None, app=None) -> Iterator[str]:
+    """OpenAI /v1/chat/completions 스트리밍. 로컬 서버와 응답 형식이 같아 파싱을 공유한다."""
+    import httpx
+    url = config.OPENAI_BASE_URL.rstrip("/") + "/chat/completions"
+    payload = {
+        "model": config.OPENAI_MODEL,
+        "stream": True,
+        "messages": [
+            {"role": "system", "content": prompts.chat_system(plan, card, upcoming, app)},
+            {"role": "user", "content": message},
+        ],
+    }
+    headers = {"Authorization": f"Bearer {config.openai_key()}"}
+    with httpx.stream("POST", url, json=payload, headers=headers, timeout=60) as r:
+        r.raise_for_status()
+        yield from _sse_deltas(r)
 
 
 def _claude_stream(plan: PlanResult, message: str, card=None, upcoming=None, app=None) -> Iterator[str]:
@@ -57,18 +94,7 @@ def _local_stream(plan: PlanResult, message: str, card=None, upcoming=None, app=
     }
     with httpx.stream("POST", url, json=payload, timeout=60) as r:
         r.raise_for_status()
-        for line in r.iter_lines():
-            if not line or not line.startswith("data:"):
-                continue
-            data = line[len("data:"):].strip()
-            if data == "[DONE]":
-                break
-            try:
-                delta = json.loads(data)["choices"][0]["delta"].get("content")
-            except Exception:
-                continue
-            if delta:
-                yield delta
+        yield from _sse_deltas(r)
 
 
 # ---------- 오프라인 템플릿(비용 0) ----------

@@ -88,6 +88,74 @@ final class CalendarStore: ObservableObject {
         }
     }
 
+    // MARK: 쓰기 — 앱에서 잡은 일정을 기기 캘린더에 남긴다
+
+    private func date(day: Int, hour: Double) -> Date? {
+        var comps = DateComponents()
+        comps.year = DemoClock.demoYear
+        comps.month = DemoClock.demoMonth
+        comps.day = day
+        comps.hour = Int(hour)
+        comps.minute = Int((hour - Double(Int(hour))) * 60)
+        return Calendar(identifier: .gregorian).date(from: comps)
+    }
+
+    /// 일정을 기본 캘린더에 쓰고 식별자를 돌려준다. 권한이 없거나 실패하면 nil.
+    /// 이 식별자가 있어야 나중에 같은 일정을 지우거나 시간을 옮길 수 있다.
+    func save(title: String, day: Int, startHour: Double, duration: Double) -> String? {
+        guard access == .authorized, let start = date(day: day, hour: startHour) else { return nil }
+
+        let event = EKEvent(eventStore: store)
+        event.title = title
+        event.startDate = start
+        event.endDate = start.addingTimeInterval(duration * 3600)
+        event.calendar = store.defaultCalendarForNewEvents
+        event.notes = "KB Tune에서 예산을 잡은 일정이에요."
+
+        do {
+            try store.save(event, span: .thisEvent, commit: true)
+            return event.eventIdentifier
+        } catch {
+            lastError = "캘린더에 일정을 쓰지 못했어요. 설정에서 캘린더 접근을 확인해 주세요."
+            return nil
+        }
+    }
+
+    /// 앱이 쓴 일정을 기기 캘린더에서 지운다.
+    /// 식별자가 있는 일정만 지우므로, 사용자가 캘린더 앱에서 직접 만든 일정은 건드리지 않는다.
+    @discardableResult
+    func remove(eventID: String) -> Bool {
+        guard access == .authorized,
+              let event = store.event(withIdentifier: eventID) else { return false }
+        do {
+            try store.remove(event, span: .thisEvent, commit: true)
+            return true
+        } catch {
+            lastError = "캘린더에서 일정을 지우지 못했어요."
+            return false
+        }
+    }
+
+    /// 시작 시각을 옮긴다(길이는 그대로 유지).
+    @discardableResult
+    func reschedule(eventID: String, day: Int, startHour: Double) -> Bool {
+        guard access == .authorized,
+              let event = store.event(withIdentifier: eventID),
+              let oldStart = event.startDate, let oldEnd = event.endDate,
+              let start = date(day: day, hour: startHour) else { return false }
+
+        let length = oldEnd.timeIntervalSince(oldStart)
+        event.startDate = start
+        event.endDate = start.addingTimeInterval(length)
+        do {
+            try store.save(event, span: .thisEvent, commit: true)
+            return true
+        } catch {
+            lastError = "캘린더에서 일정 시간을 바꾸지 못했어요."
+            return false
+        }
+    }
+
     /// 다가오는 N일간의 기기 캘린더 일정 (일정 추가 화면의 '가져오기' 목록용).
     /// iCloud뿐 아니라 설정에서 추가한 구글·네이버 캘린더 일정도 함께 읽힌다.
     func fetchUpcoming(days: Int = 30) {

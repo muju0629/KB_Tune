@@ -292,10 +292,7 @@ struct AddEventView: View {
         let before = model.weeklyBudget
         let after = before - amount
         let probBefore = model.probability
-        let probAfter = BudgetEngine.probability(model.direction,
-                                                 extraCommitted: model.userAddedTotal + amount,
-                                                 income: model.monthlyIncome,
-                                                 savingsGoal: model.savingsGoal)
+        let probAfter = model.probability(for: model.direction, extraCommitted: amount)
         let risky = (probBefore - probAfter) >= 10 || after < 0
 
         return VStack(alignment: .leading, spacing: 18) {
@@ -369,7 +366,7 @@ struct AddEventView: View {
                     adjustmentRow(id: "keep", title: "그대로 추가",
                                   detail: "사용 가능액 \(formatWon(max(after, 0))) · 확률 \(probAfter)%")
                     adjustmentRow(id: "half", title: "예산을 절반으로 줄이기",
-                                  detail: "\(formatWon(amount / 2))로 조정하면 확률 \(BudgetEngine.probability(model.direction, extraCommitted: model.userAddedTotal + amount / 2, income: model.monthlyIncome, savingsGoal: model.savingsGoal))%")
+                                  detail: "\(formatWon(amount / 2))로 조정하면 확률 \(model.probability(for: model.direction, extraCommitted: amount / 2))%")
                     adjustmentRow(id: "next", title: "다음 주로 옮기기",
                                   detail: "이번 주 계획을 그대로 지켜요 · 확률 \(probBefore)%")
                 }
@@ -391,10 +388,7 @@ struct AddEventView: View {
                 var detail: String? = nil
                 if model.currentWeekRange.contains(dayNumber) {
                     let finalAfter = before - amount
-                    let finalProb = BudgetEngine.probability(model.direction,
-                                                             extraCommitted: model.userAddedTotal + amount,
-                                                             income: model.monthlyIncome,
-                                                             savingsGoal: model.savingsGoal)
+                    let finalProb = model.probability(for: model.direction, extraCommitted: amount)
                     if finalAfter < 0 {
                         note = "이번 주 예산을 \(formatWon(-finalAfter)) 넘겨요"
                         detail = "그대로 두면 적금 목표 확률이 \(probBefore)% → \(finalProb)%로 낮아져요. 금액을 줄이거나 다음 주로 옮기는 걸 추천해요."

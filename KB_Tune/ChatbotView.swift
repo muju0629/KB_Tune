@@ -23,6 +23,9 @@ struct ChatMessage: Identifiable {
         case addEvent
         case setDirection(SpendDirection)   // 다음 달 소비 방향을 저장
         case openProducts                   // 카드·적금 탭으로 이동
+        /// 되묻기 — 모르는 걸 추측해서 답하지 않고 사용자가 고르게 한다.
+        /// 고른 답이 다시 질문으로 들어가 대화가 이어진다.
+        case choices([String])
     }
     let role: Role
     var conclusion: String                 // 결론(본문)
@@ -32,6 +35,39 @@ struct ChatMessage: Identifiable {
     var preview: EventPreview? = nil       // 대화 속 일정 미리보기
     var actions: Actions? = nil
     var isStream: Bool = false             // 백엔드 스트리밍 응답(자유 문장)
+}
+
+/// 적금을 왜 만드는지. 목적에 따라 맞는 기간·상품이 달라서 먼저 물어본다.
+enum SavingsPurpose: CaseIterable {
+    case emergency, lumpSum, goal
+
+    var label: String {
+        switch self {
+        case .emergency: "비상금"
+        case .lumpSum: "목돈 모으기"
+        case .goal: "정해둔 목표"
+        }
+    }
+    /// 사용자가 고른 답을 되받을 때 찾는 말
+    var matchKey: String { label.replacingOccurrences(of: " ", with: "") }
+
+    var termLabel: String {
+        switch self {
+        case .emergency: "언제든 뺄 수 있는 자유적립"
+        case .lumpSum: "12개월 정기적금"
+        case .goal: "목표일에 맞춘 기간"
+        }
+    }
+    var reason: String {
+        switch self {
+        case .emergency:
+            "비상금은 급할 때 바로 빼 쓸 수 있어야 해서, 금리가 조금 낮아도 중도해지 부담이 없는 쪽이 나아요."
+        case .lumpSum:
+            "목돈은 만기까지 두는 게 전제라 금리를 우선해서 고르면 돼요."
+        case .goal:
+            "목표 날짜가 있으면 그 날짜에 만기가 오도록 기간을 맞추는 게 먼저예요."
+        }
+    }
 }
 
 struct EventPreview {
@@ -251,6 +287,15 @@ struct ChatbotView: View {
                 smallAction("지금은 유지", filled: false) { flash("방향은 그대로 둘게요.") }
             }
             .padding(.top, 2)
+
+        case .choices(let options):
+            // 고르면 그 답이 그대로 다음 질문이 된다 — 타이핑 없이 대화가 이어진다.
+            FlowLayout(spacing: 8) {
+                ForEach(options, id: \.self) { option in
+                    smallAction(option, filled: false) { send(option) }
+                }
+            }
+            .padding(.top, 4)
 
         case .openProducts:
             HStack(spacing: 8) {
@@ -546,6 +591,19 @@ struct ChatbotView: View {
             )
         }
 
+        // ⑤-1 적금 목적을 고른 뒤 — 목적에 맞춰 기간·금액을 잡는다.
+        if let purpose = SavingsPurpose.allCases.first(where: { q.contains($0.matchKey) }) {
+            let monthly = model.suggestedSavingsAmount
+            return ChatMessage(
+                role: .agent,
+                conclusion: "\(purpose.label)이면 \(purpose.termLabel)로 잡는 게 맞아요. 월 \(formatWon(monthly)) 정도가 지금 여력이에요.",
+                reason: purpose.reason,
+                impact: "이번 달 남은 예산 \(formatWon(model.remainingBudget)) · \(b.nextPayLabel) 할부 \(formatWon(b.carryover))을 빼고 잡은 금액이에요",
+                basis: "월수입 \(formatWon(model.monthlyIncome)) · 저축 목표 \(formatWon(model.savingsGoal)) · 카드 할부 잔여 \(formatWon(b.carryover))",
+                actions: .openProducts
+            )
+        }
+
         // ⑤ 적금 — 여력이 없으면 없다고 말한다. 금융 앱이 무리한 저축을 권하면 안 된다.
         if q.contains("적금") || q.contains("통장") || q.contains("저축") && q.contains("만들") {
             let remaining = BudgetEngine.remainingBudget(income: model.monthlyIncome,
@@ -560,7 +618,8 @@ struct ChatbotView: View {
                     + (roomy ? "" : " 이미 넣고 있는 \(formatWon(model.savingsGoal))부터 지키는 게 먼저예요."),
                 impact: "\(b.nextPayLabel)에 카드 할부 \(formatWon(b.carryover))이 빠지니, 그게 끝난 뒤가 여유로워요",
                 basis: "월수입 \(formatWon(model.monthlyIncome)) · 저축 목표 \(formatWon(model.savingsGoal)) · 카드 할부 잔여 \(formatWon(b.carryover))",
-                actions: .openProducts
+                // 목적을 모르면 어떤 상품이 맞는지 고를 수 없다. 추측하지 말고 되묻는다.
+                actions: .choices(SavingsPurpose.allCases.map(\.label))
             )
         }
 

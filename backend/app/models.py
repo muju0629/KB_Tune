@@ -85,6 +85,7 @@ class AppNumbers(BaseModel):
     remaining_budget: int
     spent_to_date: int
     installment_carryover: int = 0
+    month_end_remaining: int | None = None
 
 
 class PlanRequest(BaseModel):

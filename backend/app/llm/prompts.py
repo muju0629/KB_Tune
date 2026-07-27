@@ -15,6 +15,8 @@ STYLE = """너는 사회초년생·대학생을 위한 소비 코치 'KB Tune �
 - 사용자를 평가하거나 소비를 도덕적으로 훈계하지 않는다.
 """
 
+_DIRECTION_KO = {"reduce": "줄이기", "maintain": "유지", "increase": "늘리기"}
+
 GROUNDING_RULE = """[매우 중요] 아래 '계획 수치'에 있는 숫자만 사용하라.
 새로운 금액·확률을 절대 만들어내지 마라(계산 금지). 수치가 필요하면 목록의 값을 그대로 인용하라."""
 
@@ -26,6 +28,8 @@ def _facts(plan: PlanResult, app=None) -> str:
     remaining = app.remaining_budget if app else plan.remaining_budget
     spent = app.spent_to_date if app else plan.variable_spent_to_date
     carry = app.installment_carryover if app else 0
+    month_end_low = app.month_end_remaining if app and app.month_end_remaining is not None else plan.month_end_remaining_low
+    month_end_high = app.month_end_remaining if app and app.month_end_remaining is not None else plan.month_end_remaining_high
     remaining_note = (
         f"(가처분 {plan.disposable_month:,} − 지금까지 {spent:,} − 할부 이월 {carry:,})"
         if carry else f"(가처분 {plan.disposable_month:,} − 지금까지 {spent:,})"
@@ -36,9 +40,9 @@ def _facts(plan: PlanResult, app=None) -> str:
         f"- 이번 달 저축 목표: {plan.savings_goal:,}원",
         f"- 이번 달 남은 예산: {remaining:,}원 {remaining_note}",
         f"- 7월 일정 예상액: {plan.month_estimate_low:,}~{plan.month_estimate_high:,}원",
-        f"- 월말 여유 예상: {plan.month_end_remaining_low:,}~{plan.month_end_remaining_high:,}원",
+        f"- 월말 여유 예상: {month_end_low:,}~{month_end_high:,}원",
         f"- 예상 근거: {plan.estimate_basis}",
-        f"- 이번 달 소비 방향: {plan.direction}",
+        f"- 이번 달 소비 방향: {_DIRECTION_KO.get(plan.direction, plan.direction)}",
         f"- 보호 소비: {plan.protected_summary}",
         f"- 가장 큰 소비 카테고리: {plan.analysis.top_category}",
     ]
@@ -50,7 +54,7 @@ def _facts(plan: PlanResult, app=None) -> str:
         lines.append("- 가능한 조정안:")
         for a in plan.adjustments:
             lines.append(f"    · {a.title} → 사용가능액 {a.weekly_available:,}원 · 확률 {a.probability}%")
-    allowed = set(plan.grounded_numbers) | {weekly, remaining, spent}
+    allowed = set(plan.grounded_numbers) | {weekly, remaining, spent, month_end_low, month_end_high}
     if carry:
         allowed.add(carry)
     lines.append(f"- (인용 허용 숫자: {', '.join(f'{n:,}' for n in sorted(allowed))})")
