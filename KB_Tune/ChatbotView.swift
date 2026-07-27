@@ -37,6 +37,60 @@ struct ChatMessage: Identifiable {
     var isStream: Bool = false             // 백엔드 스트리밍 응답(자유 문장)
 }
 
+/// 모델이 보내온 자유 문장을 읽기 좋게 그린다.
+///
+/// 통짜로 한 덩어리를 그리면 결론과 근거가 같은 무게로 붙어 벽이 된다.
+/// 빈 줄을 기준으로 문단을 나누고, 첫 문단(결론)만 굵게 세운다.
+/// 금액·비율은 굵게 살린다 — 문장 안에 숫자가 묻히면 판단할 근거가 안 보인다.
+struct StreamedAnswer: View {
+    let text: String
+
+    private var paragraphs: [String] {
+        text.components(separatedBy: "\n\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(Array(paragraphs.enumerated()), id: \.offset) { i, para in
+                Text(Self.highlightNumbers(para))
+                    .font(.system(size: i == 0 ? 15 : 14,
+                                  weight: i == 0 ? .semibold : .regular))
+                    .foregroundStyle(i == 0 ? KB.ink : KB.ink.opacity(0.88))
+                    .lineSpacing(i == 0 ? 3 : 4)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    /// 금액(1,234원)·비율(39%)·날짜(8월 14일 · 7/30)를 굵게.
+    ///
+    /// 마크다운으로 감싸는 방법은 쓰지 않는다. `**39%**라서`처럼 닫는 표시 왼쪽이 기호(%)이고
+    /// 오른쪽이 한글이면 강조가 닫히지 않아 별표가 그대로 화면에 남는다.
+    /// 범위에 직접 굵기만 얹으면 문단마다 다른 글자 크기도 그대로 상속된다.
+    static func highlightNumbers(_ s: String) -> AttributedString {
+        var attr = AttributedString(s)
+        let patterns = [
+            #"[\d,]+\s*~\s*[\d,]+원"#,   // 범위가 먼저 — 단일 금액 규칙에 잘리지 않게
+            #"[\d,]+원"#,
+            #"\d+%"#,
+            #"\d+월\s*\d+일"#,
+            #"\d+/\d+"#,
+        ]
+        let full = NSRange(s.startIndex..., in: s)
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            for m in regex.matches(in: s, range: full) {
+                guard let r = Range(m.range, in: s),
+                      let ar = Range(r, in: attr) else { continue }
+                attr[ar].inlinePresentationIntent = .stronglyEmphasized
+            }
+        }
+        return attr
+    }
+}
+
 /// 적금을 왜 만드는지. 목적에 따라 맞는 기간·상품이 달라서 먼저 물어본다.
 enum SavingsPurpose: CaseIterable {
     case emergency, lumpSum, goal
@@ -199,9 +253,13 @@ struct ChatbotView: View {
 
     private func agentCard(_ msg: ChatMessage) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(msg.conclusion)
-                .font(.system(size: 14, weight: msg.isStream ? .regular : .semibold)).foregroundStyle(KB.ink)
-                .fixedSize(horizontal: false, vertical: true)
+            if msg.isStream {
+                StreamedAnswer(text: msg.conclusion)
+            } else {
+                Text(msg.conclusion)
+                    .font(.system(size: 14, weight: .semibold)).foregroundStyle(KB.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             if let reason = msg.reason {
                 Text(reason).font(.system(size: 13)).foregroundStyle(KB.muted)

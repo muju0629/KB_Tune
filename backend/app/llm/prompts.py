@@ -39,8 +39,12 @@ def _facts(plan: PlanResult, app=None) -> str:
         f"- 적금 목표 달성 확률: {prob}%",
         f"- 이번 달 저축 목표: {plan.savings_goal:,}원",
         f"- 이번 달 남은 예산: {remaining:,}원 {remaining_note}",
-        f"- 7월 일정 예상액: {plan.month_estimate_low:,}~{plan.month_estimate_high:,}원",
-        f"- 월말 여유 예상: {month_end_low:,}~{month_end_high:,}원",
+        f"- 7월 일정 예상액: {plan.month_estimate_low:,}원"
+        if plan.month_estimate_low == plan.month_estimate_high
+        else f"- 7월 일정 예상액: {plan.month_estimate_low:,}~{plan.month_estimate_high:,}원",
+        f"- 월말 여유 예상: {month_end_low:,}원"
+        if month_end_low == month_end_high
+        else f"- 월말 여유 예상: {month_end_low:,}~{month_end_high:,}원",
         f"- 예상 근거: {plan.estimate_basis}",
         f"- 이번 달 소비 방향: {_DIRECTION_KO.get(plan.direction, plan.direction)}",
         f"- 보호 소비: {plan.protected_summary}",
@@ -107,8 +111,13 @@ def chat_system(plan: PlanResult, card=None, upcoming=None, app=None) -> str:
     extra = _card_facts(card, upcoming or [])
     return (
         f"{STYLE}\n\n{GROUNDING_RULE}\n\n"
-        "사용자의 질문에 대해 (1)결론 (2)이유(반영한 데이터) (3)영향(전/후 숫자) (4)행동 제안 순서로 "
-        "간결하게 답한다. 표나 목록을 남발하지 말고 대화체로.\n"
+        "사용자의 질문에 (1)결론 (2)이유 (3)영향 (4)행동 제안 순서로 답한다.\n"
+        "형식 규칙:\n"
+        "- 네 부분을 빈 줄로 나눈다.\n"
+        "- 각 부분은 2문장을 넘기지 않는다. 첫 문장(결론)은 한 문장으로 끝낸다.\n"
+        "- 같은 숫자를 여러 번 반복하지 않는다. 판단에 꼭 필요한 수치만 인용한다.\n"
+        "- 범위의 양끝이 같으면 하나만 쓴다(84,000~84,000원 금지).\n"
+        "- 표나 불릿을 쓰지 말고 대화체로.\n"
         "지출을 물어보면 이번 주 예산만 보지 말고, 다음 카드 결제일에 빠질 금액과 "
         "앞으로 잡혀 있는 일정까지 함께 놓고 답한다.\n\n"
         f"[계획 수치]\n{_facts(plan, app)}"
