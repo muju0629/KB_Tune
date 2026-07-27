@@ -51,12 +51,15 @@ struct KB_TuneTests {
         #expect(model.calendarDays.count == 31)
         #expect(model.todayDayNumber == 22)
         // 금액이 모두 확정돼 low == high — 범위가 사라진다.
-        #expect(model.julyEstimateLow == 801_000)
-        #expect(model.julyEstimateHigh == 801_000)
+        // 881,000 = 기존 확인값 801,000 + 데모 일정(7/30 피자 52,000 · 7/31 킥오프 28,000)
+        #expect(model.julyEstimateLow == 881_000)
+        #expect(model.julyEstimateHigh == 881_000)
         #expect(model.plannedSpendLow == 95_000)
         #expect(model.plannedSpendHigh == 95_000)
-        #expect(model.monthEndRemainingLow == 164_000)
-        #expect(model.monthEndRemainingHigh == 164_000)
+        // 월말 여유는 캘린더 합계에서 파생 — 일정이 늘면 같은 폭으로 줄어야 한다.
+        #expect(model.monthEndRemainingLow
+                == model.monthlyIncome - BudgetEngine.fixed - model.savingsGoal - model.julyEstimateHigh)
+        #expect(model.monthEndRemainingHigh == model.monthEndRemainingLow)
     }
 
     @Test func internshipCostsNothingAndLaserIsConfirmed() {

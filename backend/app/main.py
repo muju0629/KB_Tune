@@ -66,7 +66,10 @@ def coach_endpoint(req: CoachRequest):
 def chat_endpoint(req: ChatRequest):
     """계획을 바꾸는 대화 — 텍스트 스트리밍."""
     p = build_plan(_profile(req), req.today, req.include_candidate)
-    return StreamingResponse(chat_stream(p, req.message), media_type="text/plain; charset=utf-8")
+    return StreamingResponse(
+        chat_stream(p, req.message, req.card, req.upcoming, req.app_numbers),
+        media_type="text/plain; charset=utf-8",
+    )
 
 
 @app.get("/api/eval")

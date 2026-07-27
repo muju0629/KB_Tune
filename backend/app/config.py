@@ -20,7 +20,7 @@ LOCAL_LLM_BASE_URL = os.getenv("LOCAL_LLM_BASE_URL", "http://localhost:11434/v1"
 LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL", "qwen2.5:3b")
 
 # --- Claude(유료, 선택) ---
-CLAUDE_MODEL = os.getenv("KB_TUNE_MODEL", "claude-opus-4-8")
+CLAUDE_MODEL = os.getenv("KB_TUNE_MODEL", "claude-opus-5")
 
 
 def api_key() -> str | None:

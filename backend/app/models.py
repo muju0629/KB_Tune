@@ -49,11 +49,52 @@ class Profile(BaseModel):
     protected_categories: list[str] = Field(default_factory=list)
 
 
+class CardBilling(BaseModel):
+    """신용카드 청구 사이클. 앱의 BillingCycle 이 계산해 넘긴다.
+
+    '쓴 날'과 '돈 나가는 날'이 다르다는 사실은 월 예산 계산만으로는 드러나지 않는다.
+    조언할 때 "다음 달 카드값이 이미 얼마"를 근거로 쓰려면 이 값들이 필요하다.
+    """
+    due_next: int = 0          # 다음 결제일에 실제로 빠질 금액
+    usage: int = 0             # 이번 이용기간 이용금액
+    carryover: int = 0         # 할부로 그 다음 결제일에 넘어가는 금액
+    pay_label: str = ""        # "8월 14일"
+    next_pay_label: str = ""   # "9월 14일"
+    days_until_pay: int = 0
+    days_until_close: int = 0  # 이용기간 마감까지 남은 일수 (0 = 오늘 마감)
+    close_label: str = ""      # "7월 26일"
+
+
+class UpcomingEvent(BaseModel):
+    """오늘 이후로 잡혀 있는 지출 일정."""
+    day: int
+    title: str
+    amount: int
+    category: str = "기타"
+
+
+class AppNumbers(BaseModel):
+    """앱의 BudgetEngine 이 이미 계산해 화면에 띄운 값.
+
+    백엔드 엔진이 같은 값을 다시 계산하면 시드 데이터 차이·할부 이월분 반영 여부 때문에
+    화면과 어긋난다. 화면에 70,000원이 떠 있는데 챗봇이 다른 금액을 말하면 안 되므로,
+    앱이 보낸 값이 있으면 그쪽을 단일 진실로 삼는다.
+    """
+    weekly_available: int
+    probability: int
+    remaining_budget: int
+    spent_to_date: int
+    installment_carryover: int = 0
+
+
 class PlanRequest(BaseModel):
     """미지정 시 데모 페르소나 사용. 일부 필드만 덮어쓸 수 있음."""
     profile: Optional[Profile] = None
     today: int = 22  # 2026년 7월 캘린더 기준일
     include_candidate: bool = False  # 위험 후보 일정을 계획에 반영할지
+    card: Optional[CardBilling] = None
+    upcoming: list[UpcomingEvent] = Field(default_factory=list)
+    app_numbers: Optional[AppNumbers] = None
 
 
 class CoachRequest(PlanRequest):

@@ -336,7 +336,8 @@ struct WeeklyPlanView: View {
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(KB.muted)
 
-            CountUpWon(value: roundedWeeklyBudget, size: 46, weight: .heavy, duration: 0.85)
+            // 화면에서 가장 큰 숫자라 더 조용하게 — 마지막 3%만 움직인다.
+            CountUpWon(value: roundedWeeklyBudget, size: 46, weight: .heavy, from: 0.97)
                 .padding(.trailing, 2)
                 .background(alignment: .bottom) {
                     KB.yellow.frame(height: 13)

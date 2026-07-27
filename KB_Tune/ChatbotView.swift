@@ -17,7 +17,13 @@ import SwiftUI
 struct ChatMessage: Identifiable {
     let id = UUID()
     enum Role { case user, agent }
-    enum Actions { case addEvent }
+    /// 답변에 붙는 실행 버튼. 에이전트가 말만 하지 않고 계획을 실제로 바꾸거나
+    /// 다음 화면으로 데려가는 자리다. (기획 보고서 3절 '도구 호출 구조로 승격'의 축소판)
+    enum Actions: Equatable {
+        case addEvent
+        case setDirection(SpendDirection)   // 다음 달 소비 방향을 저장
+        case openProducts                   // 카드·적금 탭으로 이동
+    }
     let role: Role
     var conclusion: String                 // 결론(본문)
     var reason: String? = nil              // 이유
@@ -47,7 +53,14 @@ struct ChatbotView: View {
     @State private var toast: String?
     @FocusState private var inputFocused: Bool
 
-    private let suggestions = ["이번 주 얼마까지 써도 돼?", "적금 목표 지킬 수 있어?", "다음 주 데이트 예산 잡아줘"]
+    // 데모 흐름 순서대로 — 소비 질문 → 절감 지점 → 패턴 → 다음 달 방향 → 적금
+    private let suggestions = [
+        "오늘 7만원짜리 바지 사도 될까?",
+        "어디서 줄이는 게 좋을까?",
+        "내 소비 패턴 어때?",
+        "다음 달은 어떻게 하는 게 좋을까?",
+        "적금 통장 하나 더 만들고 싶은데?",
+    ]
     private let thinkingSteps = [
         "질문에 맞는 일정을 찾고 있어요",
         "예상 지출을 더하고 있어요",
@@ -228,6 +241,26 @@ struct ChatbotView: View {
                 smallAction("예약하지 않기", filled: false) { flash("이번엔 예약하지 않을게요.") }
             }
             .padding(.top, 2)
+
+        case .setDirection(let dir):
+            HStack(spacing: 8) {
+                smallAction("\(dir.label)로 정하기", filled: true) {
+                    withAnimation(.snappy(duration: 0.25)) { model.direction = dir }
+                    flash("다음 달 소비 방향을 ‘\(dir.label)’로 저장했어요. 설정에서 언제든 바꿀 수 있어요.")
+                }
+                smallAction("지금은 유지", filled: false) { flash("방향은 그대로 둘게요.") }
+            }
+            .padding(.top, 2)
+
+        case .openProducts:
+            HStack(spacing: 8) {
+                smallAction("적금 보러 가기", filled: true) {
+                    withAnimation(.easeInOut(duration: 0.3)) { model.selectedTab = .products }
+                }
+                smallAction("나중에", filled: false) { flash("필요할 때 다시 물어봐 주세요.") }
+            }
+            .padding(.top, 2)
+
         case nil:
             EmptyView()
         }
@@ -345,9 +378,14 @@ struct ChatbotView: View {
                 withAnimation(.easeInOut(duration: 0.3)) { thinkingStep = 2 }
             }
 
+            // LLM 키가 없으면 백엔드도 템플릿으로 답한다. 그 템플릿보다 앱 답변이
+            // 카드 청구·앞으로의 일정·카테고리까지 알고 있어서 낫다. 그래서 키가 있을 때만 호출한다.
             var streamed = ""
-            let ok = await agent.chatStream(trimmed, model: model) { delta in
-                streamed += delta
+            var ok = false
+            if agent.llmEnabled {
+                ok = await agent.chatStream(trimmed, model: model) { delta in
+                    streamed += delta
+                }
             }
 
             _ = await minimumDelay.result
@@ -359,6 +397,9 @@ struct ChatbotView: View {
                     role: .agent,
                     conclusion: streamed.trimmingCharacters(in: .whitespacesAndNewlines),
                     basis: "2026년 7월 캘린더 · 입력한 월수입과 저축 목표",
+                    // 실제 LLM이 답할 때도 실행 버튼은 붙어야 한다. 문장은 모델이 만들고
+                    // 무엇을 할 수 있는지는 질문 의도로 정한다.
+                    actions: demoActions(for: trimmed),
                     isStream: true
                 ))
             } else {
@@ -405,8 +446,120 @@ struct ChatbotView: View {
 
     // MARK: 로컬 스크립트 에이전트 (백엔드가 없을 때)
 
+    /// 질문 의도로 실행 버튼을 정한다. 답변 문장은 LLM이 만들어도 '무엇을 할 수 있는지'는
+    /// 앱이 알아야 하므로, 문장 파싱이 아니라 질문에서 판단한다.
+    private func demoActions(for text: String) -> ChatMessage.Actions? {
+        let q = text.replacingOccurrences(of: " ", with: "")
+        if q.contains("적금") || q.contains("통장") { return .openProducts }
+        if q.contains("다음달") || q.contains("방향") {
+            return .setDirection(model.probability < AppModel.atRiskProbability ? .reduce : .maintain)
+        }
+        return nil
+    }
+
+    /// 오늘 이후 잡혀 있는 지출 일정 — 조언의 근거로 되풀이해 쓰인다.
+    private var upcomingEvents: [(day: Int, title: String, amount: Int)] {
+        model.calendarDays
+            .filter { $0.dayNumber >= model.todayDayNumber }
+            .flatMap { d in d.events.filter { $0.amount > 0 }.map { (d.dayNumber, $0.title, $0.amount) } }
+    }
+
+    private var upcomingTotal: Int { upcomingEvents.reduce(0) { $0 + $1.amount } }
+
+    private var upcomingSummary: String {
+        upcomingEvents.map { "7/\($0.day) \($0.title) \(formatWon($0.amount))" }
+            .joined(separator: " · ")
+    }
+
+    /// 분석 탭 기준 가장 큰 지출 카테고리 — "어디 줄이지?"의 답이 되는 곳.
+    private var topCategory: SpendCategory? {
+        model.spendProfile.max { $0.monthly < $1.monthly }
+    }
+
     private func agentReply(to text: String) -> ChatMessage {
         let q = text.replacingOccurrences(of: " ", with: "")
+        let b = model.billing
+
+        // ① 지금 이걸 사도 되나 — 이번 주 예산 + 앞으로의 일정 + 다음 달 카드값을 함께 본다.
+        if q.contains("사도") || q.contains("살까") || q.contains("바지") || q.contains("구매") || q.contains("지를") {
+            let over = max(0, upcomingTotal - BudgetEngine.remainingBudget(income: model.monthlyIncome,
+                                                                          savingsGoal: model.savingsGoal))
+            let tight = model.weeklyBudget == 0 || over > 0
+            return ChatMessage(
+                role: .agent,
+                conclusion: tight
+                    ? "지금 사면 이번 달 계획이 흔들려요. 사고 싶으면 앞으로의 약속 중 하나를 다음 달로 옮기는 걸 먼저 볼게요."
+                    : "이번 주 여유 안에서는 가능해요. 다만 다음 달 카드값도 같이 보고 정하는 게 좋아요.",
+                reason: upcomingEvents.isEmpty
+                    ? "이번 주 남은 확정 일정은 없어요."
+                    : "앞으로 \(upcomingSummary)이 잡혀 있어서 남은 예산 \(formatWon(BudgetEngine.remainingBudget(income: model.monthlyIncome, savingsGoal: model.savingsGoal)))에서 \(formatWon(upcomingTotal))이 이미 예약된 상태예요.",
+                impact: "이번 주 사용 가능액 \(formatWon(model.weeklyBudget)) · \(b.payLabel) 카드값 \(formatWon(b.dueNext))에 얹혀요",
+                basis: "7월 캘린더 · KB ALL 카드 이용내역 \(b.count)건 \(formatWon(b.usage)) · 할부 이월 \(formatWon(b.carryover))"
+            )
+        }
+
+        // ② 어디서 줄일까 — 보호 소비는 건드리지 않고 가장 큰 카테고리부터 제안한다.
+        if q.contains("줄") || q.contains("아껴") || q.contains("절약") || q.contains("어디서") {
+            let top = topCategory
+            return ChatMessage(
+                role: .agent,
+                conclusion: top.map { "\($0.name)부터 보는 게 효과가 커요. 이번 달 \(formatWon($0.monthly))으로 가장 크거든요." }
+                    ?? "줄일 곳을 찾으려면 이번 달 지출부터 볼게요.",
+                reason: "\(model.protectedList) 소비는 지키기로 했으니 그대로 두고, 나머지에서 찾았어요.",
+                impact: "분석 탭에서 필수·기타로 나눈 내역을 보면 어디가 늘었는지 바로 보여요",
+                basis: "7월 캘린더 일정비 \(formatWon(model.spendMonthly)) 기준"
+            )
+        }
+
+        // ③ 내 소비 패턴 — 반복되는 것과 이번 달에 튄 것을 구분해 말한다.
+        if q.contains("패턴") || q.contains("어떻게썼") || q.contains("소비습관") || q.contains("분석") {
+            let cadences = SpendHistory.patterns.prefix(3)
+                .map { "\($0.key) \($0.cadenceLabel)마다 \(formatWon($0.avgAmount))" }
+                .joined(separator: " · ")
+            return ChatMessage(
+                role: .agent,
+                conclusion: "반복되는 소비가 뚜렷한 편이에요. \(cadences).",
+                reason: topCategory.map { "이번 달은 \($0.name)이 \(formatWon($0.monthly))으로 가장 컸어요." } ?? "",
+                impact: "주기가 규칙적이라 다음 달 지출도 미리 잡아둘 수 있어요",
+                basis: "최근 이력에서 찾은 반복 주기 · 7월 캘린더"
+            )
+        }
+
+        // ④ 다음 달은 어떻게 — 방향을 제안하고 그 자리에서 저장까지.
+        if q.contains("다음달") || q.contains("다음달엔") || q.contains("방향") || q.contains("어떻게하") {
+            let suggested: SpendDirection = model.probability < AppModel.atRiskProbability ? .reduce : .maintain
+            return ChatMessage(
+                role: .agent,
+                conclusion: "다음 달은 ‘\(suggested.label)’를 추천해요.",
+                reason: "지금 목표 확률이 \(model.probability)%이고, \(b.nextPayLabel)에 할부 \(formatWon(b.carryover))이 자동으로 얹혀서 시작부터 여유가 줄어요.",
+                impact: suggested.note,
+                basis: "적금 목표 \(formatWon(model.savingsGoal)) · 카드 할부 잔여 \(formatWon(b.carryover))",
+                actions: .setDirection(suggested)
+            )
+        }
+
+        // ⑤ 적금 — 지금 여력으로 넣을 수 있는 금액을 말하고 상품 탭으로 넘긴다.
+        if q.contains("적금") || q.contains("통장") || q.contains("저축") && q.contains("만들") {
+            return ChatMessage(
+                role: .agent,
+                conclusion: "지금 계획이면 적금을 하나 더 만들 여지가 있어요.",
+                reason: "이번 달 남은 예산이 \(formatWon(BudgetEngine.remainingBudget(income: model.monthlyIncome, savingsGoal: model.savingsGoal)))이고, 목표 확률은 \(model.probability)%예요.",
+                impact: "\(b.nextPayLabel)에 카드 할부 \(formatWon(b.carryover))이 빠지는 것까지 고려해서 금액을 정하는 게 좋아요",
+                basis: "월수입 \(formatWon(model.monthlyIncome)) · 저축 목표 \(formatWon(model.savingsGoal))",
+                actions: .openProducts
+            )
+        }
+
+        // ⑥ 카드값 — 이용액과 실제 청구액의 차이를 짚는다.
+        if q.contains("카드값") || q.contains("청구") || q.contains("할부") || q.contains("결제일") {
+            return ChatMessage(
+                role: .agent,
+                conclusion: "\(b.payLabel)에 \(formatWon(b.dueNext))이 빠져나가요.",
+                reason: "이번 이용기간에 \(b.count)건 \(formatWon(b.usage))을 썼는데, 그중 \(formatWon(b.carryover))은 할부라 \(b.nextPayLabel)로 넘어가요.",
+                impact: "다음 달은 시작부터 \(formatWon(b.carryover))이 얹힌 상태예요",
+                basis: "KB ALL 카드(2054) 이용기간 \(b.periodLabel)"
+            )
+        }
 
         if q.contains("출근") || q.contains("인턴") || q.contains("점심") || q.contains("교통") {
             return ChatMessage(

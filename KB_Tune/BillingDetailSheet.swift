@@ -150,49 +150,31 @@ struct BillingDetailSheet: View {
 
     // MARK: 일정-거래 매칭 근거 (기획 보고서 8.1)
 
-    /// 점수만 던지면 신뢰가 안 생긴다. 어느 기준에서 몇 점이 나왔는지,
-    /// 그리고 못 쓴 기준이 무엇인지까지 펼쳐 보여준다.
+    /// 왜 이 일정과 이어진다고 봤는지를 사람 말로 보여준다.
+    ///
+    /// 점수(53점)·기준별 배점(20/25)·환산 방식은 **판정에 쓰는 내부 값**이지
+    /// 사용자가 "맞다/아니다"를 고르는 데 필요한 정보가 아니다.
+    /// 사용자에게 의미 있는 건 "22분 차이"라는 사실이지 "시간 근접성 20점"이 아니라서,
+    /// 근거 문장만 남기고 점수 장치는 화면에서 걷어냈다. 점수 로직은 MatchEngine에 그대로 있다.
     private func matchDetail(_ m: MatchResult) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 7) {
                 LabelBadge(text: m.verdict.label, color: verdictColor(m.verdict))
                 Text(m.event.title).font(.system(size: 13.5, weight: .semibold)).foregroundStyle(KB.ink)
                 Spacer()
-                Text("\(m.score)점").money(14).foregroundStyle(verdictColor(m.verdict))
             }
 
-            // 점수 막대 — 80/50 임계선을 같이 그려 어디쯤인지 바로 보이게
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(KB.line.opacity(0.5))
-                    Capsule().fill(verdictColor(m.verdict))
-                        .frame(width: geo.size.width * CGFloat(m.score) / 100)
-                    ForEach([50, 80], id: \.self) { mark in
-                        Rectangle().fill(KB.ink.opacity(0.25)).frame(width: 1)
-                            .offset(x: geo.size.width * CGFloat(mark) / 100)
-                    }
-                }
-            }
-            .frame(height: 6)
-
-            VStack(spacing: 5) {
-                ForEach(m.criteria) { c in
+            // 계산에 실제로 쓰인 근거만. 정보가 없어 빠진 기준은 말하지 않는다.
+            VStack(alignment: .leading, spacing: 5) {
+                ForEach(m.criteria.filter { $0.max > 0 }) { c in
                     HStack(alignment: .top, spacing: 6) {
-                        Text(c.name).font(.system(size: 11.5, weight: .medium)).foregroundStyle(KB.ink)
-                            .frame(width: 62, alignment: .leading)
-                        Text(c.note).font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                        Image(systemName: "circle.fill").font(.system(size: 3.5))
+                            .foregroundStyle(KB.muted).padding(.top, 5.5)
+                        Text(c.note).font(.system(size: 12)).foregroundStyle(KB.muted)
                             .fixedSize(horizontal: false, vertical: true)
-                        Spacer(minLength: 6)
-                        Text(c.max == 0 ? "제외" : "\(c.earned)/\(c.max)")
-                            .font(.system(size: 11, weight: .semibold)).monospacedDigit()
-                            .foregroundStyle(c.max == 0 ? KB.muted : (c.earned > 0 ? KB.green : KB.muted))
                     }
                 }
             }
-
-            Text("장소·이동 정보가 없어 \(MatchEngine.missingCriteria.joined(separator: "·")) 기준은 뺐어요. 남은 기준만으로 100점 환산한 값이에요.")
-                .font(.system(size: 10.5)).foregroundStyle(KB.muted).lineSpacing(2)
-                .fixedSize(horizontal: false, vertical: true)
 
             if m.verdict == .confirm {
                 HStack(spacing: 7) {

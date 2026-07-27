@@ -16,33 +16,33 @@ from ..models import PlanResult
 from . import prompts
 
 
-def chat_stream(plan: PlanResult, message: str) -> Iterator[str]:
+def chat_stream(plan: PlanResult, message: str, card=None, upcoming=None, app=None) -> Iterator[str]:
     backend = config.llm_backend()
     try:
         if backend == "claude":
-            yield from _claude_stream(plan, message)
+            yield from _claude_stream(plan, message, card, upcoming, app)
             return
         if backend == "local":
-            yield from _local_stream(plan, message)
+            yield from _local_stream(plan, message, card, upcoming, app)
             return
     except Exception:
         pass  # 어떤 실패든 템플릿으로
-    yield from _template_stream(plan, message)
+    yield from _template_stream(plan, message, card, app)
 
 
-def _claude_stream(plan: PlanResult, message: str) -> Iterator[str]:
+def _claude_stream(plan: PlanResult, message: str, card=None, upcoming=None, app=None) -> Iterator[str]:
     import anthropic
     client = anthropic.Anthropic()
     with client.messages.stream(
         model=config.CLAUDE_MODEL, max_tokens=1024,
-        system=prompts.chat_system(plan),
+        system=prompts.chat_system(plan, card, upcoming, app),
         messages=[{"role": "user", "content": message}],
     ) as stream:
         for text in stream.text_stream:
             yield text
 
 
-def _local_stream(plan: PlanResult, message: str) -> Iterator[str]:
+def _local_stream(plan: PlanResult, message: str, card=None, upcoming=None, app=None) -> Iterator[str]:
     """OpenAI 호환 로컬 서버(/v1/chat/completions) 스트리밍. Bonsai/Ollama/llama.cpp 공용."""
     import httpx
     url = config.LOCAL_LLM_BASE_URL.rstrip("/") + "/chat/completions"
@@ -51,7 +51,7 @@ def _local_stream(plan: PlanResult, message: str) -> Iterator[str]:
         "stream": True,
         "max_tokens": 512,
         "messages": [
-            {"role": "system", "content": prompts.chat_system(plan)},
+            {"role": "system", "content": prompts.chat_system(plan, card, upcoming, app)},
             {"role": "user", "content": message},
         ],
     }
@@ -73,8 +73,16 @@ def _local_stream(plan: PlanResult, message: str) -> Iterator[str]:
 
 # ---------- 오프라인 템플릿(비용 0) ----------
 
-def _template_reply(plan: PlanResult, message: str) -> str:
+def _template_reply(plan: PlanResult, message: str, card=None, app=None) -> str:
+    # 앱이 화면에 띄운 값이 오면 그쪽을 쓴다 — 폴백이라고 다른 숫자를 말하면 안 된다.
+    weekly = app.weekly_available if app else plan.weekly_available
+    prob = app.probability if app else plan.probability
+    remaining = app.remaining_budget if app else plan.remaining_budget
     q = message.replace(" ", "")
+    if card and card.due_next and any(k in q for k in ("카드", "카드값", "청구", "할부", "결제일")):
+        return (f"{card.pay_label}에 {card.due_next:,}원이 빠져나가요. "
+                f"이번 이용기간에 {card.usage:,}원을 썼고, 그중 {card.carryover:,}원은 할부라 "
+                f"{card.next_pay_label}로 넘어가요.")
     if any(k in q for k in ("출근", "점심", "교통", "인턴")):
         return (f"이번 주 남은 확정 일정비는 {plan.committed_this_week:,}원이에요. "
                 f"출근일의 점심과 이동비를 포함한 예상이라 실제 결제액에 따라 달라질 수 있어요.")
@@ -83,15 +91,15 @@ def _template_reply(plan: PlanResult, message: str) -> str:
                 "레이저 제모가 선결제인지 확인하면 범위를 더 좁힐 수 있어요.")
     if any(k in q for k in ("데이트", "가족")):
         return (f"{plan.protected_summary}으로 두었어요. 확정 일정을 반영하고도 이번 주에는 "
-                f"약 {plan.weekly_available:,}원까지 쓸 수 있어요.")
+                f"약 {weekly:,}원까지 쓸 수 있어요.")
     if any(k in q for k in ("적금", "목표", "저축")):
-        return (f"지금 계획대로면 목표 확률은 {plan.probability}%예요. "
-                f"이번 달 남은 예산은 {plan.remaining_budget:,}원이에요.")
-    return (f"이번 주에는 약 {plan.weekly_available:,}원까지 쓸 수 있어요. "
+        return (f"지금 계획대로면 목표 확률은 {prob}%예요. "
+                f"이번 달 남은 예산은 {remaining:,}원이에요.")
+    return (f"이번 주에는 약 {weekly:,}원까지 쓸 수 있어요. "
             f"7월 일정비는 {plan.month_estimate_low:,}~{plan.month_estimate_high:,}원으로 예상해요. "
             "확인하고 싶은 일정을 말해 주세요.")
 
 
-def _template_stream(plan: PlanResult, message: str) -> Iterator[str]:
-    for token in _template_reply(plan, message).split(" "):
+def _template_stream(plan: PlanResult, message: str, card=None, app=None) -> Iterator[str]:
+    for token in _template_reply(plan, message, card, app).split(" "):
         yield token + " "

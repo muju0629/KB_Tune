@@ -18,19 +18,28 @@ final class AgentService: ObservableObject {
 
     @Published var backendReachable: Bool? = nil   // nil=미확인
 
+    /// 백엔드에 LLM 키가 물려 있는지. false면 백엔드도 템플릿으로 답하는데,
+    /// 그 템플릿보다 앱이 가진 컨텍스트(카드 청구·일정·카테고리)가 훨씬 풍부하다.
+    /// 그래서 키가 없을 땐 앱 답변을 쓰고, 키가 붙으면 그때 백엔드에 넘긴다.
+    @Published var llmEnabled = false
+
     /// 헬스체크(짧은 타임아웃).
     func ping() async {
         if ProcessInfo.processInfo.arguments.contains("-ui-test-offline") {
             backendReachable = false
+            llmEnabled = false
             return
         }
         var req = URLRequest(url: Self.baseURL.appendingPathComponent("api/health"))
         req.timeoutInterval = 2.5
         do {
-            let (_, resp) = try await URLSession.shared.data(for: req)
+            let (data, resp) = try await URLSession.shared.data(for: req)
             backendReachable = (resp as? HTTPURLResponse)?.statusCode == 200
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            llmEnabled = (json?["llm_enabled"] as? Bool) ?? false
         } catch {
             backendReachable = false
+            llmEnabled = false
         }
     }
 
@@ -104,10 +113,42 @@ final class AgentService: ObservableObject {
         if let age = model.userAge {
             profile["age"] = age
         }
+        // 카드 청구와 앞으로의 일정은 월 예산 계산에 안 들어가지만 조언에는 결정적이다.
+        // "이번 주 예산은 남지만 다음 달 카드값이 이미 이만큼"을 말하려면 이 값들이 필요하다.
+        let b = model.billing
+        let card: [String: Any] = [
+            "due_next": b.dueNext, "usage": b.usage, "carryover": b.carryover,
+            "pay_label": b.payLabel, "next_pay_label": b.nextPayLabel,
+            "days_until_pay": b.daysUntilPay, "days_until_close": b.daysUntilClose,
+            "close_label": b.closeLabel,
+        ]
+        let upcoming: [[String: Any]] = model.calendarDays
+            .filter { $0.dayNumber >= model.todayDayNumber }
+            .flatMap { day in
+                day.events.filter { $0.amount > 0 }.map { ev in
+                    ["day": day.dayNumber, "title": ev.title,
+                     "amount": ev.amount, "category": ev.category] as [String: Any]
+                }
+            }
+
+        // 화면에 띄운 숫자를 그대로 넘긴다. 백엔드가 다시 계산하면 시드 차이·할부 반영 여부로
+        // 값이 어긋나, 화면엔 70,000원인데 챗봇은 다른 금액을 말하는 상황이 생긴다.
+        let appNumbers: [String: Any] = [
+            "weekly_available": model.weeklyBudget,
+            "probability": model.probability,
+            "remaining_budget": BudgetEngine.remainingBudget(income: model.monthlyIncome,
+                                                             savingsGoal: model.savingsGoal),
+            "spent_to_date": BudgetEngine.variableSpentToDate,
+            "installment_carryover": BudgetEngine.installmentCarryover,
+        ]
+
         let body: [String: Any] = [
             "message": message,
             "profile": profile,
             "today": DemoClock.today,
+            "card": card,
+            "upcoming": upcoming,
+            "app_numbers": appNumbers,
         ]
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
 

@@ -600,6 +600,13 @@ final class AppModel: ObservableObject {
             amount: 40_000, low: 40_000, high: 40_000, basis: "사용자가 확인한 금액",
             category: "자기관리", purpose: "개인 일정", state: .reserved)
         add(24, "인포스탁 월급날", symbol: "banknote", start: 8, duration: 0.5)
+        // 데모 시나리오 — 이번 주에 새로 잡은 저녁 약속 2건.
+        add(30, "윤혁이랑 피자 (이태원)", symbol: "fork.knife", start: 19, duration: 2,
+            amount: 52_000, low: 52_000, high: 52_000, basis: "사용자가 확인한 금액",
+            category: "외식", purpose: "모임", state: .reserved)
+        add(31, "크리에이터 킥오프 저녁 (강남)", symbol: "person.3", start: 19, duration: 2,
+            amount: 28_000, low: 28_000, high: 28_000, basis: "사용자가 확인한 금액",
+            category: "외식", purpose: "모임", state: .reserved)
 
         let today = DemoClock.today
         return (1...DemoClock.daysInMonth).map { day in

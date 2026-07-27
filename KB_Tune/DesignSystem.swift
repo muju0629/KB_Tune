@@ -100,39 +100,33 @@ struct StaggerAppear: ViewModifier {
     }
 }
 
-/// 0에서 목표값까지 굴러 올라가는 금액. 큰 숫자가 그냥 박혀 있는 것보다
-/// "지금 계산해서 내놓은 값"이라는 인상을 준다.
+/// 금액이 마지막 구간만 조용히 올라와 자리를 잡는 연출.
+///
+/// 0부터 굴리면 큰 숫자에서 자릿수가 전부 요동쳐 시끄럽다. 여기선 목표값의 대부분을
+/// 이미 표시해 둔 채 남은 몇 %만 움직여서, 눈에 띄지 않게 "방금 계산된 값"이라는
+/// 느낌만 남긴다. 굴리는 일은 numericText 전환에 맡기고 직접 프레임을 돌리지 않는다.
 struct CountUpWon: View {
     let value: Int
     var size: CGFloat = 30
     var weight: Font.Weight = .bold
     var tint: Color = KB.ink
-    var duration: Double = 0.7
+    /// 시작 지점 — 목표값의 몇 %에서 출발할지. 1에 가까울수록 조용하다.
+    var from: Double = 0.94
 
-    @State private var shown = 0
+    @State private var shown: Int?
 
     var body: some View {
-        Text(formatWon(shown))
+        Text(formatWon(shown ?? value))
             .money(size, weight: weight)
             .foregroundStyle(tint)
             .contentTransition(.numericText())
-            .onAppear { run() }
-            .onChange(of: value) { _, _ in run() }
+            .onAppear { settle() }
+            .onChange(of: value) { _, _ in settle() }
     }
 
-    private func run() {
-        shown = 0
-        let steps = 18
-        for i in 1...steps {
-            let t = Double(i) / Double(steps)
-            // 끝으로 갈수록 느려지게 — 숫자가 자리를 잡는 느낌
-            let eased = 1 - pow(1 - t, 3)
-            DispatchQueue.main.asyncAfter(deadline: .now() + duration * t) {
-                withAnimation(.easeOut(duration: 0.12)) {
-                    shown = Int(Double(value) * eased)
-                }
-            }
-        }
+    private func settle() {
+        shown = Int(Double(value) * from)
+        withAnimation(.easeOut(duration: 0.55)) { shown = value }
     }
 }
 

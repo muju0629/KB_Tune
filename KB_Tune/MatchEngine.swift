@@ -69,9 +69,6 @@ enum MatchEngine {
     static let timeWeight = 25
     static let amountWeight = 15
 
-    /// 계산에서 빠진 기준 — 화면에서 "왜 만점이 100이 아닌지" 설명할 때 쓴다.
-    static let missingCriteria = ["장소 근접성(20)", "이동 패턴(10)"]
-
     /// 거래 하나에 대해 같은 날 일정 중 가장 잘 맞는 것을 찾는다.
     static func bestMatch(for tx: CardTransaction, in model: AppModel) -> MatchResult? {
         guard let day = model.day(number: tx.day) else { return nil }
