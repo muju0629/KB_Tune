@@ -195,6 +195,8 @@ struct WeeklyPlanView: View {
     private var weekContent: some View {
         VStack(alignment: .leading, spacing: 22) {
             hero.appearStagger(0)
+            rolloverCard.appearStagger(1)
+            nextMonthCard.appearStagger(2)
             if model.shouldShowDailyClose { dailyCloseCard.appearStagger(1) }
             cardBillingCard.appearStagger(2)
             weekStripPager.appearStagger(3)
@@ -345,6 +347,113 @@ struct WeeklyPlanView: View {
             return "\(b.closeLabel)까지 \(b.daysUntilClose)일 남았어요. 그때까지 쓴 돈이 \(b.payLabel)에 한 번에 빠져요."
         }
         return "이번 이용기간은 마감됐어요. 지금 쓰는 돈은 \(b.nextPayLabel)에 빠져나가요."
+    }
+
+    /// 이번 주 금액이 어떻게 나왔는지 — 배분 → 이월 → 일정비 순으로 한 줄씩 보여준다.
+    /// 결과만 던지면 "왜 이번 주는 적지?"에 답할 수 없다.
+    @ViewBuilder
+    private var rolloverCard: some View {
+        if let w = model.thisWeekBudget {
+            VStack(alignment: .leading, spacing: 11) {
+                HStack(spacing: 7) {
+                    LabelBadge(text: "이번 주 계산", color: KB.violet)
+                    Text(w.label).font(.system(size: 13.5, weight: .semibold)).foregroundStyle(KB.ink)
+                    Spacer()
+                }
+
+                VStack(spacing: 7) {
+                    ledgerRow("한 주 배분", w.baseAllowance,
+                              note: "이번 달 쓸 수 있는 돈 \(formatWon(model.monthlyDisposable)) ÷ \(model.weekBudgets.count)주")
+                    if w.rollover != 0 {
+                        ledgerRow(w.rollover > 0 ? "지난주에서 넘어옴" : "지난주에 미리 씀", w.rollover,
+                                  note: w.rollover > 0 ? "아껴 쓴 만큼 이번 주에 더해졌어요"
+                                                       : "넘겨 쓴 만큼 이번 주에서 빠졌어요",
+                                  tint: w.rollover > 0 ? KB.green : KB.caution)
+                    }
+                    if w.plannedSpend > 0 {
+                        ledgerRow("이번 주 일정비", -w.plannedSpend, note: nil)
+                    }
+                    Divider().overlay(KB.line)
+                    HStack {
+                        Text("더 쓸 수 있는 금액").font(.system(size: 13.5, weight: .semibold))
+                            .foregroundStyle(KB.ink)
+                        Spacer()
+                        Text(formatWon(w.available)).money(16)
+                            .foregroundStyle(w.isOverspent ? KB.caution : KB.ink)
+                    }
+                }
+
+                if w.isOverspent {
+                    Text("이번 주는 배분보다 \(formatWon(-w.carriesForward)) 더 쓰게 돼요. 다음 주 금액에서 그만큼 빠져요.")
+                        .font(.system(size: 11.5)).foregroundStyle(KB.caution).lineSpacing(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if w.carriesForward > 0 {
+                    Text("이번 주에 안 쓰면 \(formatWon(w.carriesForward))이 다음 주로 넘어가요.")
+                        .font(.system(size: 11.5)).foregroundStyle(KB.muted).lineSpacing(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .elevatedCard(16)
+        }
+    }
+
+    /// 이번 달 마지막 주에만 뜨는 카드 — 남긴 돈이 다음 달로 어떻게 넘어가는지.
+    /// 이월을 만들어놓고 결과를 안 보여주면 사용자는 그게 도는지 알 수 없다.
+    @ViewBuilder
+    private var nextMonthCard: some View {
+        if let w = model.thisWeekBudget, w.index == model.weekBudgets.count - 1 {
+            let next = model.nextMonthFirstWeek
+            VStack(alignment: .leading, spacing: 11) {
+                HStack(spacing: 7) {
+                    LabelBadge(text: "다음 달", color: KB.info)
+                    Text("\(model.nextMonthLabel) 첫째 주는 이렇게 시작해요")
+                        .font(.system(size: 13.5, weight: .semibold)).foregroundStyle(KB.ink)
+                    Spacer()
+                }
+
+                VStack(spacing: 7) {
+                    ledgerRow("한 주 배분", next.baseAllowance, note: nil)
+                    ledgerRow(next.rollover >= 0 ? "7월에서 넘어옴" : "7월에 미리 쓴 몫",
+                              next.rollover,
+                              note: next.rollover >= 0
+                                    ? "이번 주를 아낄수록 이 금액이 커져요"
+                                    : "7월에 넘겨 쓴 만큼 8월 첫 주에서 빠져요",
+                              tint: next.rollover >= 0 ? KB.green : KB.caution)
+                    Divider().overlay(KB.line)
+                    HStack {
+                        Text("\(model.nextMonthLabel) 첫 주 시작 금액")
+                            .font(.system(size: 13.5, weight: .semibold)).foregroundStyle(KB.ink)
+                        Spacer()
+                        Text(formatWon(max(0, next.allowance))).money(16)
+                            .foregroundStyle(next.allowance >= 0 ? KB.ink : KB.caution)
+                    }
+                }
+
+                Text("아직 \(model.nextMonthLabel) 일정은 넣지 않았어요. 일정을 잡으면 여기서 바로 빠져요.")
+                    .font(.system(size: 11.5)).foregroundStyle(KB.muted).lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .elevatedCard(16)
+        }
+    }
+
+    private func ledgerRow(_ title: String, _ amount: Int, note: String?,
+                           tint: Color = KB.ink) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text(title).font(.system(size: 13)).foregroundStyle(KB.muted)
+                Spacer()
+                Text((amount > 0 ? "+" : "") + formatWon(amount))
+                    .money(13.5, weight: .semibold).foregroundStyle(tint)
+            }
+            if let note {
+                Text(note).font(.system(size: 11)).foregroundStyle(KB.muted.opacity(0.85))
+            }
+        }
     }
 
     private var hero: some View {

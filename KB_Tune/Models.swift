@@ -227,14 +227,16 @@ final class AppModel: ObservableObject {
     var weeklyBudget: Int { weeklyBudget(for: direction) }
     var probability: Int { probability(for: direction) }
 
+    /// 이번 주에 더 쓸 수 있는 금액 — 주차 장부에서 읽는다.
+    /// 소비 방향은 그 위에 성향 계수로 얹는다(줄이기면 보수적으로 잡아준다).
     /// - extraCommitted: 아직 캘린더에 넣지 않은 후보 일정(추가 화면의 영향 미리보기용).
     func weeklyBudget(for direction: SpendDirection, extraCommitted: Int = 0) -> Int {
-        BudgetEngine.weeklyAvailable(direction,
-                                     spentToDate: spentToDate,
-                                     committedThisWeek: committedThisWeek,
-                                     extraCommitted: extraCommitted,
-                                     income: monthlyIncome,
-                                     savingsGoal: savingsGoal)
+        guard let week = thisWeekBudget else { return 0 }
+        // 배분이 음수면(지난주에 넘겨 씀) 이번 주에 나눠 쓸 몫 자체가 없다.
+        // 음수에 성향 계수를 곱하면 '줄이기'가 더 큰 금액이 되는 뒤집힘이 생기므로 먼저 자른다.
+        let base = max(0, week.allowance)
+        let scaled = Int((Double(base) * BudgetEngine.weeklyFactor(direction)).rounded())
+        return max(0, scaled - week.plannedSpend - extraCommitted)
     }
     func probability(for direction: SpendDirection, extraCommitted: Int = 0) -> Int {
         BudgetEngine.probability(direction,
@@ -249,6 +251,47 @@ final class AppModel: ObservableObject {
         BudgetEngine.remainingBudget(income: monthlyIncome, savingsGoal: savingsGoal,
                                      spentToDate: spentToDate)
     }
+
+    // MARK: 주차별 예산 장부 (이월)
+
+    /// 이 달에 쓸 수 있는 돈 — 고정비·적금·다음 달로 넘어갈 할부를 뺀 나머지.
+    /// 할부를 여기서 빼두면 주차 배분이 그만큼 줄어, 다음 달 카드값이 미리 반영된다.
+    var monthlyDisposable: Int {
+        monthlyIncome - BudgetEngine.fixed - savingsGoal - BudgetEngine.installmentCarryover
+    }
+
+    /// 지난달에서 넘어온 금액. 데모는 7월부터 시작해 0이지만,
+    /// 8월 계획을 볼 때는 7월 마지막 주 잔액이 여기로 들어온다.
+    @Published var openingRollover = 0
+
+    var weekBudgets: [WeekBudget] {
+        var spendByWeek: [Int: Int] = [:]
+        for (i, range) in WeekLedger.weekRanges().enumerated() {
+            spendByWeek[i] = calendarDays
+                .filter { range.contains($0.dayNumber) }
+                .reduce(0) { $0 + $1.spendTotal }
+        }
+        return WeekLedger.build(disposable: monthlyDisposable,
+                                spendByWeek: spendByWeek,
+                                openingRollover: openingRollover)
+    }
+
+    var thisWeekBudget: WeekBudget? {
+        weekBudgets.first { $0.days.contains(todayDayNumber) }
+    }
+
+    /// 이번 달이 끝나면 다음 달로 넘어갈 금액.
+    var closingRollover: Int { WeekLedger.closingRollover(weekBudgets) }
+
+    /// 다음 달 첫 주가 어떻게 시작되는지.
+    /// 고정비·적금은 그대로 두고, 이번 달에 남긴 금액만 얹어서 보여준다.
+    var nextMonthFirstWeek: WeekBudget {
+        WeekLedger.nextMonthOpening(
+            disposable: monthlyIncome - BudgetEngine.fixed - savingsGoal,
+            carriedIn: closingRollover)
+    }
+
+    var nextMonthLabel: String { "\(DemoClock.demoMonth + 1)월" }
 
     /// 지금 여력으로 매달 넣을 수 있는 적금액. 남은 예산에서 다음 달 할부까지 뺀 뒤
     /// 만원 단위로 내림한다 — 딱 맞게 잡으면 한 번만 흔들려도 못 넣게 된다.

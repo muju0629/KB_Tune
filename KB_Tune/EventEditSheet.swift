@@ -194,9 +194,19 @@ struct EventEditSheet: View {
     }
 
     private func delete() {
+        let weeklyBefore = model.weeklyBudget
         let calendarID = model.deleteEvent(event, on: dayNumber)
         if let calendarID { calendar?.remove(eventID: calendarID) }
-        onDone("‘\(event.title)’을 지웠어요. 이번 주 사용 가능액은 \(formatWon(model.weeklyBudget))이에요.")
+
+        // 이미 배분을 넘겨 쓴 주에서는 화면 금액이 0에 붙어 있어 지워도 안 움직인다.
+        // 그때 "그대로예요"라고 두면 지운 게 소용없어 보이므로, 다음 주로 넘어간 만큼을 알린다.
+        let message: String
+        if model.weeklyBudget > weeklyBefore {
+            message = "‘\(event.title)’을 지웠어요. 이번 주에 \(formatWon(model.weeklyBudget))까지 쓸 수 있어요."
+        } else {
+            message = "‘\(event.title)’을 지웠어요. \(formatWon(event.amount))이 다음 주로 넘어가요."
+        }
+        onDone(message)
         dismiss()
     }
 

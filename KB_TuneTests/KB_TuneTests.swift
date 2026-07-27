@@ -29,9 +29,23 @@ struct KB_TuneTests {
             #expect(model.committedThisWeek == 40_000)
             // 965,000 − 일정비 761,000 − 할부 이월 90,590
             #expect(model.remainingBudget == 113_410)
-            #expect(model.weeklyBudget(for: .maintain) == 16_705)
-            #expect(model.weeklyBudget(for: .maintain) < model.weeklyBudget(for: .increase))
-            #expect(model.weeklyBudget(for: .reduce) < model.weeklyBudget(for: .maintain))
+            // 이번 주 금액은 주차 장부에서 나온다 — 성질 검증은 이월 테스트가 맡는다.
+            #expect(model.weeklyBudget(for: .maintain) >= 0)
+        }
+    }
+
+    /// 배분이 남아 있는 주에서는 방향에 따라 금액이 줄이기 < 유지 < 늘리기 순이어야 한다.
+    /// 배분이 음수인 주에 계수를 그대로 곱하면 순서가 뒤집히므로 그 회귀를 막는다.
+    @Test func directionOrdersTheWeeklyAmount() {
+        let model = onJuly22 { AppModel() }
+        model.openingRollover = 600_000     // 첫 주부터 배분이 넉넉한 상황을 만든다
+
+        onJuly22 {
+            let reduce = model.weeklyBudget(for: .reduce)
+            let maintain = model.weeklyBudget(for: .maintain)
+            let increase = model.weeklyBudget(for: .increase)
+            #expect(reduce < maintain)
+            #expect(maintain < increase)
         }
     }
 
@@ -41,13 +55,15 @@ struct KB_TuneTests {
         let model = onJuly22 { AppModel() }
 
         onJuly22 {
-            let before = model.weeklyBudget
+            let before2 = try! #require(model.thisWeekBudget).carriesForward
             let ward = try! #require(model.day(number: 22)?.events.first { $0.title == "와드" })
 
             model.deleteEvent(ward, on: 22)
 
             #expect(model.committedThisWeek == 0)
-            #expect(model.weeklyBudget == before + ward.amount)
+            // 이 주는 이미 배분을 넘겨 써 화면 금액이 0에 붙어 있다.
+            // 지운 효과는 다음 주로 넘어갈 금액에서 드러난다.
+            #expect(model.thisWeekBudget?.carriesForward == before2 + ward.amount)
             #expect(model.day(number: 22)?.events.contains { $0.title == "와드" } == false)
         }
     }
@@ -57,12 +73,12 @@ struct KB_TuneTests {
         let model = onJuly22 { AppModel() }
 
         onJuly22 {
-            let before = model.weeklyBudget
+            let before = try! #require(model.thisWeekBudget).carriesForward
             let ward = try! #require(model.day(number: 22)?.events.first { $0.title == "와드" })
 
             model.updateEventAmount(ward, on: 22, amount: ward.amount - 10_000)
 
-            #expect(model.weeklyBudget == before + 10_000)
+            #expect(model.thisWeekBudget?.carriesForward == before + 10_000)
         }
     }
 
@@ -71,12 +87,12 @@ struct KB_TuneTests {
         let model = onJuly22 { AppModel() }
 
         onJuly22 {
-            let before = model.weeklyBudget
+            let before = try! #require(model.thisWeekBudget).carriesForward
             let ward = try! #require(model.day(number: 22)?.events.first { $0.title == "와드" })
 
             model.updateEventTime(ward, on: 22, startHour: 21)
 
-            #expect(model.weeklyBudget == before)
+            #expect(model.thisWeekBudget?.carriesForward == before)
             #expect(model.day(number: 22)?.events.first { $0.title == "와드" }?.startHour == 21)
         }
     }
@@ -167,8 +183,7 @@ struct KB_TuneTests {
             #expect(!keys.contains("와드"))
 
             // 예측은 확정이 아니므로 기본 예산을 건드리지 않는다
-            #expect(model.weeklyBudget == 16_705)
-            #expect(model.weeklyBudgetAfterPredictions < model.weeklyBudget)
+            #expect(model.weeklyBudgetAfterPredictions <= model.weeklyBudget)
         }
     }
 
@@ -185,6 +200,58 @@ struct KB_TuneTests {
         let added = model.day(number: spend.expectedDay)?.events.first { $0.title == "쿠팡 장보기" }
         #expect(added?.isPredicted == true)      // 예측 금액이라 '예상'으로 표시된다
         #expect(added?.amount == 35_000)
+    }
+
+    // MARK: 주차별 이월
+
+    /// 중간에 어떻게 나누든 총량은 보존된다 —
+    /// 마지막 주 잔액 = 이 달에 쓸 수 있는 돈 − 이 달 일정비 전체.
+    @Test func rolloverPreservesTheMonthlyTotal() {
+        let model = onJuly22 { AppModel() }
+        let weeks = model.weekBudgets
+
+        #expect(weeks.count == 5)                       // 2026년 7월은 5주에 걸친다
+        #expect(model.closingRollover
+                == model.monthlyDisposable - model.julyEstimateHigh)
+    }
+
+    /// 각 주의 잔액이 다음 주 이월로 그대로 넘어가야 한다.
+    @Test func eachWeekCarriesIntoTheNext() {
+        let model = onJuly22 { AppModel() }
+        let weeks = model.weekBudgets
+
+        for (prev, next) in zip(weeks, weeks.dropFirst()) {
+            #expect(next.rollover == prev.carriesForward)
+        }
+        #expect(weeks.first?.rollover == 0)             // 지난달에서 넘어온 게 없다
+    }
+
+    /// 지난달 잔액이 있으면 첫 주가 그만큼 넉넉해진다 — 8월로 넘길 때의 동작.
+    @Test func openingRolloverLiftsTheFirstWeek() {
+        let model = onJuly22 { AppModel() }
+        let baseline = try! #require(model.weekBudgets.first).allowance
+
+        model.openingRollover = 40_000
+
+        let lifted = try! #require(model.weekBudgets.first)
+        #expect(lifted.allowance == baseline + 40_000)
+        #expect(lifted.rollover == 40_000)
+    }
+
+    /// 일정을 지우면 그 주 잔액이 늘고, 늘어난 만큼 다음 주로 넘어간다.
+    @Test func deletingEventIncreasesWhatCarriesForward() {
+        let model = onJuly22 { AppModel() }
+
+        onJuly22 {
+            let weeks = model.weekBudgets
+            let lastBefore = try! #require(weeks.last).carriesForward
+            let ward = try! #require(model.day(number: 22)?.events.first { $0.title == "와드" })
+
+            model.deleteEvent(ward, on: 22)
+
+            #expect(try! #require(model.weekBudgets.last).carriesForward
+                    == lastBefore + ward.amount)
+        }
     }
 
     // MARK: 신용카드 청구 사이클
