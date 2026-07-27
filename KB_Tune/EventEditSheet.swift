@@ -131,7 +131,7 @@ struct EventEditSheet: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("바꾸면").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
             HStack {
-                Text("이번 주 사용 가능액").font(.system(size: 13.5)).foregroundStyle(KB.ink)
+                Text("이번 주 추가 사용 가능액").font(.system(size: 13.5)).foregroundStyle(KB.ink)
                 Spacer()
                 Text(formatWon(model.weeklyBudget)).font(.system(size: 13))
                     .foregroundStyle(KB.muted).strikethrough()
@@ -189,7 +189,7 @@ struct EventEditSheet: View {
         if amount != event.amount {
             model.updateEventAmount(event, on: dayNumber, amount: amount)
         }
-        onDone("‘\(event.title)’을 수정했어요. 이번 주 사용 가능액은 \(formatWon(model.weeklyBudget))이에요.")
+        onDone("‘\(event.title)’을 수정했어요. 이번 주 추가 사용 가능액은 \(formatWon(model.weeklyBudget))이에요.")
         dismiss()
     }
 

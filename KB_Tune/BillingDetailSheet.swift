@@ -32,7 +32,7 @@ struct BillingDetailSheet: View {
         .presentationDragIndicator(.visible)
     }
 
-    // MARK: 결제예정금액
+    // MARK: 카드 청구액
 
     private func summaryCard(_ b: BillingSummary) -> some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -43,6 +43,9 @@ struct BillingDetailSheet: View {
                 Text("KB ALL 카드(2054)").font(.system(size: 11)).foregroundStyle(KB.muted)
             }
 
+            Text("카드 청구액")
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(KB.muted)
             CountUpWon(value: b.dueNext, size: 32)
 
             HStack(spacing: 0) {
@@ -87,7 +90,7 @@ struct BillingDetailSheet: View {
                     }
                 }
             }
-            Text("무이자 할부라 이자는 없지만, 다음 달 카드값에 \(formatWon(b.carryover))이 자동으로 얹혀요.")
+            Text("무이자 할부라 이자는 없지만, 다음 달 카드 청구액에 \(formatWon(b.carryover))이 자동으로 얹혀요.")
                 .font(.system(size: 11.5)).foregroundStyle(KB.muted).lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
         }

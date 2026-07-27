@@ -21,6 +21,7 @@ struct WeeklyPlanView: View {
     enum Sheet: Identifiable { case addEvent, settings; var id: Int { hashValue } }
     @State private var sheet: Sheet?
     @State private var showSuccess = false
+    @State private var showAdjustmentPlan = false
     @State private var toast: String?
     @State private var showBillingDetail = false
 
@@ -200,6 +201,7 @@ struct WeeklyPlanView: View {
             // 일정이 먼저다. 이번 주에 뭐가 잡혀 있는지 보고 나서 금액을 따진다.
             // 계산 카드(이번 주 계산·다음 달·카드값)는 근거라 일정 아래에 둔다.
             hero.appearStagger(0)
+            if showAdjustmentPlan { adjustmentPlanCard.appearStagger(1) }
             if model.shouldShowDailyClose { dailyCloseCard.appearStagger(1) }
             weekStripPager.appearStagger(2)
             spendTimeline.appearStagger(3)
@@ -207,34 +209,36 @@ struct WeeklyPlanView: View {
 
             // 여기서부터 금액 근거
             rolloverCard.appearStagger(5)
-            cardBillingCard.appearStagger(6)
-            nextMonthCard.appearStagger(7)
+            nextMonthCard.appearStagger(6)
 
-            recommendation.appearStagger(8)
-            actions.appearStagger(9)
-            benefitRow.appearStagger(10)
+            recommendation.appearStagger(7)
+            benefitRow.appearStagger(8)
         }
     }
 
-    /// 화면 맨 아래 붙어 있는 결제예정 바 — KB Pay 홈의 시그니처.
-    /// 카드 앱에서 제일 중요한 숫자는 스크롤 위치와 상관없이 늘 보여야 한다.
+    /// 화면 맨 아래 붙어 있는 다음 결제일 청구액 요약.
+    /// 주간 계획의 핵심 숫자보다 한 단계 낮게 보여 주고, 상세는 탭해서 확인한다.
     private var billingDock: some View {
         let b = model.billing
         return Button {
             withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) { showBillingDetail = true }
         } label: {
             HStack(spacing: 8) {
-                Text("결제예정금액").font(.system(size: 13.5, weight: .semibold)).foregroundStyle(KB.ink)
+                Image(systemName: "creditcard").font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(KB.muted)
+                Text("다음 결제일 청구액").font(.system(size: 12.5, weight: .semibold)).foregroundStyle(KB.ink)
                 DDayBadge(days: b.daysUntilPay)
                 Spacer()
-                Text(formatWon(b.dueNext)).money(16.5).foregroundStyle(KB.ink)
+                Text(formatWon(b.dueNext)).money(15).foregroundStyle(KB.ink)
                 Image(systemName: "chevron.right").font(.system(size: 11, weight: .bold))
                     .foregroundStyle(KB.ink.opacity(0.55))
             }
-            .padding(.horizontal, 18).padding(.vertical, 13)
-            .background(KB.yellow)
+            .padding(.horizontal, 18).padding(.vertical, 9)
+            .background(KB.yellowSoft)
+            .overlay(alignment: .top) { Rectangle().fill(KB.yellow).frame(height: 1) }
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("billing-dock")
     }
 
     /// 하루 마감 — 예정돼 있었는데 카드 결제 기록이 없는 지출만 뜬다(기획 보고서 8.2).
@@ -291,72 +295,6 @@ struct WeeklyPlanView: View {
         .elevatedCard(16)
     }
 
-    /// 다음 결제일에 실제로 빠질 카드값 (기획 보고서 7.3 '카드 결제예정액').
-    ///
-    /// 카드사 앱은 '이용금액'만 보여줘서 할부가 다음 달로 얼마나 밀리는지 알기 어렵다.
-    /// 여기선 이용금액과 실제 청구액을 나눠 보여주고, 이용기간 마감이 임박하면
-    /// 하루 차이로 결제일이 한 달 밀린다는 점을 알려준다.
-    private var cardBillingCard: some View {
-        let b = model.billing
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 6) {
-                LabelBadge(text: "카드값", color: KB.tangerine)
-                DDayBadge(days: b.daysUntilPay)
-                Spacer()
-                Text("KB ALL").font(.system(size: 10.5, weight: .semibold)).foregroundStyle(KB.ink)
-                    .padding(.horizontal, 7).padding(.vertical, 3)
-                    .background(KB.yellowSoft, in: Capsule())
-            }
-
-            Text("\(b.payLabel)에 빠질 카드값")
-                .font(.system(size: 15, weight: .semibold)).foregroundStyle(KB.ink)
-
-            CountUpWon(value: b.dueNext, size: 30)
-
-            Text("이용기간 \(b.periodLabel)에 \(b.count)건 \(formatWon(b.usage))을 썼어요. 그중 \(formatWon(b.deferred))은 할부라 \(b.nextPayLabel)로 넘어가요.")
-                .font(.system(size: 13)).foregroundStyle(KB.muted).lineSpacing(3)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if !b.installments.isEmpty {
-                VStack(spacing: 6) {
-                    ForEach(b.installments) { tx in
-                        HStack {
-                            Text("\(tx.merchant) \(tx.installmentMonths)개월")
-                                .font(.system(size: 12.5, weight: .medium)).foregroundStyle(KB.ink)
-                                .lineLimit(1)
-                            Spacer(minLength: 8)
-                            Text("월 \(formatWon(tx.installmentAmount(round: 1)))")
-                                .font(.system(size: 12.5, weight: .semibold)).foregroundStyle(KB.caution)
-                        }
-                    }
-                }
-                .padding(10)
-                .background(KB.canvas, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            }
-
-            HStack(alignment: .top, spacing: 6) {
-                Image(systemName: model.isBillingCloseDay ? "exclamationmark.circle.fill" : "info.circle")
-                    .font(.system(size: 12)).foregroundStyle(model.isBillingCloseDay ? KB.caution : KB.muted)
-                Text(billingCloseNote(b))
-                    .font(.system(size: 12)).foregroundStyle(model.isBillingCloseDay ? KB.caution : KB.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .elevatedCard(16)
-    }
-
-    private func billingCloseNote(_ b: BillingSummary) -> String {
-        if model.isBillingCloseDay {
-            return "오늘이 이용기간 마지막 날이에요. 오늘 쓰면 \(b.payLabel)에, 내일 쓰면 \(b.nextPayLabel)에 빠져나가요."
-        }
-        if b.daysUntilClose > 0 {
-            return "\(b.closeLabel)까지 \(b.daysUntilClose)일 남았어요. 그때까지 쓴 돈이 \(b.payLabel)에 한 번에 빠져요."
-        }
-        return "이번 이용기간은 마감됐어요. 지금 쓰는 돈은 \(b.nextPayLabel)에 빠져나가요."
-    }
-
     /// 이번 주 금액이 어떻게 나왔는지 — 배분 → 이월 → 일정비 순으로 한 줄씩 보여준다.
     /// 결과만 던지면 "왜 이번 주는 적지?"에 답할 수 없다.
     @ViewBuilder
@@ -364,7 +302,7 @@ struct WeeklyPlanView: View {
         if let w = model.thisWeekBudget {
             VStack(alignment: .leading, spacing: 11) {
                 HStack(spacing: 7) {
-                    LabelBadge(text: "이번 주 계산", color: KB.violet)
+                LabelBadge(text: "주차별 예산 이월", color: KB.violet)
                     Text(w.label).font(.system(size: 14.5, weight: .bold)).foregroundStyle(KB.ink)
                     Spacer()
                 }
@@ -379,11 +317,11 @@ struct WeeklyPlanView: View {
                                   tint: w.rollover > 0 ? KB.green : KB.caution)
                     }
                     if w.plannedSpend > 0 {
-                        ledgerRow("이번 주 일정비", -w.plannedSpend, note: nil)
+                        ledgerRow("이번 주 예상 지출", -w.plannedSpend, note: nil)
                     }
                     Divider().overlay(KB.line)
                     HStack {
-                        Text("더 쓸 수 있는 금액").font(.system(size: 14.5, weight: .semibold))
+                        Text("추가 사용 가능액").font(.system(size: 14.5, weight: .semibold))
                             .foregroundStyle(KB.ink)
                         Spacer()
                         Text(formatWon(w.available)).money(17)
@@ -469,13 +407,17 @@ struct WeeklyPlanView: View {
     }
 
     private var hero: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("\(model.userName)님의 이번 주 일정비는 \(formatWon(model.plannedSpendTotal))")
+        VStack(alignment: .leading, spacing: 10) {
+            Text("\(model.userName)님의 이번 주 예상 지출은 \(formatWon(model.plannedSpendTotal))")
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(KB.muted)
 
+            Text("이번 주 추가 사용 가능액")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(KB.muted)
+
             // 화면에서 가장 큰 숫자라 더 조용하게 — 마지막 3%만 움직인다.
-            CountUpWon(value: roundedWeeklyBudget, size: 46, weight: .heavy, from: 0.97)
+            CountUpWon(value: model.weeklyBudget, size: 46, weight: .heavy, from: 0.97)
                 .padding(.trailing, 2)
                 .background(alignment: .bottom) {
                     KB.yellow.frame(height: 13)
@@ -484,12 +426,120 @@ struct WeeklyPlanView: View {
                 }
                 .padding(.top, 2)
 
-            Text("더 쓸 수 있어요")
+            Text(heroStatusText)
                 .font(.system(size: 19, weight: .semibold))
                 .foregroundStyle(KB.ink)
+                .accessibilityIdentifier("budget-status")
+
+            HStack(spacing: 8) {
+                if model.weeklyBudget == 0 {
+                    Button {
+                        withAnimation(.spring(response: 0.36, dampingFraction: 0.86)) {
+                            showAdjustmentPlan.toggle()
+                        }
+                    } label: {
+                        Label("조정안 보기", systemImage: "wand.and.stars")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .accessibilityIdentifier("show-adjustments")
+                }
+
+                if model.weeklyBudget == 0 {
+                    Button { sheet = .addEvent } label: {
+                        Label("일정 추가", systemImage: "plus")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+                    .accessibilityIdentifier("add-event-primary")
+                } else {
+                    Button { sheet = .addEvent } label: {
+                        Label("일정 추가", systemImage: "plus")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .accessibilityIdentifier("add-event-primary")
+                }
+            }
+            .padding(.top, 4)
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("이번 주 일정비 \(formatWon(model.plannedSpendTotal)), 추가 사용 가능액 약 \(formatWon(roundedWeeklyBudget)).")
+    }
+
+    private var heroStatusText: String {
+        guard model.weeklyBudget == 0 else { return "이번 주에 추가로 쓸 수 있어요" }
+        if let week = model.thisWeekBudget, week.carriesForward < 0 {
+            return "지난주 초과 사용이 이번 주에 반영됐어요"
+        }
+        return "이번 주 추가 지출 여유가 없어요"
+    }
+
+    /// 조정안은 모델 한 곳에서 고른다 — 챗봇의 제안과 같은 일정을 가리켜야 하고,
+    /// 달의 마지막 주처럼 옮길 곳이 없을 때는 금액을 줄이는 쪽으로 넘어가야 한다.
+    @ViewBuilder
+    private var adjustmentPlanCard: some View {
+        switch model.suggestedAdjustment {
+        case .move(let day, let event):
+            adjustmentCard(
+                headline: "중요한 소비는 그대로 지켰어요",
+                detail: "‘\(event.title)’을 다음 주로 옮기면 이번 주 부담이 \(formatWon(event.amount)) 줄어요.",
+                actionTitle: "다음 주로 이동",
+                gain: event.amount
+            ) {
+                model.moveEventToNextWeek(event, from: day)
+                flash("‘\(event.title)’을 다음 주로 옮겼어요. 이번 주 부담이 \(formatWon(event.amount)) 줄었어요.")
+            }
+
+        case .reduce(let day, let event, let to):
+            adjustmentCard(
+                headline: "이번 주는 이 달의 마지막 주예요",
+                detail: "다음 주로 옮기면 8월이라 이번 달 계획을 벗어나요. 대신 ‘\(event.title)’ 예산을 \(formatWon(to))으로 줄이면 이번 주에 \(formatWon(event.amount - to)) 여유가 생겨요.",
+                actionTitle: "예산 줄이기",
+                gain: event.amount - to
+            ) {
+                model.updateEventAmount(event, on: day, amount: to)
+                flash("‘\(event.title)’ 예산을 \(formatWon(to))으로 줄였어요. 이번 주에 \(formatWon(event.amount - to)) 여유가 생겼어요.")
+            }
+
+        case nil:
+            VStack(alignment: .leading, spacing: 8) {
+                LabelBadge(text: "조정안", color: KB.violet)
+                Text("이번 주에 조정할 일정이 없어요.")
+                    .font(.system(size: 14, weight: .semibold)).foregroundStyle(KB.ink)
+                Text("남은 일정이 모두 지켜두기로 한 소비예요. 8월 계획에서 새 날짜를 잡아 주세요.")
+                    .font(.system(size: 12.5)).foregroundStyle(KB.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(16)
+            .elevatedCard(16)
+        }
+    }
+
+    private func adjustmentCard(headline: String, detail: String, actionTitle: String,
+                                gain: Int, apply: @escaping () -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 7) {
+                LabelBadge(text: "AI 조정안", color: KB.violet)
+                Text(headline)
+                    .font(.system(size: 14.5, weight: .bold)).foregroundStyle(KB.ink)
+            }
+            Text(detail)
+                .font(.system(size: 13)).foregroundStyle(KB.muted).lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                apply()
+                showAdjustmentPlan = false
+            } label: {
+                HStack {
+                    Text(actionTitle)
+                    Spacer()
+                    Text("+\(formatWon(gain))")
+                }
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .accessibilityIdentifier("apply-adjustment")
+        }
+        .padding(16)
+        .elevatedCard(16)
     }
 
     /// 주간 날짜 스트립 — 가로로 넘기면 다른 주(3주차·4주차…)를 본다. 날짜를 누르면 그 날 타임테이블.
@@ -652,7 +702,7 @@ struct WeeklyPlanView: View {
             IconBadge(systemName: item.symbol,
                       background: item.isRisky ? KB.cautionSoft : (item.isProtected ? KB.greenSoft : KB.yellowSoft),
                       size: 34)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 5) {
                     Text(item.title).font(.system(size: 14, weight: .medium)).foregroundStyle(KB.ink).lineLimit(1)
                     if item.isProtected {
@@ -672,12 +722,22 @@ struct WeeklyPlanView: View {
                             .background(KB.line.opacity(0.4), in: Capsule())
                     }
                 }
+                if canMoveToNextWeek(item) {
+                    Text("다음 주로 이동 시 +\(formatWon(item.amount))")
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(KB.green)
+                }
             }
             Spacer(minLength: 8)
             Image(systemName: "chevron.right").font(.system(size: 12)).foregroundStyle(KB.muted.opacity(0.6))
         }
         .padding(.vertical, 10).padding(.horizontal, 12)
         .elevatedCard(14)
+    }
+
+    private func canMoveToNextWeek(_ item: WeekSpendItem) -> Bool {
+        item.amount > 0 && !item.isProtected && item.dayNumber >= model.todayDayNumber
+            && item.dayNumber + 7 <= model.daysInMonth
     }
 
     /// 캘린더엔 없지만 과거 주기상 이번 주에 나갈 것 같은 지출.
@@ -760,7 +820,7 @@ struct WeeklyPlanView: View {
                     Text("모두 쓰면 \(formatWon(model.predictedShortfall)) 모자라요. 하나를 다음 주로 미루면 계획을 지킬 수 있어요.")
                         .foregroundStyle(KB.caution)
                 } else {
-                    Text("모두 반영하면 이번 주 사용 가능액은 \(formatWon(model.weeklyBudgetAfterPredictions))이 돼요.")
+                    Text("모두 반영하면 이번 주 추가 사용 가능액은 \(formatWon(model.weeklyBudgetAfterPredictions))이 돼요.")
                         .foregroundStyle(KB.muted)
                 }
             }
@@ -780,7 +840,7 @@ struct WeeklyPlanView: View {
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("이번 주 일정비는 \(formatWonRange(model.plannedSpendLow, model.plannedSpendHigh))이에요.")
+                    Text("이번 주 예상 지출은 \(formatWonRange(model.plannedSpendLow, model.plannedSpendHigh))이에요.")
                         .font(.body.weight(.semibold))
                         .foregroundStyle(KB.ink)
                         .fixedSize(horizontal: false, vertical: true)
@@ -811,17 +871,10 @@ struct WeeklyPlanView: View {
                 .background(KB.yellow, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
             }
             .buttonStyle(.plain)
-            .accessibilityHint("이번 주 사용 가능액의 계산 기준을 봅니다")
+            .accessibilityHint("이번 주 추가 사용 가능액의 계산 기준을 봅니다")
         }
         .padding(18)
         .elevatedCard(18)
-    }
-
-    private var actions: some View {
-        Button { sheet = .addEvent } label: {
-            HStack { Image(systemName: "plus"); Text("일정 추가하기") }
-        }
-        .buttonStyle(SecondaryButtonStyle())
     }
 
     private var benefitRow: some View {
@@ -855,11 +908,11 @@ struct WeeklyPlanView: View {
 
             // 요약 — 캘린더 바로 위
             VStack(spacing: 0) {
-                summaryLine("7월 일정비 예상",
+                summaryLine("7월 예상 지출",
                             formatRange(low: model.julyEstimateLow, high: model.julyEstimateHigh),
                             highlight: true)
                 Divider().overlay(KB.line)
-                summaryLine("이번 주 일정비 예상",
+                summaryLine("이번 주 예상 지출",
                             formatRange(low: model.plannedSpendLow, high: model.plannedSpendHigh))
                 Divider().overlay(KB.line)
                 summaryLine("월말 여유 예상",
@@ -993,14 +1046,14 @@ struct WeeklyPlanView: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
                     Image(systemName: "equal.circle.fill").font(.system(size: 34)).foregroundStyle(KB.green)
-                    Text("약 \(formatWon(roundedWeeklyBudget)) 계산 기준").font(.system(size: 19, weight: .bold)).foregroundStyle(KB.ink)
+                    Text("\(formatWon(model.weeklyBudget)) 계산 기준").font(.system(size: 19, weight: .bold)).foregroundStyle(KB.ink)
                 }
                 Text("월 수입 220만원은 아직 데모 가정이에요. 고정비는 확인한 값이고, 설정에서 언제든 바꿀 수 있어요.")
                     .font(.system(size: 13)).foregroundStyle(KB.muted).lineSpacing(3)
                 VStack(spacing: 8) {
                     calculationRow("월 고정비", formatWon(BudgetEngine.fixed))
                     calculationRow("적금 목표", formatWon(model.savingsGoal))
-                    calculationRow("7월 \(model.todayDayNumber - 1)일까지 일정비", formatWon(model.spentToDate))
+                    calculationRow("7월 \(model.todayDayNumber - 1)일까지 지출", formatWon(model.spentToDate))
                     if BudgetEngine.installmentCarryover > 0 {
                         calculationRow("할부로 다음 달에 넘어갈 돈", formatWon(BudgetEngine.installmentCarryover))
                     }
@@ -1021,7 +1074,9 @@ struct WeeklyPlanView: View {
         }
     }
 
-    private var roundedWeeklyBudget: Int { roundToTenThousand(model.weeklyBudget) }
+    /// 화면의 큰 숫자는 반올림하지 않는다.
+    /// 만원 단위로 굴리면 5.2만원짜리 일정을 취소했을 때 14만 → 20만처럼 보여
+    /// 사용자가 직접 더해본 값과 어긋난다. 계산이 맞아도 화면이 틀린 말을 하는 셈이다.
 
     private func calculationRow(_ title: String, _ value: String, emphasized: Bool = false) -> some View {
         HStack {
@@ -1148,7 +1203,7 @@ struct DayTimetableBody: View {
             HStack(spacing: 8) {
                 Button {
                     onMove?(ev)
-                    onAction("‘\(ev.title)’를 다음 주로 옮겼어요. 이번 주 사용 가능액을 지켰어요.")
+                    onAction("‘\(ev.title)’를 다음 주로 옮겼어요. 이번 주 추가 사용 가능액을 지켰어요.")
                 } label: {
                     Text("다음 주로 옮기기")
                         .font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.ink)

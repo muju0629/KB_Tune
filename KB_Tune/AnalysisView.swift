@@ -37,21 +37,29 @@ struct AnalysisView: View {
     @State private var extracted: ExtractResponse?
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    uploadSection
-                    if !store.shots.isEmpty { extractSection }
-                    breakdownSection
-                    insight
-                    productEntry
-                }
-                .padding(20)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                title
+                uploadSection
+                if !store.shots.isEmpty { extractSection }
+                breakdownSection
+                insight
+                productEntry
             }
-            .background(KB.canvas)
-            .navigationTitle("소비 분석")
-            .navigationBarTitleDisplayMode(.inline)
+            .padding(20)
         }
+        .background(KB.canvas)
+    }
+
+    /// 좌우로 넘기는 페이지형 탭 안에서는 NavigationStack을 두지 않는다.
+    /// 페이지를 넘기는 도중 내비게이션 바가 다시 배치되면서 UIKit이 스스로 죽는 일이 있다.
+    /// 여기서 필요한 건 제목 한 줄뿐이라 그냥 텍스트로 그린다.
+    private var title: some View {
+        Text("소비 분석")
+            .font(.system(size: 17, weight: .semibold))
+            .foregroundStyle(KB.ink)
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, 2)
     }
 
     // MARK: 업로드

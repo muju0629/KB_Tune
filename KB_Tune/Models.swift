@@ -108,6 +108,20 @@ struct PlanDay: Identifiable {
     var hasRisk: Bool { events.contains { $0.riskNote != nil } }
 }
 
+/// 이번 주 부담을 줄이는 조정안. 옮길 수 있으면 옮기고, 아니면 금액을 줄인다.
+enum BudgetAdjustment {
+    case move(day: Int, event: DayEvent)
+    case reduce(day: Int, event: DayEvent, to: Int)
+
+    /// 이 조정안을 받아들이면 이번 주에 생기는 여유.
+    var gain: Int {
+        switch self {
+        case .move(_, let event): event.amount
+        case .reduce(_, let event, let to): event.amount - to
+        }
+    }
+}
+
 /// 주간 지출 카드용 파생 아이템
 struct WeekSpendItem: Identifiable {
     let id = UUID()
@@ -150,7 +164,7 @@ struct SpendCategory: Identifiable {
 // MARK: - 앱 상태
 
 /// 하단 내비게이션 탭 — 화면 간 프로그래밍 방식 이동에 쓴다.
-enum MainTab: Hashable { case weekly, chat, analysis, products }
+enum MainTab: Hashable { case weekly, analysis, chat, products }
 
 final class AppModel: ObservableObject {
     // 페르소나
@@ -494,6 +508,48 @@ final class AppModel: ObservableObject {
         guard let i = calendarDays.firstIndex(where: { $0.dayNumber == dayNumber }),
               let j = calendarDays[i].events.firstIndex(where: { $0.id == event.id }) else { return }
         calendarDays[i].events[j].calendarEventID = id
+    }
+
+    /// 다음 주로 옮겨서 이번 주 부담을 줄일 수 있는 첫 일정.
+    ///
+    /// 주간 화면의 조정안과 챗봇의 미루기 제안이 같은 일정을 가리켜야 한다.
+    /// 두 곳에서 따로 고르면 "옮기면 이번 주가 넉넉해져요"라고 말해놓고
+    /// 다음 주 일정을 옮기는 일이 생긴다. 그래서 이번 주 안에서만 고른다.
+    /// 지켜두기로 한 소비와, 옮기면 이번 달을 넘어가는 일정은 제외한다.
+    var movableEventThisWeek: (day: Int, event: DayEvent)? {
+        for day in week.sorted(by: { $0.dayNumber < $1.dayNumber })
+            where day.dayNumber >= todayDayNumber && day.dayNumber + 7 <= daysInMonth {
+            if let event = day.events.first(where: { $0.amount > 0 && !$0.isProtected }) {
+                return (day.dayNumber, event)
+            }
+        }
+        return nil
+    }
+
+    /// 금액을 줄여볼 만한 이번 주 일정 — 오늘 이후, 지켜두기로 한 소비는 빼고, 가장 큰 것부터.
+    var reducibleEventThisWeek: (day: Int, event: DayEvent)? {
+        let candidates = week
+            .filter { $0.dayNumber >= todayDayNumber }
+            .flatMap { day in
+                day.events.filter { $0.amount > 0 && !$0.isProtected }
+                    .map { (day: day.dayNumber, event: $0) }
+            }
+        return candidates.max { $0.event.amount < $1.event.amount }
+    }
+
+    /// 이번 주 부담을 줄이는 방법 하나.
+    ///
+    /// 달의 마지막 주에는 다음 주가 다음 달이라 이 달 캘린더 안에 옮길 곳이 없다.
+    /// 이동만 제안하면 그 주 내내 조정안이 비어 버리므로, 그때는 금액을 줄이는 쪽으로 넘어간다.
+    var suggestedAdjustment: BudgetAdjustment? {
+        if let movable = movableEventThisWeek {
+            return .move(day: movable.day, event: movable.event)
+        }
+        guard let biggest = reducibleEventThisWeek else { return nil }
+        // 만원 단위로 내려 잡는다 — 26,300원 같은 금액은 지키기 어렵다.
+        let halved = (biggest.event.amount / 2 / 10_000) * 10_000
+        guard halved > 0, halved < biggest.event.amount else { return nil }
+        return .reduce(day: biggest.day, event: biggest.event, to: halved)
     }
 
     /// 위험 일정을 7일 뒤로 옮기고 경고를 지운다. 이번 주 부담에서 빠져 사용 가능액이 회복된다.

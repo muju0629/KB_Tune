@@ -86,7 +86,7 @@ enum BillingCycle {
         CardTransaction(day: 13, merchant: "네이버페이", amount: 63_000, hour: 12.45),
         CardTransaction(day: 12, merchant: "쿠팡(쿠페이)", amount: 21_160, hour: 21.233),
         CardTransaction(day: 9, merchant: "쿠팡(쿠페이)", amount: 36_570, hour: 20.6),
-        CardTransaction(day: 9, merchant: "인터넷상거래", amount: 181_180, hour: 13.367,
+        CardTransaction(day: 9, merchant: "무신사", amount: 181_180, hour: 13.367,
                         installmentMonths: 2, isKBPay: true),
         // 카드사 앱 총액(633,220원 · 14건)과 맞추기 위한 나머지 3건.
         // 스크린샷에 안 잡힌 구간이라 개별 내역 대신 합계로만 둔다(시각도 모른다).

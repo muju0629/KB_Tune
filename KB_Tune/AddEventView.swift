@@ -271,13 +271,13 @@ struct AddEventView: View {
     private var cardImpactRow: some View {
         let b = model.billing
         if dayNumber <= BillingCycle.closingDay {
-            impactRow("\(b.payLabel) 카드값",
+            impactRow("\(b.payLabel) 카드 청구액",
                       from: formatWon(b.dueNext),
                       to: formatWon(BillingCycle.projectedDue(adding: amount, on: dayNumber)),
                       warn: false, tint: KB.ink)
         } else {
             HStack {
-                Text("\(b.nextPayLabel) 카드값").font(.system(size: 13)).foregroundStyle(KB.muted)
+                Text("\(b.nextPayLabel) 카드 청구액").font(.system(size: 13)).foregroundStyle(KB.muted)
                 Spacer()
                 Text("+\(formatWon(amount))").font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(KB.ink)
@@ -343,7 +343,7 @@ struct AddEventView: View {
             // 영향
             VStack(alignment: .leading, spacing: 10) {
                 Text("이 일정을 넣으면").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
-                impactRow("이번 주 사용 가능액", from: formatWon(before), to: formatWon(max(after, 0)),
+                impactRow("이번 주 추가 사용 가능액", from: formatWon(before), to: formatWon(max(after, 0)),
                           warn: after < 0)
                 impactRow("적금 목표 확률", from: "\(probBefore)%", to: "\(probAfter)%",
                           warn: (probBefore - probAfter) >= 10)
@@ -364,7 +364,7 @@ struct AddEventView: View {
                             .foregroundStyle(KB.ink)
                     }
                     adjustmentRow(id: "keep", title: "그대로 추가",
-                                  detail: "사용 가능액 \(formatWon(max(after, 0))) · 확률 \(probAfter)%")
+                                  detail: "추가 사용 가능액 \(formatWon(max(after, 0))) · 확률 \(probAfter)%")
                     adjustmentRow(id: "half", title: "예산을 절반으로 줄이기",
                                   detail: "\(formatWon(amount / 2))로 조정하면 확률 \(model.probability(for: model.direction, extraCommitted: amount / 2))%")
                     adjustmentRow(id: "next", title: "다음 주로 옮기기",

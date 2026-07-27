@@ -158,14 +158,14 @@ struct CardRecommendPage: View {
     private func spendSummary(_ reco: CardReco) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                Text("7월 일정비 예상").font(.system(size: 12)).foregroundStyle(KB.muted)
+                Text("7월 예상 지출").font(.system(size: 12)).foregroundStyle(KB.muted)
                 Spacer()
                 Text(model.analysisPeriod).font(.system(size: 11)).foregroundStyle(KB.muted)
             }
             Text(formatWon(model.spendMonthly))
                 .money(27, weight: .heavy).foregroundStyle(KB.ink)
             TierBar(recognized: reco.recognizedSpend, tiers: [200_000, 300_000, 400_000])
-            Text("카드 전월실적이 아니라 캘린더 일정비예요. 실제 실적은 카드 내역에서 확인해 주세요.")
+            Text("카드 전월실적이 아니라 캘린더 예상 지출이에요. 실제 실적은 카드 내역에서 확인해 주세요.")
                 .font(.system(size: 11)).foregroundStyle(KB.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -545,7 +545,7 @@ struct SavingsRecommendPage: View {
             VStack(spacing: 8) {
                 cashRow("수입", model.monthlyIncome)
                 cashRow("고정비", -BudgetEngine.fixed)
-                cashRow("일정비", -model.spendMonthly)
+                cashRow("예상 지출", -model.spendMonthly)
                 Divider().overlay(KB.line)
                 cashRow("여유", free, emphasized: true)
             }
@@ -553,7 +553,7 @@ struct SavingsRecommendPage: View {
                 Image(systemName: "checkmark.seal.fill").font(.system(size: 12)).foregroundStyle(KB.green)
                 Text(model.savingsGoal <= free
                      ? "목표 저축 \(formatWon(model.savingsGoal))은 여유 안이라 현금 흐름을 침범하지 않아요."
-                     : "목표 저축 \(formatWon(model.savingsGoal))은 여유 \(formatWon(free))보다 커요. 일정비를 줄이거나 목표를 낮춰야 지킬 수 있어요.")
+                     : "목표 저축 \(formatWon(model.savingsGoal))은 여유 \(formatWon(free))보다 커요. 예상 지출을 줄이거나 목표를 낮춰야 지킬 수 있어요.")
                     .font(.system(size: 12)).foregroundStyle(KB.ink)
                     .fixedSize(horizontal: false, vertical: true)
             }

@@ -52,7 +52,7 @@ struct CalendarImportView: View {
                 .lineSpacing(4)
                 .padding(.top, 22)
 
-            Text("이번 주 약속·모임을 읽어와, 각 일정에 예상 지출을 붙이고 사용 가능액을 다시 계산해요. 캘린더 내용은 기기에서만 사용해요.")
+            Text("이번 주 약속·모임을 읽어와, 각 일정에 예상 지출을 붙이고 추가 사용 가능액을 다시 계산해요. 캘린더 내용은 기기에서만 사용해요.")
                 .font(.system(size: 13.5))
                 .foregroundStyle(KB.muted)
                 .multilineTextAlignment(.center)

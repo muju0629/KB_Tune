@@ -15,9 +15,12 @@ struct MainTabView: View {
 
     var body: some View {
         TabView(selection: $model.selectedTab) {
+            // 순서는 실제 사용 흐름과 같다 — 이번 주 계획을 보고(주간),
+            // 왜 그런지 확인하고(분석), 어떻게 바꿀지 상의하고(대화), 상품으로 간다.
+            // 좌우로 밀기만 해도 이 흐름이 그대로 이어진다.
             WeeklyPlanView().tag(MainTab.weekly)
-            ChatbotView().tag(MainTab.chat)
             AnalysisView().tag(MainTab.analysis)
+            ChatbotView().tag(MainTab.chat)
             ProductsTabView().tag(MainTab.products)
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
@@ -41,8 +44,8 @@ struct CustomTabBar: View {
     // 선택되면 채워진 아이콘으로 바뀐다 — KB Pay를 비롯한 금융 앱의 공통 문법.
     private let items: [(tab: MainTab, label: String, icon: String, onIcon: String)] = [
         (.weekly,   "주간",     "calendar.day.timeline.left", "calendar.day.timeline.left"),
-        (.chat,     "대화",     "bubble.left.and.bubble.right", "bubble.left.and.bubble.right.fill"),
         (.analysis, "분석",     "chart.bar.xaxis", "chart.bar.xaxis"),
+        (.chat,     "대화",     "bubble.left.and.bubble.right", "bubble.left.and.bubble.right.fill"),
         (.products, "카드·적금", "creditcard", "creditcard.fill"),
     ]
 

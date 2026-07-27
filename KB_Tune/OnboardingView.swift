@@ -220,7 +220,7 @@ struct OnboardingView: View {
                         .foregroundStyle(KB.ink)
                         .contentTransition(.numericText())
                         .animation(.snappy(duration: 0.2), value: pct)
-                    Text("저축 후 남는 \(formatWon(afterSaving))에서 일정비와 고정비를 계산해요.")
+                    Text("저축 후 남는 \(formatWon(afterSaving))에서 예상 지출과 고정비를 계산해요.")
                         .font(.system(size: 12))
                         .foregroundStyle(KB.muted)
                         .lineSpacing(2)
