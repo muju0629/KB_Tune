@@ -194,17 +194,22 @@ struct WeeklyPlanView: View {
 
     private var weekContent: some View {
         VStack(alignment: .leading, spacing: 22) {
+            // 일정이 먼저다. 이번 주에 뭐가 잡혀 있는지 보고 나서 금액을 따진다.
+            // 계산 카드(이번 주 계산·다음 달·카드값)는 근거라 일정 아래에 둔다.
             hero.appearStagger(0)
-            rolloverCard.appearStagger(1)
-            nextMonthCard.appearStagger(2)
             if model.shouldShowDailyClose { dailyCloseCard.appearStagger(1) }
-            cardBillingCard.appearStagger(2)
-            weekStripPager.appearStagger(3)
-            spendTimeline.appearStagger(4)
-            if !model.upcomingSpends.isEmpty { predictedSpends.appearStagger(5) }
-            recommendation.appearStagger(6)
-            actions.appearStagger(7)
-            benefitRow.appearStagger(8)
+            weekStripPager.appearStagger(2)
+            spendTimeline.appearStagger(3)
+            if !model.upcomingSpends.isEmpty { predictedSpends.appearStagger(4) }
+
+            // 여기서부터 금액 근거
+            rolloverCard.appearStagger(5)
+            cardBillingCard.appearStagger(6)
+            nextMonthCard.appearStagger(7)
+
+            recommendation.appearStagger(8)
+            actions.appearStagger(9)
+            benefitRow.appearStagger(10)
         }
     }
 
@@ -357,7 +362,7 @@ struct WeeklyPlanView: View {
             VStack(alignment: .leading, spacing: 11) {
                 HStack(spacing: 7) {
                     LabelBadge(text: "이번 주 계산", color: KB.violet)
-                    Text(w.label).font(.system(size: 13.5, weight: .semibold)).foregroundStyle(KB.ink)
+                    Text(w.label).font(.system(size: 14.5, weight: .bold)).foregroundStyle(KB.ink)
                     Spacer()
                 }
 
@@ -375,21 +380,21 @@ struct WeeklyPlanView: View {
                     }
                     Divider().overlay(KB.line)
                     HStack {
-                        Text("더 쓸 수 있는 금액").font(.system(size: 13.5, weight: .semibold))
+                        Text("더 쓸 수 있는 금액").font(.system(size: 14.5, weight: .semibold))
                             .foregroundStyle(KB.ink)
                         Spacer()
-                        Text(formatWon(w.available)).money(16)
+                        Text(formatWon(w.available)).money(17)
                             .foregroundStyle(w.isOverspent ? KB.caution : KB.ink)
                     }
                 }
 
                 if w.isOverspent {
                     Text("이번 주는 배분보다 \(formatWon(-w.carriesForward)) 더 쓰게 돼요. 다음 주 금액에서 그만큼 빠져요.")
-                        .font(.system(size: 11.5)).foregroundStyle(KB.caution).lineSpacing(2)
+                        .font(.system(size: 12.5)).foregroundStyle(KB.caution).lineSpacing(3)
                         .fixedSize(horizontal: false, vertical: true)
                 } else if w.carriesForward > 0 {
                     Text("이번 주에 안 쓰면 \(formatWon(w.carriesForward))이 다음 주로 넘어가요.")
-                        .font(.system(size: 11.5)).foregroundStyle(KB.muted).lineSpacing(2)
+                        .font(.system(size: 12.5)).foregroundStyle(KB.muted).lineSpacing(3)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -409,7 +414,7 @@ struct WeeklyPlanView: View {
                 HStack(spacing: 7) {
                     LabelBadge(text: "다음 달", color: KB.info)
                     Text("\(model.nextMonthLabel) 첫째 주는 이렇게 시작해요")
-                        .font(.system(size: 13.5, weight: .semibold)).foregroundStyle(KB.ink)
+                        .font(.system(size: 14.5, weight: .bold)).foregroundStyle(KB.ink)
                     Spacer()
                 }
 
@@ -424,15 +429,15 @@ struct WeeklyPlanView: View {
                     Divider().overlay(KB.line)
                     HStack {
                         Text("\(model.nextMonthLabel) 첫 주 시작 금액")
-                            .font(.system(size: 13.5, weight: .semibold)).foregroundStyle(KB.ink)
+                            .font(.system(size: 14.5, weight: .semibold)).foregroundStyle(KB.ink)
                         Spacer()
-                        Text(formatWon(max(0, next.allowance))).money(16)
+                        Text(formatWon(max(0, next.allowance))).money(17)
                             .foregroundStyle(next.allowance >= 0 ? KB.ink : KB.caution)
                     }
                 }
 
                 Text("아직 \(model.nextMonthLabel) 일정은 넣지 않았어요. 일정을 잡으면 여기서 바로 빠져요.")
-                    .font(.system(size: 11.5)).foregroundStyle(KB.muted).lineSpacing(2)
+                    .font(.system(size: 12.5)).foregroundStyle(KB.muted).lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(16)
@@ -441,17 +446,21 @@ struct WeeklyPlanView: View {
         }
     }
 
+    /// 항목 이름은 값과 같은 잉크색으로 두고 굵기로만 위계를 준다.
+    /// 흐리게 처리하면 계산 근거가 안 읽혀 카드의 목적 자체가 사라진다.
+    /// 근거 문장에는 불투명도를 씌우지 않는다 — 흰 배경과 섞이면 명암비가 기준 아래로 떨어진다.
     private func ledgerRow(_ title: String, _ amount: Int, note: String?,
                            tint: Color = KB.ink) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 3) {
             HStack {
-                Text(title).font(.system(size: 13)).foregroundStyle(KB.muted)
+                Text(title).font(.system(size: 14)).foregroundStyle(KB.ink)
                 Spacer()
                 Text((amount > 0 ? "+" : "") + formatWon(amount))
-                    .money(13.5, weight: .semibold).foregroundStyle(tint)
+                    .money(14.5, weight: .semibold).foregroundStyle(tint)
             }
             if let note {
-                Text(note).font(.system(size: 11)).foregroundStyle(KB.muted.opacity(0.85))
+                Text(note).font(.system(size: 12.5)).foregroundStyle(KB.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
