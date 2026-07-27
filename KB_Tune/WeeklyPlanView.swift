@@ -105,7 +105,7 @@ struct WeeklyPlanView: View {
 
             if let toast {
                 Text(toast)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.kb(13, .medium))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 18).padding(.vertical, 12)
                     .background(KB.ink.opacity(0.92), in: Capsule())
@@ -146,7 +146,7 @@ struct WeeklyPlanView: View {
     private var planToolbar: some View {
         HStack(spacing: 10) {
             Text("7월 \(viewedDay)일 \(weekdayName(viewedDay))요일")
-                .font(.system(size: 18, weight: .bold))
+                .font(.kb(18, .bold))
                 .foregroundStyle(KB.ink)
                 .accessibilityLabel(viewedDay == model.todayDayNumber
                                     ? "오늘 7월 \(viewedDay)일 \(weekdayName(viewedDay))요일"
@@ -158,7 +158,7 @@ struct WeeklyPlanView: View {
 
             Button { sheet = .settings } label: {
                 Image(systemName: "person.crop.circle")
-                    .font(.system(size: 21, weight: .regular))
+                    .font(.kb(21, .regular))
                     .foregroundStyle(KB.ink)
                     .frame(width: 44, height: 44)
             }
@@ -178,7 +178,7 @@ struct WeeklyPlanView: View {
                     withAnimation(switchSpring) { mode = option }
                 } label: {
                     Text(option.rawValue)
-                        .font(.system(size: 11.5, weight: .semibold))
+                        .font(.kb(11.5, .semibold))
                         .foregroundStyle(mode == option ? KB.ink : KB.muted)
                         .frame(width: 38, height: 30)
                         .background(mode == option ? KB.yellowSoft : .clear, in: Capsule())
@@ -226,7 +226,7 @@ struct WeeklyPlanView: View {
             HStack(spacing: 8) {
                 Image(systemName: "creditcard").font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(KB.muted)
-                Text("다음 결제일 청구액").font(.system(size: 12.5, weight: .semibold)).foregroundStyle(KB.ink)
+                Text("다음 결제일 청구액").font(.kb(12.5, .semibold)).foregroundStyle(KB.ink)
                 DDayBadge(days: b.daysUntilPay)
                 Spacer()
                 Text(formatWon(b.dueNext)).money(15).foregroundStyle(KB.ink)
@@ -250,17 +250,17 @@ struct WeeklyPlanView: View {
         return VStack(alignment: .leading, spacing: 12) {
             LabelBadge(text: "확인 필요", color: KB.caution)
             Text("결제 기록이 없는 지출이 있어요")
-                .font(.system(size: 15, weight: .semibold)).foregroundStyle(KB.ink)
+                .font(.kb(15, .semibold)).foregroundStyle(KB.ink)
             Text("‘\(names)’에 \(formatWon(total)) 쓸 예정이었는데 카드 결제 기록이 없어요. 현금으로 결제하셨나요?")
-                .font(.system(size: 13)).foregroundStyle(KB.muted)
+                .font(.kb(13)).foregroundStyle(KB.muted)
                 .fixedSize(horizontal: false, vertical: true)
 
             VStack(spacing: 6) {
                 ForEach(items) { ev in
                     HStack {
-                        Text(ev.title).font(.system(size: 13, weight: .medium)).foregroundStyle(KB.ink)
+                        Text(ev.title).font(.kb(13, .medium)).foregroundStyle(KB.ink)
                         Spacer()
-                        Text(formatWon(ev.amount)).font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+                        Text(formatWon(ev.amount)).font(.kb(13, .semibold)).foregroundStyle(KB.muted)
                     }
                 }
             }
@@ -273,7 +273,7 @@ struct WeeklyPlanView: View {
                     flash("현금 지출로 확인했어요. \(formatWon(total))을 이번 달 지출에 반영했어요.")
                 } label: {
                     Text("현금으로 결제했어요")
-                        .font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.ink)
+                        .font(.kb(13, .semibold)).foregroundStyle(KB.ink)
                         .frame(maxWidth: .infinity).padding(.vertical, 10)
                         .background(KB.yellow, in: Capsule())
                 }
@@ -283,7 +283,7 @@ struct WeeklyPlanView: View {
                     flash("아직 안 쓴 걸로 두고 예정 예산은 그대로 둘게요.")
                 } label: {
                     Text("아직 안 썼어요")
-                        .font(.system(size: 13, weight: .medium)).foregroundStyle(KB.muted)
+                        .font(.kb(13, .medium)).foregroundStyle(KB.muted)
                         .frame(maxWidth: .infinity).padding(.vertical, 10)
                         .background(.white, in: Capsule())
                         .overlay(Capsule().stroke(KB.line, lineWidth: 1))
@@ -303,7 +303,7 @@ struct WeeklyPlanView: View {
             VStack(alignment: .leading, spacing: 11) {
                 HStack(spacing: 7) {
                 LabelBadge(text: "주차별 예산 이월", color: KB.violet)
-                    Text(w.label).font(.system(size: 14.5, weight: .bold)).foregroundStyle(KB.ink)
+                    Text(w.label).font(.kb(14.5, .bold)).foregroundStyle(KB.ink)
                     Spacer()
                 }
 
@@ -321,7 +321,7 @@ struct WeeklyPlanView: View {
                     }
                     Divider().overlay(KB.line)
                     HStack {
-                        Text("추가 사용 가능액").font(.system(size: 14.5, weight: .semibold))
+                        Text("추가 사용 가능액").font(.kb(14.5, .semibold))
                             .foregroundStyle(KB.ink)
                         Spacer()
                         Text(formatWon(w.available)).money(17)
@@ -331,11 +331,11 @@ struct WeeklyPlanView: View {
 
                 if w.isOverspent {
                     Text("이번 주는 배분보다 \(formatWon(-w.carriesForward)) 더 쓰게 돼요. 다음 주 금액에서 그만큼 빠져요.")
-                        .font(.system(size: 12.5)).foregroundStyle(KB.caution).lineSpacing(3)
+                        .font(.kb(12.5)).foregroundStyle(KB.caution).lineSpacing(3)
                         .fixedSize(horizontal: false, vertical: true)
                 } else if w.carriesForward > 0 {
                     Text("이번 주에 안 쓰면 \(formatWon(w.carriesForward))이 다음 주로 넘어가요.")
-                        .font(.system(size: 12.5)).foregroundStyle(KB.muted).lineSpacing(3)
+                        .font(.kb(12.5)).foregroundStyle(KB.muted).lineSpacing(3)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -355,7 +355,7 @@ struct WeeklyPlanView: View {
                 HStack(spacing: 7) {
                     LabelBadge(text: "다음 달", color: KB.info)
                     Text("\(model.nextMonthLabel) 첫째 주는 이렇게 시작해요")
-                        .font(.system(size: 14.5, weight: .bold)).foregroundStyle(KB.ink)
+                        .font(.kb(14.5, .bold)).foregroundStyle(KB.ink)
                     Spacer()
                 }
 
@@ -370,7 +370,7 @@ struct WeeklyPlanView: View {
                     Divider().overlay(KB.line)
                     HStack {
                         Text("\(model.nextMonthLabel) 첫 주 시작 금액")
-                            .font(.system(size: 14.5, weight: .semibold)).foregroundStyle(KB.ink)
+                            .font(.kb(14.5, .semibold)).foregroundStyle(KB.ink)
                         Spacer()
                         Text(formatWon(max(0, next.allowance))).money(17)
                             .foregroundStyle(next.allowance >= 0 ? KB.ink : KB.caution)
@@ -378,7 +378,7 @@ struct WeeklyPlanView: View {
                 }
 
                 Text("아직 \(model.nextMonthLabel) 일정은 넣지 않았어요. 일정을 잡으면 여기서 바로 빠져요.")
-                    .font(.system(size: 12.5)).foregroundStyle(KB.muted).lineSpacing(3)
+                    .font(.kb(12.5)).foregroundStyle(KB.muted).lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(16)
@@ -394,13 +394,13 @@ struct WeeklyPlanView: View {
                            tint: Color = KB.ink) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack {
-                Text(title).font(.system(size: 14)).foregroundStyle(KB.ink)
+                Text(title).font(.kb(14)).foregroundStyle(KB.ink)
                 Spacer()
                 Text((amount > 0 ? "+" : "") + formatWon(amount))
                     .money(14.5, weight: .semibold).foregroundStyle(tint)
             }
             if let note {
-                Text(note).font(.system(size: 12.5)).foregroundStyle(KB.muted)
+                Text(note).font(.kb(12.5)).foregroundStyle(KB.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -409,11 +409,11 @@ struct WeeklyPlanView: View {
     private var hero: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("\(model.userName)님의 이번 주 예상 지출은 \(formatWon(model.plannedSpendTotal))")
-                .font(.system(size: 14, weight: .medium))
+                .font(.kb(14, .medium))
                 .foregroundStyle(KB.muted)
 
             Text("이번 주 추가 사용 가능액")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.kb(13, .semibold))
                 .foregroundStyle(KB.muted)
 
             // 화면에서 가장 큰 숫자라 더 조용하게 — 마지막 3%만 움직인다.
@@ -427,7 +427,7 @@ struct WeeklyPlanView: View {
                 .padding(.top, 2)
 
             Text(heroStatusText)
-                .font(.system(size: 19, weight: .semibold))
+                .font(.kb(19, .semibold))
                 .foregroundStyle(KB.ink)
                 .accessibilityIdentifier("budget-status")
 
@@ -504,9 +504,9 @@ struct WeeklyPlanView: View {
             VStack(alignment: .leading, spacing: 8) {
                 LabelBadge(text: "조정안", color: KB.violet)
                 Text("이번 주에 조정할 일정이 없어요.")
-                    .font(.system(size: 14, weight: .semibold)).foregroundStyle(KB.ink)
+                    .font(.kb(14, .semibold)).foregroundStyle(KB.ink)
                 Text("남은 일정이 모두 지켜두기로 한 소비예요. 8월 계획에서 새 날짜를 잡아 주세요.")
-                    .font(.system(size: 12.5)).foregroundStyle(KB.muted)
+                    .font(.kb(12.5)).foregroundStyle(KB.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(16)
@@ -520,10 +520,10 @@ struct WeeklyPlanView: View {
             HStack(spacing: 7) {
                 LabelBadge(text: "AI 조정안", color: KB.violet)
                 Text(headline)
-                    .font(.system(size: 14.5, weight: .bold)).foregroundStyle(KB.ink)
+                    .font(.kb(14.5, .bold)).foregroundStyle(KB.ink)
             }
             Text(detail)
-                .font(.system(size: 13)).foregroundStyle(KB.muted).lineSpacing(3)
+                .font(.kb(13)).foregroundStyle(KB.muted).lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
             Button {
                 apply()
@@ -548,9 +548,9 @@ struct WeeklyPlanView: View {
         return VStack(spacing: 10) {
             HStack {
                 Text("7월 \(viewed + 1)주차")
-                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.ink)
+                    .font(.kb(13, .semibold)).foregroundStyle(KB.ink)
                 if viewed == model.currentWeekIndex {
-                    Text("이번 주").font(.system(size: 10.5, weight: .bold)).foregroundStyle(KB.ink)
+                    Text("이번 주").font(.kb(10.5, .bold)).foregroundStyle(KB.ink)
                         .padding(.horizontal, 7).padding(.vertical, 2)
                         .background(KB.yellow, in: Capsule())
                 }
@@ -594,9 +594,9 @@ struct WeeklyPlanView: View {
             withAnimation(switchSpring) { selectedDay = day }
         } label: {
             VStack(spacing: 6) {
-                Text(day.weekday).font(.system(size: 12)).foregroundStyle(KB.muted)
+                Text(day.weekday).font(.kb(12)).foregroundStyle(KB.muted)
                 Text(day.dateLabel)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.kb(13, .semibold))
                     .foregroundStyle(KB.ink)
                     .frame(width: 36, height: 34)
                     .background {
@@ -626,7 +626,7 @@ struct WeeklyPlanView: View {
             if groups.isEmpty {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle").font(.system(size: 15)).foregroundStyle(KB.green)
-                    Text("이번 주 예정된 지출이 없어요.").font(.system(size: 13)).foregroundStyle(KB.muted)
+                    Text("이번 주 예정된 지출이 없어요.").font(.kb(13)).foregroundStyle(KB.muted)
                 }
                 .padding(.vertical, 4)
             } else {
@@ -655,9 +655,9 @@ struct WeeklyPlanView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 6) {
                     Text(items.first?.dayLabel ?? "")
-                        .font(.system(size: 12.5, weight: .semibold)).foregroundStyle(KB.ink)
+                        .font(.kb(12.5, .semibold)).foregroundStyle(KB.ink)
                     if isToday {
-                        Text("오늘").font(.system(size: 9.5, weight: .bold)).foregroundStyle(KB.ink)
+                        Text("오늘").font(.kb(9.5, .bold)).foregroundStyle(KB.ink)
                             .padding(.horizontal, 6).padding(.vertical, 1.5)
                             .background(KB.yellow, in: Capsule())
                     }
@@ -704,7 +704,7 @@ struct WeeklyPlanView: View {
                       size: 34)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 5) {
-                    Text(item.title).font(.system(size: 14, weight: .medium)).foregroundStyle(KB.ink).lineLimit(1)
+                    Text(item.title).font(.kb(14, .medium)).foregroundStyle(KB.ink).lineLimit(1)
                     if item.isProtected {
                         Image(systemName: "shield.fill").font(.system(size: 10)).foregroundStyle(KB.green)
                     }
@@ -717,14 +717,14 @@ struct WeeklyPlanView: View {
                     Text(estimateLabel(low: item.amountLow, high: item.amountHigh, estimated: item.isEstimated))
                         .money(12.5, weight: .medium).foregroundStyle(KB.muted)
                     if let purpose = item.purpose {
-                        Text(purpose).font(.system(size: 10.5, weight: .medium)).foregroundStyle(KB.muted)
+                        Text(purpose).font(.kb(10.5, .medium)).foregroundStyle(KB.muted)
                             .padding(.horizontal, 6).padding(.vertical, 2)
                             .background(KB.line.opacity(0.4), in: Capsule())
                     }
                 }
                 if canMoveToNextWeek(item) {
                     Text("다음 주로 이동 시 +\(formatWon(item.amount))")
-                        .font(.system(size: 11.5, weight: .semibold))
+                        .font(.kb(11.5, .semibold))
                         .foregroundStyle(KB.green)
                 }
             }
@@ -746,9 +746,9 @@ struct WeeklyPlanView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 7) {
                 LabelBadge(text: "AI 예측", color: KB.violet)
-                Text("이런 소비가 예상돼요").font(.system(size: 16, weight: .semibold)).foregroundStyle(KB.ink)
+                Text("이런 소비가 예상돼요").font(.kb(16, .semibold)).foregroundStyle(KB.ink)
                 Spacer()
-                Text("캘린더에 없는 지출").font(.system(size: 11)).foregroundStyle(KB.muted)
+                Text("캘린더에 없는 지출").font(.kb(11)).foregroundStyle(KB.muted)
             }
 
             ForEach(model.upcomingSpends, id: \.pattern.key) { spend in
@@ -757,9 +757,9 @@ struct WeeklyPlanView: View {
                         IconBadge(systemName: spend.pattern.symbol, background: .white, size: 38)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(spend.pattern.key)
-                                .font(.system(size: 14.5, weight: .semibold)).foregroundStyle(KB.ink)
+                                .font(.kb(14.5, .semibold)).foregroundStyle(KB.ink)
                             Text("7월 \(spend.expectedDay)일 즈음")
-                                .font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                                .font(.kb(11.5)).foregroundStyle(KB.muted)
                         }
                         Spacer(minLength: 8)
                         Text("예상 \(formatWon(spend.amount))")
@@ -770,10 +770,10 @@ struct WeeklyPlanView: View {
                     // 왜 이 금액인지 — 과거 기록을 그대로 보여준다
                     VStack(alignment: .leading, spacing: 3) {
                         Text(spend.reason)
-                            .font(.system(size: 12.5)).foregroundStyle(KB.ink)
+                            .font(.kb(12.5)).foregroundStyle(KB.ink)
                             .fixedSize(horizontal: false, vertical: true)
                         Text(SpendHistory.recordSummary(spend.pattern))
-                            .font(.system(size: 11)).foregroundStyle(KB.muted)
+                            .font(.kb(11)).foregroundStyle(KB.muted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(10)
@@ -788,7 +788,7 @@ struct WeeklyPlanView: View {
                             }
                         } label: {
                             Text("계획에 넣기")
-                                .font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.ink)
+                                .font(.kb(13, .semibold)).foregroundStyle(KB.ink)
                                 .frame(maxWidth: .infinity).padding(.vertical, 10)
                                 .background(KB.yellow, in: Capsule())
                         }
@@ -799,7 +799,7 @@ struct WeeklyPlanView: View {
                             }
                         } label: {
                             Text("이번엔 안 써요")
-                                .font(.system(size: 13, weight: .medium)).foregroundStyle(KB.muted)
+                                .font(.kb(13, .medium)).foregroundStyle(KB.muted)
                                 .frame(maxWidth: .infinity).padding(.vertical, 10)
                                 .background(.white, in: Capsule())
                                 .overlay(Capsule().stroke(KB.line, lineWidth: 1))
@@ -824,7 +824,7 @@ struct WeeklyPlanView: View {
                         .foregroundStyle(KB.muted)
                 }
             }
-            .font(.system(size: 11.5))
+            .font(.kb(11.5))
             .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -841,14 +841,14 @@ struct WeeklyPlanView: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text("이번 주 예상 지출은 \(formatWonRange(model.plannedSpendLow, model.plannedSpendHigh))이에요.")
-                        .font(.body.weight(.semibold))
+                        .font(.kb(17, .semibold))
                         .foregroundStyle(KB.ink)
                         .fixedSize(horizontal: false, vertical: true)
                     // 주간 합계는 지나간 날까지 포함 — 남은 금액과 창이 달라 함께 밝힌다.
                     Text(model.remainingThisWeek > 0
                          ? "7월 \(model.todayDayNumber)일 기준 아직 안 쓴 건 \(formatWon(model.remainingThisWeek))이에요."
                          : "이번 주 남은 확정 일정은 없어요.")
-                        .font(.subheadline)
+                        .font(.kb(15))
                         .foregroundStyle(KB.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -862,9 +862,9 @@ struct WeeklyPlanView: View {
                     Text("계산 기준 보기")
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .font(.caption.weight(.bold))
+                        .font(.kb(12, .bold))
                 }
-                .font(.body.weight(.semibold))
+                .font(.kb(17, .semibold))
                 .foregroundStyle(KB.ink)
                 .padding(.horizontal, 16)
                 .frame(maxWidth: .infinity, minHeight: 50)
@@ -882,8 +882,8 @@ struct WeeklyPlanView: View {
             HStack(spacing: 12) {
                 IconBadge(systemName: "magnifyingglass", background: KB.yellowSoft)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("내 소비에 맞는 카드·적금 알아보기").font(.system(size: 14, weight: .semibold)).foregroundStyle(KB.ink)
-                    Text("계획을 세운 뒤 참고할 수 있어요").font(.system(size: 12)).foregroundStyle(KB.muted)
+                    Text("내 소비에 맞는 카드·적금 알아보기").font(.kb(14, .semibold)).foregroundStyle(KB.ink)
+                    Text("계획을 세운 뒤 참고할 수 있어요").font(.kb(12)).foregroundStyle(KB.muted)
                 }
                 Spacer()
                 Image(systemName: "chevron.right").font(.system(size: 14)).foregroundStyle(KB.muted)
@@ -901,9 +901,9 @@ struct WeeklyPlanView: View {
             // 헤더
             VStack(alignment: .leading, spacing: 4) {
                 Text(model.monthLabel)
-                    .font(.system(size: 24, weight: .bold)).foregroundStyle(KB.ink)
+                    .font(.kb(24, .bold)).foregroundStyle(KB.ink)
                 Text("캘린더 일정으로 계산한 예상 금액이에요")
-                    .font(.system(size: 13)).foregroundStyle(KB.muted)
+                    .font(.kb(13)).foregroundStyle(KB.muted)
             }
 
             // 요약 — 캘린더 바로 위
@@ -936,16 +936,16 @@ struct WeeklyPlanView: View {
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 Text("타임테이블")
-                    .font(.system(size: 16, weight: .semibold)).foregroundStyle(KB.ink)
+                    .font(.kb(16, .semibold)).foregroundStyle(KB.ink)
                 if d == model.todayDayNumber {
-                    Text("오늘").font(.system(size: 10.5, weight: .bold)).foregroundStyle(KB.ink)
+                    Text("오늘").font(.kb(10.5, .bold)).foregroundStyle(KB.ink)
                         .padding(.horizontal, 7).padding(.vertical, 2)
                         .background(KB.yellow, in: Capsule())
                 }
                 Spacer()
                 if let day, day.spendTotal > 0 {
                     Text(estimateLabel(low: day.spendLow, high: day.spendHigh, estimated: day.hasEstimate))
-                        .font(.system(size: 12.5, weight: .medium)).foregroundStyle(KB.muted)
+                        .font(.kb(12.5, .medium)).foregroundStyle(KB.muted)
                 }
             }
 
@@ -958,7 +958,7 @@ struct WeeklyPlanView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "info.circle").foregroundStyle(KB.muted)
                     Text("이 날은 예정된 지출이 없어요. 대화 탭에서 일정을 추가할 수 있어요.")
-                        .font(.system(size: 12.5)).foregroundStyle(KB.muted)
+                        .font(.kb(12.5)).foregroundStyle(KB.muted)
                 }
                 .padding(14).frame(maxWidth: .infinity, alignment: .leading)
                 .background(KB.greenSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -978,7 +978,7 @@ struct WeeklyPlanView: View {
         VStack(spacing: 8) {
             HStack(spacing: 0) {
                 ForEach(["월", "화", "수", "목", "금", "토", "일"], id: \.self) { w in
-                    Text(w).font(.system(size: 12)).foregroundStyle(KB.muted)
+                    Text(w).font(.kb(12)).foregroundStyle(KB.muted)
                         .frame(maxWidth: .infinity)
                 }
             }
@@ -1005,7 +1005,7 @@ struct WeeklyPlanView: View {
         } label: {
             VStack(spacing: 2) {
                 Text("\(d)")
-                    .font(.system(size: 13.5, weight: isToday ? .bold : .regular))
+                    .font(.kb(13.5, isToday ? .bold : .regular))
                     .foregroundStyle(KB.ink)
                     .frame(width: 30, height: 30)
                     .background {
@@ -1014,7 +1014,7 @@ struct WeeklyPlanView: View {
                     }
                 if let day, day.spendTotal > 0 {
                     Text(compactSpend(day.spendTotal))
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.kb(11, .semibold))
                         .foregroundStyle(KB.expenseRed)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
@@ -1029,10 +1029,10 @@ struct WeeklyPlanView: View {
 
     private func summaryLine(_ title: String, _ value: String, highlight: Bool = false, tint: Color = KB.ink) -> some View {
         HStack {
-            Text(title).font(.system(size: 14)).foregroundStyle(highlight ? KB.ink : KB.muted)
+            Text(title).font(.kb(14)).foregroundStyle(highlight ? KB.ink : KB.muted)
                 .lineLimit(1).layoutPriority(1)
             Spacer(minLength: 8)
-            Text(value).font(.system(size: 15, weight: .semibold)).foregroundStyle(tint)
+            Text(value).font(.kb(15, .semibold)).foregroundStyle(tint)
                 .lineLimit(1).minimumScaleFactor(0.75)
         }
         .padding(.horizontal, 16).padding(.vertical, 13)
@@ -1046,10 +1046,10 @@ struct WeeklyPlanView: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
                     Image(systemName: "equal.circle.fill").font(.system(size: 34)).foregroundStyle(KB.green)
-                    Text("\(formatWon(model.weeklyBudget)) 계산 기준").font(.system(size: 19, weight: .bold)).foregroundStyle(KB.ink)
+                    Text("\(formatWon(model.weeklyBudget)) 계산 기준").font(.kb(19, .bold)).foregroundStyle(KB.ink)
                 }
                 Text("월 수입 220만원은 아직 데모 가정이에요. 고정비는 확인한 값이고, 설정에서 언제든 바꿀 수 있어요.")
-                    .font(.system(size: 13)).foregroundStyle(KB.muted).lineSpacing(3)
+                    .font(.kb(13)).foregroundStyle(KB.muted).lineSpacing(3)
                 VStack(spacing: 8) {
                     calculationRow("월 고정비", formatWon(BudgetEngine.fixed))
                     calculationRow("적금 목표", formatWon(model.savingsGoal))
@@ -1062,7 +1062,7 @@ struct WeeklyPlanView: View {
                     calculationRow("추가 사용 가능액", formatWon(model.weeklyBudget), emphasized: true)
                 }
                 Text("\(formatWon(model.remainingBudget)) ÷ 남은 \(BudgetEngine.remainingWeeks)주 − 확정 일정 \(formatWon(model.committedThisWeek))")
-                    .font(.system(size: 11.5))
+                    .font(.kb(11.5))
                     .foregroundStyle(KB.muted)
                 Button { showSuccess = false } label: { Text("확인") }
                     .buttonStyle(PrimaryButtonStyle())
@@ -1084,7 +1084,7 @@ struct WeeklyPlanView: View {
             Spacer()
             Text(value).fontWeight(emphasized ? .bold : .semibold).foregroundStyle(KB.ink)
         }
-        .font(.system(size: 13))
+        .font(.kb(13))
     }
 
     private func flash(_ message: String) {
@@ -1111,22 +1111,22 @@ struct DayTimetableView: View {
             HStack(spacing: 10) {
                 Button(action: onClose) {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.kb(16, .semibold))
                         .foregroundStyle(KB.ink)
                 }
                 // 날짜는 상단 툴바가 따라오므로 여기서는 화면 성격만 밝힌다.
                 Text("타임테이블")
-                    .font(.system(size: 19, weight: .bold))
+                    .font(.kb(19, .bold))
                     .foregroundStyle(KB.ink)
                 if day.isToday {
-                    Text("오늘").font(.system(size: 11, weight: .bold)).foregroundStyle(KB.ink)
+                    Text("오늘").font(.kb(11, .bold)).foregroundStyle(KB.ink)
                         .padding(.horizontal, 8).padding(.vertical, 3)
                         .background(KB.yellow, in: Capsule())
                 }
                 Spacer()
                 if day.spendTotal > 0 {
                     Text(estimateLabel(low: day.spendLow, high: day.spendHigh, estimated: day.hasEstimate))
-                        .font(.system(size: 12.5, weight: .medium))
+                        .font(.kb(12.5, .medium))
                         .foregroundStyle(KB.muted)
                 }
             }
@@ -1136,7 +1136,7 @@ struct DayTimetableView: View {
                 HStack(spacing: 5) {
                     Image(systemName: "hand.tap").font(.system(size: 11))
                     Text("일정을 누르면 시간·금액을 바꾸거나 지울 수 있어요")
-                        .font(.system(size: 12))
+                        .font(.kb(12))
                 }
                 .foregroundStyle(KB.muted)
             }
@@ -1177,9 +1177,9 @@ struct DayTimetableBody: View {
         VStack(spacing: 8) {
             Image(systemName: "calendar").font(.system(size: 26, weight: .light)).foregroundStyle(KB.muted)
             Text("예정된 변동지출이 없어요")
-                .font(.system(size: 13.5, weight: .medium)).foregroundStyle(KB.ink)
+                .font(.kb(13.5, .medium)).foregroundStyle(KB.ink)
             Text("대화 탭에서 ‘일정 추가’라고 말해보세요")
-                .font(.system(size: 12)).foregroundStyle(KB.muted)
+                .font(.kb(12)).foregroundStyle(KB.muted)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 28)
@@ -1191,13 +1191,13 @@ struct DayTimetableBody: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 15)).foregroundStyle(KB.caution)
+                    .font(.kb(15)).foregroundStyle(KB.caution)
                 Text("‘\(ev.title)’ — \(ev.riskNote ?? "")")
-                    .font(.system(size: 13.5, weight: .semibold)).foregroundStyle(KB.ink)
+                    .font(.kb(13.5, .semibold)).foregroundStyle(KB.ink)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Text(ev.riskDetail ?? "")
-                .font(.system(size: 13)).foregroundStyle(KB.muted)
+                .font(.kb(13)).foregroundStyle(KB.muted)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 8) {
@@ -1206,7 +1206,7 @@ struct DayTimetableBody: View {
                     onAction("‘\(ev.title)’를 다음 주로 옮겼어요. 이번 주 추가 사용 가능액을 지켰어요.")
                 } label: {
                     Text("다음 주로 옮기기")
-                        .font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.ink)
+                        .font(.kb(13, .semibold)).foregroundStyle(KB.ink)
                         .padding(.horizontal, 14).padding(.vertical, 9)
                         .background(KB.yellow, in: Capsule())
                 }
@@ -1215,7 +1215,7 @@ struct DayTimetableBody: View {
                     onAction("일정을 유지했어요. 목표 확률이 낮아질 수 있어요.")
                 } label: {
                     Text("그대로 둘게요")
-                        .font(.system(size: 13, weight: .medium)).foregroundStyle(KB.muted)
+                        .font(.kb(13, .medium)).foregroundStyle(KB.muted)
                         .padding(.horizontal, 14).padding(.vertical, 9)
                         .background(.white, in: Capsule())
                         .overlay(Capsule().stroke(KB.line, lineWidth: 1))
@@ -1280,7 +1280,7 @@ struct DayTimetableBody: View {
                 ForEach(Int(startHour)..<Int(endHour), id: \.self) { h in
                     HStack(alignment: .top, spacing: 8) {
                         Text("\(h)시")
-                            .font(.system(size: 10.5))
+                            .font(.kb(10.5))
                             .foregroundStyle(KB.muted)
                             .frame(width: 34, alignment: .trailing)
                         VStack { Divider().overlay(KB.line.opacity(0.7)) }
@@ -1318,7 +1318,7 @@ struct DayTimetableBody: View {
             IconBadge(systemName: ev.symbol, background: .white, size: 34)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    Text(ev.title).font(.system(size: 13.5, weight: .semibold)).foregroundStyle(KB.ink)
+                    Text(ev.title).font(.kb(13.5, .semibold)).foregroundStyle(KB.ink)
                     if ev.isProtected {
                         Image(systemName: "shield.fill").font(.system(size: 11)).foregroundStyle(KB.green)
                     }
@@ -1329,9 +1329,9 @@ struct DayTimetableBody: View {
                 }
                 HStack(spacing: 6) {
                     Text("\(hourString(ev.startHour))–\(hourString(ev.startHour + ev.duration))")
-                        .font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                        .font(.kb(11.5)).foregroundStyle(KB.muted)
                     if let purpose = ev.purpose {
-                        Text(purpose).font(.system(size: 10, weight: .medium)).foregroundStyle(KB.muted)
+                        Text(purpose).font(.kb(10, .medium)).foregroundStyle(KB.muted)
                             .padding(.horizontal, 5).padding(.vertical, 1.5)
                             .background(KB.line.opacity(0.4), in: Capsule())
                     }
@@ -1339,12 +1339,12 @@ struct DayTimetableBody: View {
                 Text(ev.amount > 0
                      ? estimateLabel(low: ev.amountLow, high: ev.amountHigh, estimated: ev.isEstimated)
                      : "비용 없음")
-                    .font(.system(size: 12.5, weight: ev.amount > 0 ? .semibold : .regular))
+                    .font(.kb(12.5, ev.amount > 0 ? .semibold : .regular))
                     .foregroundStyle(ev.amount > 0 ? KB.ink : KB.muted)
                 // AI가 이력으로 채운 금액은 근거를 함께 보여준다
                 if ev.isPredicted, let basis = ev.estimateBasis {
                     Text(basis)
-                        .font(.system(size: 11)).foregroundStyle(KB.muted)
+                        .font(.kb(11)).foregroundStyle(KB.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -1394,7 +1394,7 @@ private func stateBadge(_ state: SpendState) -> some View {
     case .reserved:
         HStack(spacing: 2) {
             Image(systemName: "clock.fill").font(.system(size: 8))
-            Text("예약").font(.system(size: 9.5, weight: .bold))
+            Text("예약").font(.kb(9.5, .bold))
         }
         .foregroundStyle(KB.ink)
         .padding(.horizontal, 5).padding(.vertical, 1.5)
@@ -1402,7 +1402,7 @@ private func stateBadge(_ state: SpendState) -> some View {
     case .pattern:
         HStack(spacing: 2) {
             Image(systemName: "wand.and.stars").font(.system(size: 8))
-            Text("예상").font(.system(size: 9.5, weight: .bold))
+            Text("예상").font(.kb(9.5, .bold))
         }
         .foregroundStyle(KB.muted)
         .padding(.horizontal, 5).padding(.vertical, 1.5)
@@ -1421,7 +1421,7 @@ struct SheetContainer<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text(title).font(.system(size: 18, weight: .bold)).foregroundStyle(KB.ink)
+                Text(title).font(.kb(18, .bold)).foregroundStyle(KB.ink)
                 Spacer()
                 Button { dismiss() } label: {
                     Image(systemName: "xmark").font(.system(size: 15, weight: .semibold)).foregroundStyle(KB.muted)

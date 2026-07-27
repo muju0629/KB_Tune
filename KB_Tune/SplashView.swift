@@ -27,12 +27,12 @@ struct SplashView: View {
             .opacity(appear ? 1 : 0)
 
             Text("KB Tune")
-                .font(.system(size: 34, weight: .bold))
+                .font(.kb(34, .bold))
                 .foregroundStyle(KB.ink)
                 .padding(.top, 24)
 
             Text("중요한 소비는 지키고,\n나머지를 조율하는 금융 라이프 에이전트")
-                .font(.system(size: 15))
+                .font(.kb(15))
                 .foregroundStyle(KB.muted)
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
@@ -48,7 +48,7 @@ struct SplashView: View {
             .padding(.horizontal, 24)
 
             Text("데모 데이터로 바로 체험할 수 있어요")
-                .font(.system(size: 12))
+                .font(.kb(12))
                 .foregroundStyle(KB.muted)
                 .padding(.top, 12)
                 .padding(.bottom, 20)

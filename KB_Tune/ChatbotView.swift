@@ -56,8 +56,7 @@ struct StreamedAnswer: View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach(Array(paragraphs.enumerated()), id: \.offset) { i, para in
                 Text(Self.highlightNumbers(para))
-                    .font(.system(size: i == 0 ? 15 : 14,
-                                  weight: i == 0 ? .semibold : .regular))
+                    .font(.kb(i == 0 ? 15 : 14, i == 0 ? .semibold : .regular))
                     .foregroundStyle(i == 0 ? KB.ink : KB.ink.opacity(0.88))
                     .lineSpacing(i == 0 ? 3 : 4)
                     .fixedSize(horizontal: false, vertical: true)
@@ -190,7 +189,7 @@ struct ChatbotView: View {
         .overlay(alignment: .top) {
             if let toast {
                 Text(toast)
-                    .font(.system(size: 13, weight: .medium)).foregroundStyle(.white)
+                    .font(.kb(13, .medium)).foregroundStyle(.white)
                     .padding(.horizontal, 16).padding(.vertical, 10)
                     .background(KB.green, in: Capsule())
                     .padding(.top, 8)
@@ -213,7 +212,7 @@ struct ChatbotView: View {
         SheetContainer(title: "일정 제목도 같이 볼까요?") {
             VStack(alignment: .leading, spacing: 16) {
                 Text("답변은 AI가 만들어요. 이때 이번 달 일정과 금액이 AI 제공자에게 전달돼요.")
-                    .font(.system(size: 14)).foregroundStyle(KB.ink)
+                    .font(.kb(14)).foregroundStyle(KB.ink)
                     .fixedSize(horizontal: false, vertical: true)
 
                 consentRow(icon: "text.bubble.fill", tint: KB.green, title: "제목까지 보내면",
@@ -222,7 +221,7 @@ struct ChatbotView: View {
                            detail: "\"25일 경조사 지출이 있어요\"까지만 답해요. 제목은 기기 밖으로 안 나가요.")
 
                 Text("이름과 나이는 어느 쪽이든 보내지 않아요. 설정에서 언제든 바꿀 수 있어요.")
-                    .font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                    .font(.kb(11.5)).foregroundStyle(KB.muted)
                     .fixedSize(horizontal: false, vertical: true)
 
                 HStack(spacing: 10) {
@@ -241,8 +240,8 @@ struct ChatbotView: View {
             Image(systemName: icon).font(.system(size: 14)).foregroundStyle(tint)
                 .frame(width: 20)
             VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.system(size: 13.5, weight: .semibold)).foregroundStyle(KB.ink)
-                Text(detail).font(.system(size: 12)).foregroundStyle(KB.muted)
+                Text(title).font(.kb(13.5, .semibold)).foregroundStyle(KB.ink)
+                Text(detail).font(.kb(12)).foregroundStyle(KB.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -252,7 +251,7 @@ struct ChatbotView: View {
                                action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(label)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.kb(14, .semibold))
                 .foregroundStyle(KB.ink)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 13)
@@ -283,15 +282,15 @@ struct ChatbotView: View {
                     Text("Tune")
                     Circle().fill(KB.green).frame(width: 6, height: 6)
                 }
-                    .font(.subheadline.weight(.semibold))
+                    .font(.kb(15, .semibold))
                     .foregroundStyle(KB.ink)
                 Text("일정과 소비를 함께 보고 있어요")
-                    .font(.caption)
+                    .font(.kb(12))
                     .foregroundStyle(KB.muted)
             }
             Spacer()
             Text("이번 주 \(formatWon(model.weeklyBudget))")
-                .font(.system(size: 11.5, weight: .semibold))
+                .font(.kb(11.5, .semibold))
                 .foregroundStyle(KB.ink)
                 .padding(.horizontal, 10).padding(.vertical, 7)
                 .background(.white.opacity(0.8), in: Capsule())
@@ -310,7 +309,7 @@ struct ChatbotView: View {
             HStack {
                 Spacer(minLength: 40)
                 Text(msg.conclusion)
-                    .font(.system(size: 14)).foregroundStyle(KB.ink)
+                    .font(.kb(14)).foregroundStyle(KB.ink)
                     .padding(.horizontal, 14).padding(.vertical, 10)
                     .background(KB.yellow, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
@@ -323,7 +322,7 @@ struct ChatbotView: View {
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Tune")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.kb(11, .semibold))
                         .foregroundStyle(KB.muted)
                     agentCard(msg)
                 }
@@ -338,19 +337,19 @@ struct ChatbotView: View {
                 StreamedAnswer(text: msg.conclusion)
             } else {
                 Text(msg.conclusion)
-                    .font(.system(size: 14, weight: .semibold)).foregroundStyle(KB.ink)
+                    .font(.kb(14, .semibold)).foregroundStyle(KB.ink)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             if let reason = msg.reason {
-                Text(reason).font(.system(size: 13)).foregroundStyle(KB.muted)
+                Text(reason).font(.kb(13)).foregroundStyle(KB.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             if let impact = msg.impact {
                 HStack(spacing: 6) {
                     Image(systemName: "sparkles").font(.system(size: 11)).foregroundStyle(KB.violet)
-                    Text(impact).font(.system(size: 12.5, weight: .medium)).foregroundStyle(KB.ink)
+                    Text(impact).font(.kb(12.5, .medium)).foregroundStyle(KB.ink)
                 }
                 .padding(.horizontal, 10).padding(.vertical, 7)
                 .background(KB.canvas, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
@@ -362,10 +361,10 @@ struct ChatbotView: View {
 
             if let basis = msg.basis {
                 DisclosureGroup {
-                    Text(basis).font(.system(size: 12)).foregroundStyle(KB.muted)
+                    Text(basis).font(.kb(12)).foregroundStyle(KB.muted)
                         .padding(.top, 4)
                 } label: {
-                    Text("왜 이렇게 답했어요?").font(.system(size: 12, weight: .medium)).foregroundStyle(KB.muted)
+                    Text("왜 이렇게 답했어요?").font(.kb(12, .medium)).foregroundStyle(KB.muted)
                 }
                 .tint(KB.muted)
             }
@@ -383,11 +382,11 @@ struct ChatbotView: View {
         HStack(spacing: 10) {
             IconBadge(systemName: "calendar", background: KB.yellowSoft, size: 36)
             VStack(alignment: .leading, spacing: 1) {
-                Text(p.title).font(.system(size: 13, weight: .medium)).foregroundStyle(KB.ink)
-                Text(p.day).font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                Text(p.title).font(.kb(13, .medium)).foregroundStyle(KB.ink)
+                Text(p.day).font(.kb(11.5)).foregroundStyle(KB.muted)
             }
             Spacer()
-            Text(formatWon(p.amount)).font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.ink)
+            Text(formatWon(p.amount)).font(.kb(13, .semibold)).foregroundStyle(KB.ink)
         }
         .padding(10)
         .background(KB.canvas, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
@@ -396,7 +395,7 @@ struct ChatbotView: View {
 
     private func smallAction(_ title: String, filled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(KB.ink)
+            Text(title).font(.kb(12.5, .semibold)).foregroundStyle(KB.ink)
                 .padding(.horizontal, 14).padding(.vertical, 8)
                 .background(filled ? KB.yellow : .clear, in: Capsule())
                 .overlay(Capsule().stroke(filled ? .clear : KB.line, lineWidth: 1))
@@ -481,7 +480,7 @@ struct ChatbotView: View {
 
             VStack(alignment: .leading, spacing: 7) {
                 Text(thinkingSteps[min(thinkingStep, thinkingSteps.count - 1)])
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.kb(13, .medium))
                     .foregroundStyle(KB.ink)
                     .contentTransition(.opacity)
                     .accessibilityIdentifier("chat-thinking")
@@ -524,11 +523,11 @@ struct ChatbotView: View {
     private var chips: some View {
         VStack(alignment: .leading, spacing: 7) {
             Text(messages.count <= 1 ? "이렇게 물어보세요" : "이어서 물어보기")
-                .font(.system(size: 11.5, weight: .medium)).foregroundStyle(KB.muted)
+                .font(.kb(11.5, .medium)).foregroundStyle(KB.muted)
             FlowLayout(spacing: 8) {
                 ForEach(remainingSuggestions, id: \.self) { q in
                     Button { send(q) } label: {
-                        Text(q).font(.system(size: 13)).foregroundStyle(KB.ink)
+                        Text(q).font(.kb(13)).foregroundStyle(KB.ink)
                             .padding(.horizontal, 14).padding(.vertical, 9)
                             .background(.white, in: Capsule())
                             .overlay(Capsule().stroke(KB.line, lineWidth: 1))
@@ -548,7 +547,7 @@ struct ChatbotView: View {
     private var inputBar: some View {
         HStack(spacing: 10) {
             TextField("편하게 말해 주세요", text: $input)
-                .font(.system(size: 14))
+                .font(.kb(14))
                 .padding(.horizontal, 16).padding(.vertical, 12)
                 .background(.white, in: Capsule())
                 .overlay(Capsule().stroke(KB.line, lineWidth: 1))
@@ -561,7 +560,7 @@ struct ChatbotView: View {
                 send(input)
             } label: {
                 Image(systemName: "arrow.up")
-                    .font(.system(size: 17, weight: .bold)).foregroundStyle(KB.ink)
+                    .font(.kb(17, .bold)).foregroundStyle(KB.ink)
                     .frame(width: 44, height: 44)
                     .background(KB.yellow, in: Circle())
             }

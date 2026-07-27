@@ -40,7 +40,7 @@ struct LabelBadge: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 11, weight: .bold))
+            .font(.kb(11, .bold))
             .foregroundStyle(filled ? .white : color)
             .padding(.horizontal, 9).padding(.vertical, 4)
             .background(filled ? color : color.opacity(0.12), in: Capsule())
@@ -56,18 +56,36 @@ struct DDayBadge: View {
 
     var body: some View {
         Text(label)
-            .font(.system(size: 10, weight: .heavy)).monospacedDigit()
+            .font(.kb(10, .heavy)).monospacedDigit()
             .foregroundStyle(tint)
             .padding(.horizontal, 6).padding(.vertical, 2.5)
             .background(tint.opacity(0.13), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
     }
 }
 
+extension Font {
+    /// KB금융그룹 서체(KBFG Text).
+    ///
+    /// 라이트·미디엄 두 벌만 있어서 굵기를 그 둘로 접는다 —
+    /// medium 이상은 전부 Medium, 그 아래는 Light.
+    /// 크기는 fixedSize로 넘긴다. 기존 화면이 .system(size:)로 짜여 있어
+    /// 본문 크기 설정에 따라 커지지 않는데, 여기서만 커지면 레이아웃이 어긋난다.
+    static func kb(_ size: CGFloat, _ weight: Weight = .regular) -> Font {
+        .custom(Self.kbFaceName(for: weight), fixedSize: size)
+    }
+
+    private static func kbFaceName(for weight: Weight) -> String {
+        switch weight {
+        case .medium, .semibold, .bold, .heavy, .black: "KBFGText-Medium"
+        default: "KBFGText-Light"
+        }
+    }
+}
+
 extension View {
-    /// 돈 숫자의 정체성 — 따뜻하고 정확한 라운드 숫자(자릿수 고정으로 흔들림 없음).
-    /// 한글(원)은 시스템 서체로 자연히 폴백되고, 숫자만 부드러워진다.
+    /// 돈 숫자 — 자릿수를 고정해 값이 바뀔 때 좌우로 흔들리지 않게 한다.
     func money(_ size: CGFloat, weight: Font.Weight = .bold) -> some View {
-        font(.system(size: size, weight: weight, design: .rounded)).monospacedDigit()
+        font(.kb(size, weight)).monospacedDigit()
     }
 
     /// 떠 있는 카드 표면 — 테두리 대신 부드러운 그림자로 종이 위에 띄운다.
@@ -167,7 +185,7 @@ func formatWonRange(_ low: Int, _ high: Int) -> String {
 struct PrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 16, weight: .semibold))
+            .font(.kb(16, .semibold))
             .foregroundStyle(KB.ink)
             .frame(maxWidth: .infinity)
             .frame(height: 52)
@@ -183,7 +201,7 @@ struct PrimaryButtonStyle: ButtonStyle {
 struct SecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 16, weight: .medium))
+            .font(.kb(16, .medium))
             .foregroundStyle(KB.ink)
             .frame(maxWidth: .infinity)
             .frame(height: 52)

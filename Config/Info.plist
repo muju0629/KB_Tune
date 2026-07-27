@@ -10,5 +10,12 @@
 	<string>$(KB_TUNE_API_BASE_URL)</string>
 	<key>KBTuneAPIKey</key>
 	<string>$(KB_TUNE_API_KEY)</string>
+
+	<!-- KB금융그룹 서체. 번들에 넣은 파일 이름을 여기 적어야 앱이 쓸 수 있다. -->
+	<key>UIAppFonts</key>
+	<array>
+		<string>KBFGText-Light.otf</string>
+		<string>KBFGText-Medium.otf</string>
+	</array>
 </dict>
 </plist>

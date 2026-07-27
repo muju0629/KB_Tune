@@ -84,7 +84,7 @@ struct ProductsHome: View {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) { segment = index }
         } label: {
             Text(title)
-                .font(.system(size: 14, weight: segment == index ? .semibold : .medium))
+                .font(.kb(14, segment == index ? .semibold : .medium))
                 .foregroundStyle(KB.ink)
                 .frame(maxWidth: .infinity)
                 .frame(height: 36)
@@ -98,7 +98,7 @@ struct ProductsHome: View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "info.circle").font(.system(size: 12)).foregroundStyle(KB.muted)
             Text("검증일 \(productVerifiedAt) 기준 · 가입 전 KB 공식 안내에서 다시 확인해 주세요.")
-                .font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                .font(.kb(11.5)).foregroundStyle(KB.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.top, 4)
@@ -130,7 +130,7 @@ struct CardRecommendPage: View {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) { showMore.toggle() }
                 } label: {
                     HStack {
-                        Text("다른 카드 \(rest)개").font(.system(size: 13, weight: .medium)).foregroundStyle(KB.ink)
+                        Text("다른 카드 \(rest)개").font(.kb(13, .medium)).foregroundStyle(KB.ink)
                         Spacer()
                         Image(systemName: "chevron.down").font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(KB.muted)
@@ -158,15 +158,15 @@ struct CardRecommendPage: View {
     private func spendSummary(_ reco: CardReco) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                Text("7월 예상 지출").font(.system(size: 12)).foregroundStyle(KB.muted)
+                Text("7월 예상 지출").font(.kb(12)).foregroundStyle(KB.muted)
                 Spacer()
-                Text(model.analysisPeriod).font(.system(size: 11)).foregroundStyle(KB.muted)
+                Text(model.analysisPeriod).font(.kb(11)).foregroundStyle(KB.muted)
             }
             Text(formatWon(model.spendMonthly))
                 .money(27, weight: .heavy).foregroundStyle(KB.ink)
             TierBar(recognized: reco.recognizedSpend, tiers: [200_000, 300_000, 400_000])
             Text("카드 전월실적이 아니라 캘린더 예상 지출이에요. 실제 실적은 카드 내역에서 확인해 주세요.")
-                .font(.system(size: 11)).foregroundStyle(KB.muted)
+                .font(.kb(11)).foregroundStyle(KB.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(16)
@@ -177,8 +177,8 @@ struct CardRecommendPage: View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "minus.circle").font(.system(size: 14)).foregroundStyle(KB.muted).padding(.top, 1)
             VStack(alignment: .leading, spacing: 2) {
-                Text(e.product.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
-                Text(e.excludeReason ?? "").font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                Text(e.product.name).font(.kb(13, .semibold)).foregroundStyle(KB.muted)
+                Text(e.excludeReason ?? "").font(.kb(11.5)).foregroundStyle(KB.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
@@ -210,12 +210,12 @@ struct TierBar: View {
             }
             .frame(height: 8)
             HStack(spacing: 6) {
-                Text("캘린더 기준").font(.system(size: 11)).foregroundStyle(KB.muted)
+                Text("캘린더 기준").font(.kb(11)).foregroundStyle(KB.muted)
                 ForEach(tiers, id: \.self) { t in
                     let met = recognized >= t
                     HStack(spacing: 2) {
                         if met { Image(systemName: "checkmark").font(.system(size: 8, weight: .bold)) }
-                        Text("\(t / 10_000)만").font(.system(size: 11, weight: met ? .semibold : .regular))
+                        Text("\(t / 10_000)만").font(.kb(11, met ? .semibold : .regular))
                     }
                     .foregroundStyle(met ? KB.green : KB.muted)
                     .padding(.horizontal, 8).padding(.vertical, 3)
@@ -241,17 +241,17 @@ struct CardHeroRow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     // 배지를 이름과 같은 줄에 두면 긴 카드명이 2줄로 깨져 별도 행으로 분리
                     Text(badge)
-                        .font(.system(size: 10, weight: .bold)).foregroundStyle(KB.ink)
+                        .font(.kb(10, .bold)).foregroundStyle(KB.ink)
                         .padding(.horizontal, 7).padding(.vertical, 2)
                         .background(badge == "추천" ? KB.yellow : KB.line, in: Capsule())
                     Text(eval.product.name)
-                        .font(.system(size: compact ? 14.5 : 16, weight: .bold)).foregroundStyle(KB.ink)
+                        .font(.kb(compact ? 14.5 : 16, .bold)).foregroundStyle(KB.ink)
                         .lineLimit(1).minimumScaleFactor(0.85)
                     if !compact {
-                        Text(eval.product.short).font(.system(size: 12)).foregroundStyle(KB.muted)
+                        Text(eval.product.short).font(.kb(12)).foregroundStyle(KB.muted)
                     }
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("월 예상 혜택").font(.system(size: 10.5)).foregroundStyle(KB.muted)
+                        Text("월 예상 혜택").font(.kb(10.5)).foregroundStyle(KB.muted)
                         Text("+\(formatWon(eval.netMonthly))")
                             .money(compact ? 17 : 22, weight: .heavy).foregroundStyle(KB.green)
                     }
@@ -276,7 +276,7 @@ struct CardCandidateRow: View {
     var body: some View {
         HStack(spacing: 12) {
             CardArt(url: eval.product.imageURL, height: 34)
-            Text(eval.product.name).font(.system(size: 14, weight: .semibold)).foregroundStyle(KB.ink)
+            Text(eval.product.name).font(.kb(14, .semibold)).foregroundStyle(KB.ink)
             Spacer(minLength: 4)
             Text("월 +\(formatWon(eval.netMonthly))")
                 .money(13, weight: .bold).foregroundStyle(KB.green)
@@ -342,7 +342,7 @@ struct CardDetailView: View {
         VStack(alignment: .leading, spacing: 11) {
             HStack(spacing: 7) {
                 Text("AI 추천 이유")
-                    .font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
+                    .font(.kb(11, .bold)).foregroundStyle(.white)
                     .padding(.horizontal, 9).padding(.vertical, 4)
                     .background(Color(hex: 0x7A5CF0), in: Capsule())
                 Spacer()
@@ -350,12 +350,12 @@ struct CardDetailView: View {
                     ProgressView().tint(KB.muted).scaleEffect(0.7)
                 } else {
                     Text(advisor.source == .agent ? "에이전트 요약" : "기기 계산")
-                        .font(.system(size: 10.5)).foregroundStyle(KB.muted)
+                        .font(.kb(10.5)).foregroundStyle(KB.muted)
                 }
             }
 
             Text(advisor.summary.isEmpty ? "추천 근거를 정리하고 있어요…" : advisor.summary)
-                .font(.system(size: 14.5, weight: .medium)).foregroundStyle(KB.ink)
+                .font(.kb(14.5, .medium)).foregroundStyle(KB.ink)
                 .lineSpacing(4)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -364,7 +364,7 @@ struct CardDetailView: View {
             HStack(alignment: .top, spacing: 7) {
                 Image(systemName: "function").font(.system(size: 11)).foregroundStyle(KB.muted)
                 Text(eval.fitCopy)
-                    .font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                    .font(.kb(11.5)).foregroundStyle(KB.muted)
                     .lineSpacing(2).fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -378,8 +378,8 @@ struct CardDetailView: View {
         VStack(alignment: .leading, spacing: 12) {
             CardArt(url: eval.product.imageURL, height: 92)
             VStack(alignment: .leading, spacing: 4) {
-                Text(eval.product.name).font(.system(size: 21, weight: .bold)).foregroundStyle(KB.ink)
-                Text(eval.product.short).font(.system(size: 13)).foregroundStyle(KB.muted)
+                Text(eval.product.name).font(.kb(21, .bold)).foregroundStyle(KB.ink)
+                Text(eval.product.short).font(.kb(13)).foregroundStyle(KB.muted)
             }
             HStack(spacing: 8) {
                 metaChip(eval.product.feeNote)
@@ -392,7 +392,7 @@ struct CardDetailView: View {
     private func metaChip(_ text: String, met: Bool = false) -> some View {
         HStack(spacing: 3) {
             if met { Image(systemName: "checkmark").font(.system(size: 9, weight: .bold)) }
-            Text(text).font(.system(size: 11, weight: .medium))
+            Text(text).font(.kb(11, .medium))
         }
         .foregroundStyle(met ? KB.green : KB.ink)
         .padding(.horizontal, 8).padding(.vertical, 4)
@@ -403,35 +403,35 @@ struct CardDetailView: View {
     private var benefitBox: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("회원님 예상 순혜택 (월)").font(.system(size: 12)).foregroundStyle(KB.muted)
+                Text("회원님 예상 순혜택 (월)").font(.kb(12)).foregroundStyle(KB.muted)
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text("+\(formatWon(eval.netMonthly))")
-                        .font(.system(size: 26, weight: .bold)).foregroundStyle(KB.green)
-                    Text("연 약 +\(formatWon(eval.netMonthly * 12))").font(.system(size: 12.5)).foregroundStyle(KB.muted)
+                        .font(.kb(26, .bold)).foregroundStyle(KB.green)
+                    Text("연 약 +\(formatWon(eval.netMonthly * 12))").font(.kb(12.5)).foregroundStyle(KB.muted)
                 }
             }
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(eval.benefitLines, id: \.label) { line in
                     HStack(alignment: .top) {
-                        Text(line.label).font(.system(size: 12.5)).foregroundStyle(KB.ink)
+                        Text(line.label).font(.kb(12.5)).foregroundStyle(KB.ink)
                             .fixedSize(horizontal: false, vertical: true)
                         Spacer(minLength: 8)
                         Text(line.amount > 0 ? "+\(formatWon(line.amount))" : "—")
-                            .font(.system(size: 12.5, weight: .semibold))
+                            .font(.kb(12.5, .semibold))
                             .foregroundStyle(line.amount > 0 ? KB.green : KB.muted)
                     }
                 }
                 if eval.product.annualFee > 0 {
                     HStack {
-                        Text("연회비 월 환산").font(.system(size: 12.5)).foregroundStyle(KB.ink)
+                        Text("연회비 월 환산").font(.kb(12.5)).foregroundStyle(KB.ink)
                         Spacer()
                         Text("−\(formatWon(eval.product.annualFee / 12))")
-                            .font(.system(size: 12.5, weight: .semibold)).foregroundStyle(KB.caution)
+                            .font(.kb(12.5, .semibold)).foregroundStyle(KB.caution)
                     }
                 }
             }
             Text("최대 \(eval.product.capNote) — 모든 조건 충족 시 상한이며 예상값과 구분해요.")
-                .font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                .font(.kb(11.5)).foregroundStyle(KB.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(16)
@@ -442,11 +442,11 @@ struct CardDetailView: View {
     // 확인이 필요한 조건만(충족 정보는 위 순혜택·칩으로 이미 전달).
     private var checklist: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("가입 전 확인").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+            Text("가입 전 확인").font(.kb(13, .semibold)).foregroundStyle(KB.muted)
             ForEach(eval.unmet, id: \.self) { c in
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "exclamationmark.circle").font(.system(size: 15)).foregroundStyle(KB.caution)
-                    Text(c).font(.system(size: 13.5)).foregroundStyle(KB.ink)
+                    Text(c).font(.kb(13.5)).foregroundStyle(KB.ink)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -455,7 +455,7 @@ struct CardDetailView: View {
 
     private func altBox(_ alt: CardEval) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("비교 대안").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+            Text("비교 대안").font(.kb(13, .semibold)).foregroundStyle(KB.muted)
             NavigationLink { CardDetailView(eval: alt, alternative: nil) } label: {
                 CardCandidateRow(eval: alt)
             }
@@ -465,11 +465,11 @@ struct CardDetailView: View {
 
     private var cautions: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("주의할 점").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+            Text("주의할 점").font(.kb(13, .semibold)).foregroundStyle(KB.muted)
             ForEach(eval.product.cautions, id: \.self) { c in
                 HStack(alignment: .top, spacing: 8) {
-                    Text("·").font(.system(size: 14, weight: .bold)).foregroundStyle(KB.muted)
-                    Text(c).font(.system(size: 13)).foregroundStyle(KB.ink)
+                    Text("·").font(.kb(14, .bold)).foregroundStyle(KB.muted)
+                    Text(c).font(.kb(13)).foregroundStyle(KB.ink)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -507,7 +507,7 @@ struct SavingsRecommendPage: View {
                 } label: {
                     HStack {
                         Text("지금 조건이 맞지 않는 상품 \(ex.count)개")
-                            .font(.system(size: 13, weight: .medium)).foregroundStyle(KB.ink)
+                            .font(.kb(13, .medium)).foregroundStyle(KB.ink)
                         Spacer()
                         Image(systemName: "chevron.down").font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(KB.muted).rotationEffect(.degrees(showExcluded ? 180 : 0))
@@ -523,8 +523,8 @@ struct SavingsRecommendPage: View {
                         HStack(alignment: .top, spacing: 10) {
                             Image(systemName: "minus.circle").font(.system(size: 14)).foregroundStyle(KB.muted).padding(.top, 1)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(e.product.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
-                                Text(e.fitCopy).font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                                Text(e.product.name).font(.kb(13, .semibold)).foregroundStyle(KB.muted)
+                                Text(e.fitCopy).font(.kb(11.5)).foregroundStyle(KB.muted)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                         }
@@ -554,7 +554,7 @@ struct SavingsRecommendPage: View {
                 Text(model.savingsGoal <= free
                      ? "목표 저축 \(formatWon(model.savingsGoal))은 여유 안이라 현금 흐름을 침범하지 않아요."
                      : "목표 저축 \(formatWon(model.savingsGoal))은 여유 \(formatWon(free))보다 커요. 예상 지출을 줄이거나 목표를 낮춰야 지킬 수 있어요.")
-                    .font(.system(size: 12)).foregroundStyle(KB.ink)
+                    .font(.kb(12)).foregroundStyle(KB.ink)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -567,10 +567,10 @@ struct SavingsRecommendPage: View {
     private func cashRow(_ label: String, _ value: Int, emphasized: Bool = false) -> some View {
         let sign = value < 0 ? "− " : ""
         return HStack {
-            Text(label).font(.system(size: 14)).foregroundStyle(emphasized ? KB.ink : KB.muted)
+            Text(label).font(.kb(14)).foregroundStyle(emphasized ? KB.ink : KB.muted)
             Spacer()
             Text(sign + formatWon(abs(value)))
-                .font(.system(size: emphasized ? 19 : 16, weight: emphasized ? .bold : .semibold))
+                .font(.kb(emphasized ? 19 : 16, emphasized ? .bold : .semibold))
                 .foregroundStyle(emphasized ? KB.green : KB.ink)
                 .monospacedDigit()
         }
@@ -579,10 +579,10 @@ struct SavingsRecommendPage: View {
     private func step(_ n: Int, _ title: String) -> some View {
         HStack(spacing: 8) {
             Text("\(n)")
-                .font(.system(size: 12, weight: .bold)).foregroundStyle(KB.ink)
+                .font(.kb(12, .bold)).foregroundStyle(KB.ink)
                 .frame(width: 22, height: 22)
                 .background(KB.yellow, in: Circle())
-            Text(title).font(.system(size: 14, weight: .semibold)).foregroundStyle(KB.ink)
+            Text(title).font(.kb(14, .semibold)).foregroundStyle(KB.ink)
         }
         .padding(.top, 4)
     }
@@ -629,19 +629,19 @@ struct SavingsRow: View {
                       background: eval.verdict == .pick ? KB.yellowSoft : KB.greenSoft, size: 42)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    Text(eval.product.name).font(.system(size: 15, weight: .bold)).foregroundStyle(KB.ink)
+                    Text(eval.product.name).font(.kb(15, .bold)).foregroundStyle(KB.ink)
                     if let b = badge {
-                        Text(b.0).font(.system(size: 10, weight: .bold)).foregroundStyle(KB.ink)
+                        Text(b.0).font(.kb(10, .bold)).foregroundStyle(KB.ink)
                             .padding(.horizontal, 7).padding(.vertical, 2)
                             .background(b.1, in: Capsule())
                     }
                 }
                 Text("\(eval.product.role.rawValue) · \(eval.product.termLabel)")
-                    .font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                    .font(.kb(11.5)).foregroundStyle(KB.muted)
                 if let m = metric {
                     Text(m.headline).money(13.5, weight: .bold).foregroundStyle(KB.green)
                         .lineLimit(1).minimumScaleFactor(0.85)
-                    Text(m.sub).font(.system(size: 11)).foregroundStyle(KB.muted)
+                    Text(m.sub).font(.kb(11)).foregroundStyle(KB.muted)
                 }
             }
             Spacer(minLength: 4)
@@ -682,8 +682,8 @@ struct SavingsDetailView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
             IconBadge(systemName: eval.product.symbol, background: KB.yellowSoft, size: 52)
-            Text(eval.product.name).font(.system(size: 21, weight: .bold)).foregroundStyle(KB.ink)
-            Text(eval.product.rateLabel).font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.green)
+            Text(eval.product.name).font(.kb(21, .bold)).foregroundStyle(KB.ink)
+            Text(eval.product.rateLabel).font(.kb(13, .semibold)).foregroundStyle(KB.green)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 8) {
                 metaChip(eval.product.termLabel)
@@ -694,7 +694,7 @@ struct SavingsDetailView: View {
 
     private func metaChip(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 11, weight: .medium)).foregroundStyle(KB.ink)
+            .font(.kb(11, .medium)).foregroundStyle(KB.ink)
             .padding(.horizontal, 8).padding(.vertical, 4)
             .background(KB.line.opacity(0.4), in: Capsule())
     }
@@ -702,7 +702,7 @@ struct SavingsDetailView: View {
     private func statusBox(_ status: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "clock.badge.exclamationmark").font(.system(size: 15)).foregroundStyle(KB.caution)
-            Text(status).font(.system(size: 13, weight: .medium)).foregroundStyle(KB.ink)
+            Text(status).font(.kb(13, .medium)).foregroundStyle(KB.ink)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(14)
@@ -714,7 +714,7 @@ struct SavingsDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             if eval.months > 0 {
                 Text("월 \(formatWon(eval.monthlyDeposit)) × \(eval.months)개월 (세전)")
-                    .font(.system(size: 12)).foregroundStyle(KB.muted)
+                    .font(.kb(12)).foregroundStyle(KB.muted)
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text("예상 이자 \(formatWon(eval.estInterest))")
                         .money(22, weight: .heavy).foregroundStyle(KB.green)
@@ -722,14 +722,14 @@ struct SavingsDetailView: View {
                         .money(12, weight: .medium).foregroundStyle(KB.muted)
                 }
                 Text("모든 우대 충족 시 최대 \(formatWon(eval.maxInterest)) (연 \(String(format: "%.2f", eval.product.maxRate))%) · 원금 \(formatWon(eval.monthlyDeposit * eval.months)) · 중도해지 시 낮은 이율")
-                    .font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                    .font(.kb(11.5)).foregroundStyle(KB.muted)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
-                Text("100만원 보관 기준 (세전)").font(.system(size: 12)).foregroundStyle(KB.muted)
+                Text("100만원 보관 기준 (세전)").font(.kb(12)).foregroundStyle(KB.muted)
                 Text("월 약 \(formatWon(eval.estInterest)) 이자")
                     .money(22, weight: .heavy).foregroundStyle(KB.green)
                 Text("기본금리 연 0.1% · 우대조건 충족 여부에 따라 크게 달라져요.")
-                    .font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                    .font(.kb(11.5)).foregroundStyle(KB.muted)
             }
         }
         .padding(16)
@@ -740,7 +740,7 @@ struct SavingsDetailView: View {
     private var fitLine: some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "person.crop.circle.badge.checkmark").font(.system(size: 14)).foregroundStyle(KB.ink)
-            Text(eval.fitCopy).font(.system(size: 13.5)).foregroundStyle(KB.ink)
+            Text(eval.fitCopy).font(.kb(13.5)).foregroundStyle(KB.ink)
                 .lineSpacing(2).fixedSize(horizontal: false, vertical: true)
         }
         .padding(14)
@@ -750,15 +750,15 @@ struct SavingsDetailView: View {
 
     private var benefitTable: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("핵심 혜택·우대").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+            Text("핵심 혜택·우대").font(.kb(13, .semibold)).foregroundStyle(KB.muted)
             ForEach(eval.product.benefits, id: \.area) { line in
                 HStack(alignment: .top, spacing: 10) {
                     Text(line.area)
-                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(KB.ink)
+                        .font(.kb(12, .semibold)).foregroundStyle(KB.ink)
                         .frame(width: 76, alignment: .leading)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(line.value).font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.green)
-                        Text(line.condition).font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                        Text(line.value).font(.kb(13, .semibold)).foregroundStyle(KB.green)
+                        Text(line.condition).font(.kb(11.5)).foregroundStyle(KB.muted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -773,11 +773,11 @@ struct SavingsDetailView: View {
 
     private var unmetBox: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("가입 전 확인").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+            Text("가입 전 확인").font(.kb(13, .semibold)).foregroundStyle(KB.muted)
             ForEach(eval.unmet, id: \.self) { c in
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "exclamationmark.circle").font(.system(size: 15)).foregroundStyle(KB.caution)
-                    Text(c).font(.system(size: 13.5)).foregroundStyle(KB.ink)
+                    Text(c).font(.kb(13.5)).foregroundStyle(KB.ink)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -786,11 +786,11 @@ struct SavingsDetailView: View {
 
     private var cautions: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("주의할 점").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+            Text("주의할 점").font(.kb(13, .semibold)).foregroundStyle(KB.muted)
             ForEach(eval.product.cautions, id: \.self) { c in
                 HStack(alignment: .top, spacing: 8) {
-                    Text("·").font(.system(size: 14, weight: .bold)).foregroundStyle(KB.muted)
-                    Text(c).font(.system(size: 13)).foregroundStyle(KB.ink)
+                    Text("·").font(.kb(14, .bold)).foregroundStyle(KB.muted)
+                    Text(c).font(.kb(13)).foregroundStyle(KB.ink)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -815,13 +815,13 @@ struct ProductLinkFooter: View {
                         Spacer()
                         Image(systemName: "arrow.up.right")
                     }
-                    .font(.system(size: 15, weight: .semibold)).foregroundStyle(KB.ink)
+                    .font(.kb(15, .semibold)).foregroundStyle(KB.ink)
                     .padding(.horizontal, 16).frame(height: 50)
                     .background(KB.yellow, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
             }
             Text("검증일 \(productVerifiedAt) 기준 · \(productDisclaimer)")
-                .font(.system(size: 11)).foregroundStyle(KB.muted)
+                .font(.kb(11)).foregroundStyle(KB.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

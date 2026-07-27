@@ -60,11 +60,11 @@ struct CustomTabBar: View {
                 } label: {
                     VStack(spacing: 3) {
                         Image(systemName: isOn ? item.onIcon : item.icon)
-                            .font(.system(size: 18, weight: isOn ? .semibold : .regular))
+                            .font(.kb(18, isOn ? .semibold : .regular))
                             .contentTransition(.symbolEffect(.replace.offUp))
                             .symbolEffect(.bounce, value: isOn)
                         Text(item.label)
-                            .font(.system(size: 10, weight: isOn ? .semibold : .medium))
+                            .font(.kb(10, isOn ? .semibold : .medium))
                     }
                     .foregroundStyle(isOn ? KB.ink : KB.muted)
                     .frame(maxWidth: .infinity)

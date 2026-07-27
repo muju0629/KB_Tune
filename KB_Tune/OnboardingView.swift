@@ -64,7 +64,7 @@ struct OnboardingView: View {
                     }
                 } label: {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.kb(17, .semibold))
                         .foregroundStyle(KB.ink)
                 }
             }
@@ -92,11 +92,11 @@ struct OnboardingView: View {
     private func header(_ title: String, _ sub: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.system(size: 26, weight: .bold))
+                .font(.kb(26, .bold))
                 .foregroundStyle(KB.ink)
                 .lineSpacing(3)
             Text(sub)
-                .font(.system(size: 14))
+                .font(.kb(14))
                 .foregroundStyle(KB.muted)
                 .lineSpacing(3)
         }
@@ -113,7 +113,7 @@ struct OnboardingView: View {
     private func agentHint(_ text: String) -> some View {
         HStack(spacing: 6) {
             Image(systemName: "sparkles").font(.system(size: 11, weight: .medium))
-            Text(text).font(.system(size: 12))
+            Text(text).font(.kb(12))
         }
         .foregroundStyle(KB.muted)
         .frame(maxWidth: .infinity, alignment: .center)
@@ -148,7 +148,7 @@ struct OnboardingView: View {
 
             if let err = calendar.lastError {
                 Text(err)
-                    .font(.system(size: 12)).foregroundStyle(KB.caution)
+                    .font(.kb(12)).foregroundStyle(KB.caution)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 24).padding(.top, 10)
             }
@@ -211,17 +211,17 @@ struct OnboardingView: View {
 
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: "equal.circle")
-                    .font(.system(size: 14))
+                    .font(.kb(14))
                     .foregroundStyle(KB.green)
                     .padding(.top, 1)
                 VStack(alignment: .leading, spacing: 3) {
                     Text("저축 목표는 수입의 \(pct)%")
-                        .font(.system(size: 13.5, weight: .semibold))
+                        .font(.kb(13.5, .semibold))
                         .foregroundStyle(KB.ink)
                         .contentTransition(.numericText())
                         .animation(.snappy(duration: 0.2), value: pct)
                     Text("저축 후 남는 \(formatWon(afterSaving))에서 예상 지출과 고정비를 계산해요.")
-                        .font(.system(size: 12))
+                        .font(.kb(12))
                         .foregroundStyle(KB.muted)
                         .lineSpacing(2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -246,7 +246,7 @@ struct OnboardingView: View {
 
     private func dialCard(_ label: String, value: Binding<Int>, range: ClosedRange<Int>, step: Int) -> some View {
         VStack(spacing: 6) {
-            Text(label).font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+            Text(label).font(.kb(13, .semibold)).foregroundStyle(KB.muted)
             MoneyDial(value: value, range: range, step: step)
         }
         .padding(.horizontal, 10).padding(.vertical, 14)
@@ -305,14 +305,14 @@ struct OnboardingView: View {
             ZStack {
                 Circle().fill(KB.yellow).frame(width: 76, height: 76)
                 Image(systemName: "sparkles")
-                    .font(.system(size: 32, weight: .medium))
+                    .font(.kb(32, .medium))
                     .foregroundStyle(KB.ink)
             }
             .scaleEffect(buildStep % 2 == 0 ? 1.0 : 1.08)
             .animation(.easeInOut(duration: 0.5), value: buildStep)
 
             Text("7월 계획을\n계산하고 있어요")
-                .font(.system(size: 24, weight: .bold))
+                .font(.kb(24, .bold))
                 .foregroundStyle(KB.ink)
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
@@ -323,7 +323,7 @@ struct OnboardingView: View {
                     HStack(spacing: 10) {
                         if buildStep > i {
                             Image(systemName: "checkmark.circle.fill")
-                                .font(.system(size: 18))
+                                .font(.kb(18))
                                 .foregroundStyle(KB.green)
                                 .transition(.scale.combined(with: .opacity))
                         } else if buildStep == i {
@@ -334,7 +334,7 @@ struct OnboardingView: View {
                                 .padding(1)
                         }
                         Text(row)
-                            .font(.system(size: 14, weight: buildStep >= i ? .medium : .regular))
+                            .font(.kb(14, buildStep >= i ? .medium : .regular))
                             .foregroundStyle(buildStep >= i ? KB.ink : KB.muted)
                     }
                 }
@@ -370,11 +370,11 @@ struct OnboardingView: View {
             Spacer()
 
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 56))
+                .font(.kb(56))
                 .foregroundStyle(KB.green)
 
             Text("\(model.userName)님의 7월 계획이\n준비됐어요")
-                .font(.system(size: 25, weight: .bold))
+                .font(.kb(25, .bold))
                 .foregroundStyle(KB.ink)
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
@@ -409,11 +409,11 @@ struct OnboardingView: View {
     private func summaryRow(symbol: String, text: String) -> some View {
         HStack(spacing: 10) {
             Image(systemName: symbol)
-                .font(.system(size: 14, weight: .medium))
+                .font(.kb(14, .medium))
                 .foregroundStyle(KB.green)
                 .frame(width: 20)
             Text(text)
-                .font(.system(size: 13.5))
+                .font(.kb(13.5))
                 .foregroundStyle(KB.ink)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -437,7 +437,7 @@ struct FlowChips: View {
                 } label: {
                     HStack(spacing: 7) {
                         Image(systemName: item.symbol).font(.system(size: 15, weight: .regular))
-                        Text(item.label).font(.system(size: 15, weight: .medium))
+                        Text(item.label).font(.kb(15, .medium))
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 13)

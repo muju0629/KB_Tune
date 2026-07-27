@@ -34,8 +34,8 @@ struct ConnectRow: View {
                 }
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(KB.ink)
-                    Text(detail).font(.system(size: 12.5)).foregroundStyle(KB.muted)
+                    Text(title).font(.kb(15, .semibold)).foregroundStyle(KB.ink)
+                    Text(detail).font(.kb(12.5)).foregroundStyle(KB.muted)
                         .fixedSize(horizontal: false, vertical: true)
                         .multilineTextAlignment(.leading)
                 }
@@ -58,7 +58,7 @@ struct ConnectRow: View {
         switch state {
         case .idle:
             Text("연결")
-                .font(.system(size: 13, weight: .bold)).foregroundStyle(KB.ink)
+                .font(.kb(13, .bold)).foregroundStyle(KB.ink)
                 .padding(.horizontal, 14).padding(.vertical, 7)
                 .background(KB.yellow, in: Capsule())
         case .loading:
@@ -66,12 +66,12 @@ struct ConnectRow: View {
         case .linked:
             HStack(spacing: 4) {
                 Image(systemName: "checkmark.circle.fill").font(.system(size: 15))
-                Text("연결됨").font(.system(size: 12.5, weight: .semibold))
+                Text("연결됨").font(.kb(12.5, .semibold))
             }
             .foregroundStyle(KB.green)
         case .denied:
             Text("설정에서 허용")
-                .font(.system(size: 12, weight: .medium)).foregroundStyle(KB.caution)
+                .font(.kb(12, .medium)).foregroundStyle(KB.caution)
         }
     }
 }
@@ -104,12 +104,12 @@ struct KBPayConsentSheet: View {
                         ZStack {
                             RoundedRectangle(cornerRadius: 12, style: .continuous).fill(KB.yellow)
                                 .frame(width: 46, height: 46)
-                            Text("KB\nPay").font(.system(size: 12, weight: .heavy))
+                            Text("KB\nPay").font(.kb(12, .heavy))
                                 .multilineTextAlignment(.center).foregroundStyle(KB.ink)
                         }
                         VStack(alignment: .leading, spacing: 3) {
                             Text("KB Pay 이용내역을\n불러올까요?")
-                                .font(.system(size: 20, weight: .bold)).foregroundStyle(KB.ink)
+                                .font(.kb(20, .bold)).foregroundStyle(KB.ink)
                                 .lineSpacing(2)
                         }
                         Spacer()
@@ -117,17 +117,17 @@ struct KBPayConsentSheet: View {
                     .padding(.top, 14)
 
                     Text("최근 이용내역을 읽어 소비 패턴을 분석하고, 앞으로의 일정에 쓸 금액을 예측해요.")
-                        .font(.system(size: 13.5)).foregroundStyle(KB.muted).lineSpacing(3)
+                        .font(.kb(13.5)).foregroundStyle(KB.muted).lineSpacing(3)
                         .fixedSize(horizontal: false, vertical: true)
 
                     VStack(alignment: .leading, spacing: 11) {
-                        Text("가져오는 항목").font(.system(size: 12.5, weight: .semibold))
+                        Text("가져오는 항목").font(.kb(12.5, .semibold))
                             .foregroundStyle(KB.muted)
                         ForEach(collected, id: \.0) { item in
                             HStack(spacing: 9) {
                                 Image(systemName: item.1).font(.system(size: 13))
                                     .foregroundStyle(KB.green).frame(width: 18)
-                                Text(item.0).font(.system(size: 14)).foregroundStyle(KB.ink)
+                                Text(item.0).font(.kb(14)).foregroundStyle(KB.ink)
                             }
                         }
                     }
@@ -136,17 +136,17 @@ struct KBPayConsentSheet: View {
                     .background(KB.greenSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
 
                     VStack(alignment: .leading, spacing: 9) {
-                        Text("가져오지 않는 항목").font(.system(size: 12.5, weight: .semibold))
+                        Text("가져오지 않는 항목").font(.kb(12.5, .semibold))
                             .foregroundStyle(KB.muted)
                         Text(notCollected.joined(separator: " · "))
-                            .font(.system(size: 14, weight: .medium)).foregroundStyle(KB.ink)
+                            .font(.kb(14, .medium)).foregroundStyle(KB.ink)
                     }
                     .padding(15)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(KB.canvas, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
 
                     Text("이 화면은 KB AI Challenge 데모예요. 실제 KB Pay 계정에 접속하지 않고, 미리 준비한 이용내역을 씁니다.")
-                        .font(.system(size: 11.5)).foregroundStyle(KB.muted).lineSpacing(2)
+                        .font(.kb(11.5)).foregroundStyle(KB.muted).lineSpacing(2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.horizontal, 22)

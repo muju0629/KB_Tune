@@ -49,12 +49,12 @@ struct SettingsView: View {
             ZStack {
                 Circle().fill(KB.yellow).frame(width: 56, height: 56)
                 Text(String(model.userName.prefix(1)))
-                    .font(.system(size: 22, weight: .bold)).foregroundStyle(KB.ink)
+                    .font(.kb(22, .bold)).foregroundStyle(KB.ink)
             }
             VStack(alignment: .leading, spacing: 3) {
-                Text("\(model.userName)님").font(.system(size: 18, weight: .bold)).foregroundStyle(KB.ink)
+                Text("\(model.userName)님").font(.kb(18, .bold)).foregroundStyle(KB.ink)
                 Text(model.userRole)
-                    .font(.system(size: 13)).foregroundStyle(KB.muted)
+                    .font(.kb(13)).foregroundStyle(KB.muted)
             }
             Spacer()
         }
@@ -80,7 +80,7 @@ struct SettingsView: View {
     private var directionRow: some View {
         HStack(spacing: 12) {
             rowIcon("arrow.up.arrow.down")
-            Text("이번 달 소비 방향").font(.system(size: 14.5)).foregroundStyle(KB.ink)
+            Text("이번 달 소비 방향").font(.kb(14.5)).foregroundStyle(KB.ink)
             Spacer()
             Menu {
                 ForEach(SpendDirection.allCases) { d in
@@ -91,7 +91,7 @@ struct SettingsView: View {
                 }
             } label: {
                 HStack(spacing: 4) {
-                    Text(model.direction.label).font(.system(size: 14.5, weight: .semibold)).foregroundStyle(KB.ink)
+                    Text(model.direction.label).font(.kb(14.5, .semibold)).foregroundStyle(KB.ink)
                     Image(systemName: "chevron.up.chevron.down").font(.system(size: 11)).foregroundStyle(KB.muted)
                 }
             }
@@ -104,11 +104,11 @@ struct SettingsView: View {
 
     private var keepsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("나한테 더 필요한 소비").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+            Text("나한테 더 필요한 소비").font(.kb(13, .semibold)).foregroundStyle(KB.muted)
             FlowChips(items: keepCandidates.map { (tag: $0.tag, label: $0.label, symbol: $0.symbol) },
                       selected: $model.hobbies)
             Text("예산을 조정할 때 \(model.protectedList) 소비는 줄이지 않고 남겨둬요. 탭해서 바로 바꿀 수 있어요.")
-                .font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                .font(.kb(11.5)).foregroundStyle(KB.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -117,7 +117,7 @@ struct SettingsView: View {
 
     private var calendarBasisSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("계산 기준").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+            Text("계산 기준").font(.kb(13, .semibold)).foregroundStyle(KB.muted)
             VStack(spacing: 0) {
                 basisRow(icon: "calendar", title: "2026년 7월 캘린더", detail: "31일 · 인턴 출근 22일")
                 rowDivider
@@ -127,7 +127,7 @@ struct SettingsView: View {
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
 
             Text("실제 결제액이 아닌 예상값이에요. 수입과 일정 금액을 수정하면 계획도 다시 계산돼요.")
-                .font(.system(size: 11)).foregroundStyle(KB.muted)
+                .font(.kb(11)).foregroundStyle(KB.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -135,9 +135,9 @@ struct SettingsView: View {
     private func basisRow(icon: String, title: String, detail: String) -> some View {
         HStack(spacing: 12) {
             rowIcon(icon)
-            Text(title).font(.system(size: 14.5)).foregroundStyle(KB.ink)
+            Text(title).font(.kb(14.5)).foregroundStyle(KB.ink)
             Spacer()
-            Text(detail).font(.system(size: 11.5)).foregroundStyle(KB.muted)
+            Text(detail).font(.kb(11.5)).foregroundStyle(KB.muted)
                 .multilineTextAlignment(.trailing)
         }
         .padding(.horizontal, 16).padding(.vertical, 14)
@@ -147,14 +147,14 @@ struct SettingsView: View {
 
     private var privacySection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("개인정보").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+            Text("개인정보").font(.kb(13, .semibold)).foregroundStyle(KB.muted)
             VStack(spacing: 0) {
                 Toggle(isOn: $sharesEventTitles) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("일정 제목까지 함께 분석")
-                            .font(.system(size: 14.5)).foregroundStyle(KB.ink)
+                            .font(.kb(14.5)).foregroundStyle(KB.ink)
                         Text("끄면 일정 유형과 금액만 넘어가요")
-                            .font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                            .font(.kb(11.5)).foregroundStyle(KB.muted)
                     }
                 }
                 .tint(KB.green)
@@ -164,7 +164,7 @@ struct SettingsView: View {
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
 
             Text("대화 기능을 켰을 때만 해당돼요. 일정 제목에는 병원·종교처럼 민감한 내용이 들어갈 수 있어서 기본은 꺼져 있어요. 이름과 나이는 어느 쪽이든 보내지 않아요.")
-                .font(.system(size: 11)).foregroundStyle(KB.muted)
+                .font(.kb(11)).foregroundStyle(KB.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -178,8 +178,8 @@ struct SettingsView: View {
             infoRow("앱 버전", "1.0.0")
             rowDivider
             VStack(alignment: .leading, spacing: 6) {
-                Text("개인정보 안내").font(.system(size: 13, weight: .medium)).foregroundStyle(KB.ink)
-                Text(productDisclaimer).font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                Text("개인정보 안내").font(.kb(13, .medium)).foregroundStyle(KB.ink)
+                Text(productDisclaimer).font(.kb(11.5)).foregroundStyle(KB.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -199,7 +199,7 @@ struct SettingsView: View {
                 .padding(.vertical, 8)
             if !isIncome {
                 Text("수입의 \(savingPct)%예요.")
-                    .font(.system(size: 13, weight: .medium)).foregroundStyle(KB.green)
+                    .font(.kb(13, .medium)).foregroundStyle(KB.green)
                     .frame(maxWidth: .infinity)
             }
             Button { editing = nil } label: { Text("완료") }
@@ -211,7 +211,7 @@ struct SettingsView: View {
 
     private func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+            Text(title).font(.kb(13, .semibold)).foregroundStyle(KB.muted)
             VStack(spacing: 0) { content() }
                 .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
@@ -229,11 +229,11 @@ struct SettingsView: View {
         Button(action: action) {
             HStack(spacing: 12) {
                 rowIcon(icon)
-                Text(title).font(.system(size: 14.5)).foregroundStyle(KB.ink)
+                Text(title).font(.kb(14.5)).foregroundStyle(KB.ink)
                 Spacer()
                 VStack(alignment: .trailing, spacing: 1) {
-                    Text(value).font(.system(size: 14.5, weight: .semibold)).foregroundStyle(KB.ink)
-                    if let sub { Text(sub).font(.system(size: 11.5)).foregroundStyle(KB.muted) }
+                    Text(value).font(.kb(14.5, .semibold)).foregroundStyle(KB.ink)
+                    if let sub { Text(sub).font(.kb(11.5)).foregroundStyle(KB.muted) }
                 }
                 Image(systemName: "chevron.right").font(.system(size: 12)).foregroundStyle(KB.muted)
             }
@@ -244,9 +244,9 @@ struct SettingsView: View {
 
     private func infoRow(_ title: String, _ value: String) -> some View {
         HStack {
-            Text(title).font(.system(size: 14)).foregroundStyle(KB.ink)
+            Text(title).font(.kb(14)).foregroundStyle(KB.ink)
             Spacer()
-            Text(value).font(.system(size: 14)).foregroundStyle(KB.muted)
+            Text(value).font(.kb(14)).foregroundStyle(KB.muted)
         }
         .padding(.horizontal, 16).padding(.vertical, 14)
     }

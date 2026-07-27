@@ -56,7 +56,7 @@ struct AnalysisView: View {
     /// 여기서 필요한 건 제목 한 줄뿐이라 그냥 텍스트로 그린다.
     private var title: some View {
         Text("소비 분석")
-            .font(.system(size: 17, weight: .semibold))
+            .font(.kb(17, .semibold))
             .foregroundStyle(KB.ink)
             .frame(maxWidth: .infinity)
             .padding(.bottom, 2)
@@ -67,9 +67,9 @@ struct AnalysisView: View {
     private var uploadSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("소비 데이터 올리기").font(.system(size: 16, weight: .semibold)).foregroundStyle(KB.ink)
+                Text("소비 데이터 올리기").font(.kb(16, .semibold)).foregroundStyle(KB.ink)
                 Text("결제 캡처가 있으면 일정의 예상 금액과 비교할 수 있어요. 이미지는 기기에만 보관돼요.")
-                    .font(.system(size: 12.5)).foregroundStyle(KB.muted).lineSpacing(2)
+                    .font(.kb(12.5)).foregroundStyle(KB.muted).lineSpacing(2)
             }
 
             PhotosPicker(selection: $picks, maxSelectionCount: 10, matching: .images) {
@@ -77,7 +77,7 @@ struct AnalysisView: View {
                     if isImporting { ProgressView().tint(KB.ink) }
                     else { Image(systemName: "photo.badge.plus").font(.system(size: 16, weight: .medium)) }
                     Text(isImporting ? "불러오는 중…" : "캡처 이미지 올리기")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.kb(14, .semibold))
                 }
                 .foregroundStyle(KB.ink)
                 .frame(maxWidth: .infinity).frame(height: 48)
@@ -89,7 +89,7 @@ struct AnalysisView: View {
             if store.shots.isEmpty {
                 HStack(spacing: 8) {
                     Image(systemName: "tray").foregroundStyle(KB.muted)
-                    Text("아직 올린 캡처가 없어요.").font(.system(size: 12.5)).foregroundStyle(KB.muted)
+                    Text("아직 올린 캡처가 없어요.").font(.kb(12.5)).foregroundStyle(KB.muted)
                 }
                 .frame(maxWidth: .infinity).padding(.vertical, 22)
                 .background(KB.line.opacity(0.3), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -99,7 +99,7 @@ struct AnalysisView: View {
                         ForEach(store.shots) { shot in thumbnail(shot) }
                     }
                 }
-                Text("저장된 캡처 \(store.shots.count)장").font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                Text("저장된 캡처 \(store.shots.count)장").font(.kb(11.5)).foregroundStyle(KB.muted)
             }
         }
     }
@@ -113,7 +113,7 @@ struct AnalysisView: View {
             .overlay(alignment: .topTrailing) {
                 Button { store.delete(shot) } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 18))
+                        .font(.kb(18))
                         .foregroundStyle(.white, KB.ink.opacity(0.6))
                 }
                 .padding(4)
@@ -148,7 +148,7 @@ struct AnalysisView: View {
                     if isExtracting { ProgressView().tint(KB.ink) }
                     else { Image(systemName: "doc.text.viewfinder").font(.system(size: 16, weight: .medium)) }
                     Text(isExtracting ? "캡처를 읽는 중…" : "캡처에서 거래 읽기")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.kb(14, .semibold))
                 }
                 .foregroundStyle(KB.ink)
                 .frame(maxWidth: .infinity).frame(height: 48)
@@ -160,10 +160,10 @@ struct AnalysisView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
                         Text("읽어낸 거래 \(result.transactions.count)건")
-                            .font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.ink)
+                            .font(.kb(13, .semibold)).foregroundStyle(KB.ink)
                         Spacer()
                         Text(sourceLabel(result.method))
-                            .font(.system(size: 10.5, weight: .medium)).foregroundStyle(KB.muted)
+                            .font(.kb(10.5, .medium)).foregroundStyle(KB.muted)
                             .padding(.horizontal, 7).padding(.vertical, 3)
                             .background(KB.line.opacity(0.45), in: Capsule())
                     }
@@ -174,12 +174,12 @@ struct AnalysisView: View {
                                       background: tx.category == "기타" ? KB.line.opacity(0.4) : KB.greenSoft,
                                       size: 34)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(tx.merchant).font(.system(size: 13.5, weight: .medium))
+                                Text(tx.merchant).font(.kb(13.5, .medium))
                                     .foregroundStyle(KB.ink).lineLimit(1)
-                                Text(tx.category).font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                                Text(tx.category).font(.kb(11.5)).foregroundStyle(KB.muted)
                             }
                             Spacer()
-                            Text(formatWon(tx.amount)).font(.system(size: 13.5, weight: .semibold))
+                            Text(formatWon(tx.amount)).font(.kb(13.5, .semibold))
                                 .foregroundStyle(KB.ink)
                         }
                         .padding(.vertical, 2)
@@ -188,9 +188,9 @@ struct AnalysisView: View {
                     if !result.transactions.isEmpty {
                         Divider().overlay(KB.line)
                         HStack {
-                            Text("합계").font(.system(size: 13, weight: .medium)).foregroundStyle(KB.muted)
+                            Text("합계").font(.kb(13, .medium)).foregroundStyle(KB.muted)
                             Spacer()
-                            Text(formatWon(result.total)).font(.system(size: 15, weight: .bold))
+                            Text(formatWon(result.total)).font(.kb(15, .bold))
                                 .foregroundStyle(KB.ink)
                         }
                     }
@@ -198,7 +198,7 @@ struct AnalysisView: View {
                     ForEach(result.warnings, id: \.self) { w in
                         HStack(alignment: .top, spacing: 6) {
                             Image(systemName: "info.circle").font(.system(size: 12)).foregroundStyle(KB.muted)
-                            Text(w).font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                            Text(w).font(.kb(11.5)).foregroundStyle(KB.muted)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
@@ -290,9 +290,9 @@ struct AnalysisView: View {
         let upcomingTotal = (essential + discretionary).reduce(0) { $0 + $1.upcoming }
         return VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
-                Text("7월 지출").font(.system(size: 16, weight: .semibold)).foregroundStyle(KB.ink)
+                Text("7월 지출").font(.kb(16, .semibold)).foregroundStyle(KB.ink)
                 Spacer()
-                Text("합계 약 \(formatWon(grandTotal))").font(.system(size: 12.5)).foregroundStyle(KB.muted)
+                Text("합계 약 \(formatWon(grandTotal))").font(.kb(12.5)).foregroundStyle(KB.muted)
             }
 
             HStack(spacing: 14) {
@@ -307,14 +307,14 @@ struct AnalysisView: View {
             Text(upcomingTotal > 0
                  ? "짙은 회색이 앞으로 나갈 것으로 보이는 \(formatWon(upcomingTotal))이에요."
                  : "이번 달 예상 지출을 필수와 기타로 나눠 봤어요.")
-                .font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                .font(.kb(11.5)).foregroundStyle(KB.muted)
         }
     }
 
     private func legendDot(_ color: Color, _ label: String) -> some View {
         HStack(spacing: 5) {
             Circle().fill(color).frame(width: 8, height: 8)
-            Text(label).font(.system(size: 11.5)).foregroundStyle(KB.muted)
+            Text(label).font(.kb(11.5)).foregroundStyle(KB.muted)
         }
     }
 
@@ -322,9 +322,9 @@ struct AnalysisView: View {
         let total = items.reduce(0) { $0 + $1.total }
         return VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text(title).font(.system(size: 14, weight: .bold)).foregroundStyle(KB.ink)
+                Text(title).font(.kb(14, .bold)).foregroundStyle(KB.ink)
                 Spacer()
-                Text(formatWon(total)).font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+                Text(formatWon(total)).font(.kb(13, .semibold)).foregroundStyle(KB.muted)
             }
             ForEach(items) { item in bucketRow(item, maxTotal: maxTotal) }
         }
@@ -338,16 +338,16 @@ struct AnalysisView: View {
             IconBadge(systemName: item.symbol, background: KB.greenSoft, size: 38)
             VStack(alignment: .leading, spacing: 5) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(item.name).font(.system(size: 14, weight: .medium)).foregroundStyle(KB.ink)
+                    Text(item.name).font(.kb(14, .medium)).foregroundStyle(KB.ink)
                     Spacer()
                     if item.upcoming > 0 {
                         Text("예상 +\(formatWon(item.upcoming))")
-                            .font(.system(size: 10.5, weight: .medium)).foregroundStyle(upcomingTint)
+                            .font(.kb(10.5, .medium)).foregroundStyle(upcomingTint)
                     }
-                    Text(formatWon(item.total)).font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.ink)
+                    Text(formatWon(item.total)).font(.kb(13, .semibold)).foregroundStyle(KB.ink)
                 }
                 if let detail = item.detail {
-                    Text(detail).font(.system(size: 10.5)).foregroundStyle(KB.muted)
+                    Text(detail).font(.kb(10.5)).foregroundStyle(KB.muted)
                         .lineLimit(1).minimumScaleFactor(0.85)
                 }
                 GeometryReader { geo in
@@ -375,9 +375,9 @@ struct AnalysisView: View {
                 Image(systemName: "sparkles").font(.system(size: 18)).foregroundStyle(KB.ink)
             }
             VStack(alignment: .leading, spacing: 5) {
-                Text("이번 달은 식비와 병원비가 크게 나갔어요.").font(.system(size: 14, weight: .semibold)).foregroundStyle(KB.ink)
+                Text("이번 달은 식비와 병원비가 크게 나갔어요.").font(.kb(14, .semibold)).foregroundStyle(KB.ink)
                 Text("식비·교통·통신·병원처럼 꼭 나가는 돈은 필수 지출로 묶었어요. 짙은 회색은 아직 안 썼지만 앞으로 나갈 것으로 보이는 지출이라, 어디서 더 쓰게 될지 미리 볼 수 있어요.")
-                    .font(.system(size: 13)).foregroundStyle(KB.muted).fixedSize(horizontal: false, vertical: true)
+                    .font(.kb(13)).foregroundStyle(KB.muted).fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(16)
@@ -393,7 +393,7 @@ struct AnalysisView: View {
             Button { model.selectedTab = .products } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass").font(.system(size: 15))
-                    Text("확인한 지출로 카드·적금 비교하기").font(.system(size: 14, weight: .medium))
+                    Text("확인한 지출로 카드·적금 비교하기").font(.kb(14, .medium))
                     Spacer()
                     Image(systemName: "chevron.right").font(.system(size: 13))
                 }
@@ -405,7 +405,7 @@ struct AnalysisView: View {
             .buttonStyle(.plain)
 
             Text("캘린더 예상액은 카드 전월실적과 다를 수 있어요.")
-                .font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                .font(.kb(11.5)).foregroundStyle(KB.muted)
                 .frame(maxWidth: .infinity, alignment: .center)
         }
         .padding(.top, 4)

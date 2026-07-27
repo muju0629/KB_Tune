@@ -103,7 +103,7 @@ struct AddEventView: View {
                         if s == .device { Task { await loadDeviceEvents() } }
                     } label: {
                         Text(s.rawValue)
-                            .font(.system(size: 14, weight: source == s ? .semibold : .regular))
+                            .font(.kb(14, source == s ? .semibold : .regular))
                             .foregroundStyle(KB.ink)
                             .frame(maxWidth: .infinity).padding(.vertical, 10)
                             .background(source == s ? KB.yellow : .clear,
@@ -124,9 +124,9 @@ struct AddEventView: View {
     private var manualInput: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("무슨 일정인가요?").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+                Text("무슨 일정인가요?").font(.kb(13, .semibold)).foregroundStyle(KB.muted)
                 TextField("예: 지민 결혼식, 동아리 회식", text: $title)
-                    .font(.system(size: 16))
+                    .font(.kb(16))
                     .padding(14)
                     .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(KB.line, lineWidth: 1))
@@ -140,14 +140,14 @@ struct AddEventView: View {
             // 예상 지출 금액 — 제목으로 잡은 추정치를 회색으로 미리 얹어두고,
             // 사용자가 직접 적으면 그 값이 우선한다(회색 안내는 사라진다).
             VStack(alignment: .leading, spacing: 8) {
-                Text("예상 지출 금액").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+                Text("예상 지출 금액").font(.kb(13, .semibold)).foregroundStyle(KB.muted)
                 HStack(spacing: 6) {
                     TextField("", text: $amountText,
                               prompt: Text(suggested.map { formatWon($0.amount) } ?? "금액을 입력하세요"))
-                        .font(.system(size: 16))
+                        .font(.kb(16))
                         .keyboardType(.numberPad)
                     if !amountText.isEmpty {
-                        Text("원").font(.system(size: 16)).foregroundStyle(KB.muted)
+                        Text("원").font(.kb(16)).foregroundStyle(KB.muted)
                     }
                 }
                 .padding(14)
@@ -156,13 +156,13 @@ struct AddEventView: View {
 
                 if amountText.isEmpty, let s = suggested, s.amount > 0 {
                     Text(s.basis)
-                        .font(.system(size: 12)).foregroundStyle(KB.muted)
+                        .font(.kb(12)).foregroundStyle(KB.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("언제예요?").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+                Text("언제예요?").font(.kb(13, .semibold)).foregroundStyle(KB.muted)
                 DatePicker("", selection: $date, in: Self.dateRange,
                            displayedComponents: [.date, .hourAndMinute])
                     .datePickerStyle(.compact)
@@ -193,9 +193,9 @@ struct AddEventView: View {
             case .notDetermined:
                 VStack(alignment: .leading, spacing: 12) {
                     Text("기기 캘린더에서 일정을 가져올게요")
-                        .font(.system(size: 15, weight: .semibold)).foregroundStyle(KB.ink)
+                        .font(.kb(15, .semibold)).foregroundStyle(KB.ink)
                     Text("아이폰 캘린더에 있는 일정을 읽어와요. 설정에 추가한 구글·네이버 캘린더 일정도 함께 보여요. 내용은 기기에서만 사용해요.")
-                        .font(.system(size: 13)).foregroundStyle(KB.muted).lineSpacing(2)
+                        .font(.kb(13)).foregroundStyle(KB.muted).lineSpacing(2)
                     Button { Task { await loadDeviceEvents() } } label: {
                         if calendar.isLoading { ProgressView().tint(KB.ink) } else { Text("캘린더 불러오기") }
                     }
@@ -207,9 +207,9 @@ struct AddEventView: View {
 
             case .denied:
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("캘린더 접근이 꺼져 있어요").font(.system(size: 15, weight: .semibold)).foregroundStyle(KB.ink)
+                    Text("캘린더 접근이 꺼져 있어요").font(.kb(15, .semibold)).foregroundStyle(KB.ink)
                     Text("설정 → 개인정보 보호 → 캘린더에서 켤 수 있어요. 직접 입력으로도 추가할 수 있어요.")
-                        .font(.system(size: 13)).foregroundStyle(KB.muted)
+                        .font(.kb(13)).foregroundStyle(KB.muted)
                     Button { withAnimation(.snappy) { source = .manual } } label: { Text("직접 입력으로 추가") }
                         .buttonStyle(SecondaryButtonStyle())
                 }
@@ -223,13 +223,13 @@ struct AddEventView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "calendar").foregroundStyle(KB.muted)
                         Text("앞으로 30일간 등록된 일정이 없어요. 직접 입력으로 추가해 보세요.")
-                            .font(.system(size: 12.5)).foregroundStyle(KB.muted)
+                            .font(.kb(12.5)).foregroundStyle(KB.muted)
                     }
                     .padding(14).frame(maxWidth: .infinity, alignment: .leading)
                     .background(KB.greenSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 } else {
                     Text("가져올 일정을 선택하세요")
-                        .font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+                        .font(.kb(13, .semibold)).foregroundStyle(KB.muted)
                     ForEach(calendar.events) { ev in
                         Button {
                             title = ev.title
@@ -242,9 +242,9 @@ struct AddEventView: View {
                             HStack(spacing: 12) {
                                 IconBadge(systemName: "calendar", background: KB.yellowSoft, size: 38)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(ev.title).font(.system(size: 14.5, weight: .medium))
+                                    Text(ev.title).font(.kb(14.5, .medium))
                                         .foregroundStyle(KB.ink).lineLimit(1)
-                                    Text(ev.dayLabel).font(.system(size: 12)).foregroundStyle(KB.muted)
+                                    Text(ev.dayLabel).font(.kb(12)).foregroundStyle(KB.muted)
                                 }
                                 Spacer()
                                 Image(systemName: "chevron.right").font(.system(size: 13)).foregroundStyle(KB.muted)
@@ -260,7 +260,7 @@ struct AddEventView: View {
 
             if isEstimating {
                 HStack(spacing: 8) { ProgressView().tint(KB.muted); Text("예상 지출을 계산하는 중…")
-                    .font(.system(size: 12.5)).foregroundStyle(KB.muted) }
+                    .font(.kb(12.5)).foregroundStyle(KB.muted) }
             }
         }
     }
@@ -277,9 +277,9 @@ struct AddEventView: View {
                       warn: false, tint: KB.ink)
         } else {
             HStack {
-                Text("\(b.nextPayLabel) 카드 청구액").font(.system(size: 13)).foregroundStyle(KB.muted)
+                Text("\(b.nextPayLabel) 카드 청구액").font(.kb(13)).foregroundStyle(KB.muted)
                 Spacer()
-                Text("+\(formatWon(amount))").font(.system(size: 13, weight: .semibold))
+                Text("+\(formatWon(amount))").font(.kb(13, .semibold))
                     .foregroundStyle(KB.ink)
             }
         }
@@ -300,20 +300,20 @@ struct AddEventView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     Image(systemName: "sparkles").font(.system(size: 13)).foregroundStyle(KB.ink)
-                    Text("예상 지출을 이렇게 잡았어요").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.ink)
+                    Text("예상 지출을 이렇게 잡았어요").font(.kb(13, .semibold)).foregroundStyle(KB.ink)
                     Spacer()
                     if let e = estimate {
-                        Text(e.category).font(.system(size: 11, weight: .medium)).foregroundStyle(KB.ink)
+                        Text(e.category).font(.kb(11, .medium)).foregroundStyle(KB.ink)
                             .padding(.horizontal, 8).padding(.vertical, 3)
                             .background(KB.yellowSoft, in: Capsule())
                     }
                 }
-                Text(title).font(.system(size: 17, weight: .bold)).foregroundStyle(KB.ink)
-                Text("7월 \(dayNumber)일").font(.system(size: 12.5)).foregroundStyle(KB.muted)
+                Text(title).font(.kb(17, .bold)).foregroundStyle(KB.ink)
+                Text("7월 \(dayNumber)일").font(.kb(12.5)).foregroundStyle(KB.muted)
 
                 HStack {
                     Text(formatWon(amount))
-                        .font(.system(size: 26, weight: .bold)).foregroundStyle(KB.ink)
+                        .font(.kb(26, .bold)).foregroundStyle(KB.ink)
                         .monospacedDigit()
                         .contentTransition(.numericText())
                         .animation(.snappy(duration: 0.2), value: amount)
@@ -323,7 +323,7 @@ struct AddEventView: View {
                 .padding(.top, 2)
 
                 if let e = estimate {
-                    Text(e.basis).font(.system(size: 12)).foregroundStyle(KB.muted)
+                    Text(e.basis).font(.kb(12)).foregroundStyle(KB.muted)
                         .fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 6) {
                         Text("예상 범위 \(formatWon(e.low))~\(formatWon(e.high))")
@@ -332,7 +332,7 @@ struct AddEventView: View {
                         Text("·")
                         Text(e.method == "local" ? "기기 계산" : "서버 추정")
                     }
-                    .font(.system(size: 11)).foregroundStyle(KB.muted.opacity(0.9))
+                    .font(.kb(11)).foregroundStyle(KB.muted.opacity(0.9))
                 }
             }
             .padding(16)
@@ -342,7 +342,7 @@ struct AddEventView: View {
 
             // 영향
             VStack(alignment: .leading, spacing: 10) {
-                Text("이 일정을 넣으면").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+                Text("이 일정을 넣으면").font(.kb(13, .semibold)).foregroundStyle(KB.muted)
                 impactRow("이번 주 추가 사용 가능액", from: formatWon(before), to: formatWon(max(after, 0)),
                           warn: after < 0)
                 impactRow("적금 목표 확률", from: "\(probBefore)%", to: "\(probAfter)%",
@@ -360,7 +360,7 @@ struct AddEventView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 13))
                             .foregroundStyle(KB.caution)
-                        Text("이대로면 계획이 흔들려요").font(.system(size: 13, weight: .semibold))
+                        Text("이대로면 계획이 흔들려요").font(.kb(13, .semibold))
                             .foregroundStyle(KB.ink)
                     }
                     adjustmentRow(id: "keep", title: "그대로 추가",
@@ -415,11 +415,11 @@ struct AddEventView: View {
     private func impactRow(_ label: String, from: String, to: String,
                            warn: Bool, tint: Color? = nil) -> some View {
         HStack {
-            Text(label).font(.system(size: 13.5)).foregroundStyle(KB.ink)
+            Text(label).font(.kb(13.5)).foregroundStyle(KB.ink)
             Spacer()
-            Text(from).font(.system(size: 13)).foregroundStyle(KB.muted).strikethrough()
+            Text(from).font(.kb(13)).foregroundStyle(KB.muted).strikethrough()
             Image(systemName: "arrow.right").font(.system(size: 10)).foregroundStyle(KB.muted)
-            Text(to).font(.system(size: 15, weight: .bold))
+            Text(to).font(.kb(15, .bold))
                 .foregroundStyle(tint ?? (warn ? KB.caution : KB.green))
                 .monospacedDigit()
         }
@@ -430,10 +430,10 @@ struct AddEventView: View {
         return Button { chosenAdjustment = on ? nil : id } label: {
             HStack(spacing: 12) {
                 Image(systemName: on ? "largecircle.fill.circle" : "circle")
-                    .font(.system(size: 19)).foregroundStyle(on ? KB.ink : KB.line)
+                    .font(.kb(19)).foregroundStyle(on ? KB.ink : KB.line)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.system(size: 14, weight: .semibold)).foregroundStyle(KB.ink)
-                    Text(detail).font(.system(size: 12)).foregroundStyle(KB.muted)
+                    Text(title).font(.kb(14, .semibold)).foregroundStyle(KB.ink)
+                    Text(detail).font(.kb(12)).foregroundStyle(KB.muted)
                 }
                 Spacer()
             }
@@ -452,9 +452,9 @@ struct AddEventView: View {
         return VStack(spacing: 14) {
             Spacer(minLength: 40)
             Image(systemName: "checkmark.circle.fill").font(.system(size: 54)).foregroundStyle(KB.green)
-            Text("일정을 추가했어요").font(.system(size: 20, weight: .bold)).foregroundStyle(KB.ink)
+            Text("일정을 추가했어요").font(.kb(20, .bold)).foregroundStyle(KB.ink)
             Text("7월 \(dayNumber)일 ‘\(title)’ \(formatWon(amount))을 반영했어요.\n이번 주에는 \(formatWon(model.weeklyBudget))까지 쓸 수 있어요.")
-                .font(.system(size: 13.5)).foregroundStyle(KB.muted)
+                .font(.kb(13.5)).foregroundStyle(KB.muted)
                 .multilineTextAlignment(.center).lineSpacing(3)
             Spacer()
             Button { dismiss() } label: { Text("확인") }
@@ -466,7 +466,7 @@ struct AddEventView: View {
     private func hint(_ text: String) -> some View {
         HStack(spacing: 6) {
             Image(systemName: "sparkles").font(.system(size: 10))
-            Text(text).font(.system(size: 11.5))
+            Text(text).font(.kb(11.5))
         }
         .foregroundStyle(KB.muted)
     }

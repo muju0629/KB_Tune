@@ -37,14 +37,14 @@ struct BillingDetailSheet: View {
     private func summaryCard(_ b: BillingSummary) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 7) {
-                Text(b.payLabel).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(KB.ink)
+                Text(b.payLabel).font(.kb(12.5, .semibold)).foregroundStyle(KB.ink)
                 DDayBadge(days: b.daysUntilPay)
                 Spacer()
-                Text("KB ALL 카드(2054)").font(.system(size: 11)).foregroundStyle(KB.muted)
+                Text("KB ALL 카드(2054)").font(.kb(11)).foregroundStyle(KB.muted)
             }
 
             Text("카드 청구액")
-                .font(.system(size: 12.5, weight: .semibold))
+                .font(.kb(12.5, .semibold))
                 .foregroundStyle(KB.muted)
             CountUpWon(value: b.dueNext, size: 32)
 
@@ -64,8 +64,8 @@ struct BillingDetailSheet: View {
 
     private func miniStat(_ label: String, _ value: String) -> some View {
         VStack(spacing: 3) {
-            Text(label).font(.system(size: 11)).foregroundStyle(KB.muted)
-            Text(value).font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.ink)
+            Text(label).font(.kb(11)).foregroundStyle(KB.muted)
+            Text(value).font(.kb(13, .semibold)).foregroundStyle(KB.ink)
                 .monospacedDigit().lineLimit(1).minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity)
@@ -79,9 +79,9 @@ struct BillingDetailSheet: View {
             ForEach(b.installments) { tx in
                 VStack(alignment: .leading, spacing: 5) {
                     HStack {
-                        Text(tx.merchant).font(.system(size: 14, weight: .semibold)).foregroundStyle(KB.ink)
+                        Text(tx.merchant).font(.kb(14, .semibold)).foregroundStyle(KB.ink)
                         Spacer()
-                        Text("총 \(formatWon(tx.amount))").font(.system(size: 12.5)).foregroundStyle(KB.muted)
+                        Text("총 \(formatWon(tx.amount))").font(.kb(12.5)).foregroundStyle(KB.muted)
                     }
                     HStack(spacing: 6) {
                         ForEach(1...tx.installmentMonths, id: \.self) { round in
@@ -91,7 +91,7 @@ struct BillingDetailSheet: View {
                 }
             }
             Text("무이자 할부라 이자는 없지만, 다음 달 카드 청구액에 \(formatWon(b.carryover))이 자동으로 얹혀요.")
-                .font(.system(size: 11.5)).foregroundStyle(KB.muted).lineSpacing(2)
+                .font(.kb(11.5)).foregroundStyle(KB.muted).lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(16)
@@ -102,10 +102,10 @@ struct BillingDetailSheet: View {
     /// 회차별 청구액. 1회차는 이번 결제일이라 노랑, 나머지는 아직 안 온 달.
     private func roundChip(round: Int, tx: CardTransaction) -> some View {
         VStack(spacing: 2) {
-            Text("\(round)회차").font(.system(size: 10, weight: .medium))
+            Text("\(round)회차").font(.kb(10, .medium))
                 .foregroundStyle(round == 1 ? KB.ink : KB.muted)
             Text(formatWon(tx.installmentAmount(round: round)))
-                .font(.system(size: 11.5, weight: .bold)).monospacedDigit()
+                .font(.kb(11.5, .bold)).monospacedDigit()
                 .foregroundStyle(round == 1 ? KB.ink : KB.muted)
         }
         .frame(maxWidth: .infinity)
@@ -119,9 +119,9 @@ struct BillingDetailSheet: View {
     private var transactionList: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("이용내역").font(.system(size: 15, weight: .bold)).foregroundStyle(KB.ink)
+                Text("이용내역").font(.kb(15, .bold)).foregroundStyle(KB.ink)
                 Spacer()
-                Text(model.billing.periodLabel).font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                Text(model.billing.periodLabel).font(.kb(11.5)).foregroundStyle(KB.muted)
             }
             .padding(.bottom, 12)
 
@@ -163,7 +163,7 @@ struct BillingDetailSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 7) {
                 LabelBadge(text: m.verdict.label, color: verdictColor(m.verdict))
-                Text(m.event.title).font(.system(size: 13.5, weight: .semibold)).foregroundStyle(KB.ink)
+                Text(m.event.title).font(.kb(13.5, .semibold)).foregroundStyle(KB.ink)
                 Spacer()
             }
 
@@ -173,7 +173,7 @@ struct BillingDetailSheet: View {
                     HStack(alignment: .top, spacing: 6) {
                         Image(systemName: "circle.fill").font(.system(size: 3.5))
                             .foregroundStyle(KB.muted).padding(.top, 5.5)
-                        Text(c.note).font(.system(size: 12)).foregroundStyle(KB.muted)
+                        Text(c.note).font(.kb(12)).foregroundStyle(KB.muted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -185,7 +185,7 @@ struct BillingDetailSheet: View {
                         dismiss()
                     } label: {
                         Text("맞아요, 연결할게요")
-                            .font(.system(size: 12.5, weight: .semibold)).foregroundStyle(KB.ink)
+                            .font(.kb(12.5, .semibold)).foregroundStyle(KB.ink)
                             .frame(maxWidth: .infinity).padding(.vertical, 9)
                             .background(KB.yellow, in: Capsule())
                     }
@@ -193,7 +193,7 @@ struct BillingDetailSheet: View {
                         withAnimation { expanded = nil }
                     } label: {
                         Text("관련 없어요")
-                            .font(.system(size: 12.5, weight: .medium)).foregroundStyle(KB.muted)
+                            .font(.kb(12.5, .medium)).foregroundStyle(KB.muted)
                             .frame(maxWidth: .infinity).padding(.vertical, 9)
                             .background(.white, in: Capsule())
                             .overlay(Capsule().stroke(KB.line, lineWidth: 1))
@@ -223,25 +223,25 @@ struct BillingDetailSheet: View {
             IconBadge(systemName: AppModel.symbol(for: category), size: 34)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(tx.merchant).font(.system(size: 14, weight: .medium)).foregroundStyle(KB.ink)
+                Text(tx.merchant).font(.kb(14, .medium)).foregroundStyle(KB.ink)
                     .lineLimit(1)
                 HStack(spacing: 5) {
                     Text("07.\(String(format: "%02d", tx.day))\(tx.timeLabel.map { " " + $0 } ?? "")")
-                        .font(.system(size: 11)).foregroundStyle(KB.muted).monospacedDigit()
-                    Text("·").font(.system(size: 11)).foregroundStyle(KB.muted)
+                        .font(.kb(11)).foregroundStyle(KB.muted).monospacedDigit()
+                    Text("·").font(.kb(11)).foregroundStyle(KB.muted)
                     // 네이버페이·KICC 같은 결제대행은 가맹점을 알 수 없어 '기타'로 떨어진다.
                     // 그냥 두면 큰 금액이 조용히 묻히므로, 분류가 안 됐다는 걸 드러낸다.
                     if category == "기타" {
                         Text("분류 필요")
-                            .font(.system(size: 10, weight: .medium)).foregroundStyle(KB.caution)
+                            .font(.kb(10, .medium)).foregroundStyle(KB.caution)
                             .padding(.horizontal, 5).padding(.vertical, 1.5)
                             .overlay(RoundedRectangle(cornerRadius: 4)
                                 .stroke(KB.caution.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [2.5, 2])))
                     } else {
-                        Text(category).font(.system(size: 11)).foregroundStyle(KB.muted)
+                        Text(category).font(.kb(11)).foregroundStyle(KB.muted)
                     }
                     if tx.isKBPay {
-                        Text("KB Pay").font(.system(size: 9, weight: .bold)).foregroundStyle(KB.ink)
+                        Text("KB Pay").font(.kb(9, .bold)).foregroundStyle(KB.ink)
                             .padding(.horizontal, 4).padding(.vertical, 1.5)
                             .background(KB.yellow, in: RoundedRectangle(cornerRadius: 3))
                     }
@@ -254,14 +254,14 @@ struct BillingDetailSheet: View {
                 Text(formatWon(tx.amount)).money(14).foregroundStyle(KB.ink)
                 if tx.isInstallment {
                     Text("\(tx.installmentMonths)개월 무이자")
-                        .font(.system(size: 10, weight: .semibold)).foregroundStyle(KB.tangerine)
+                        .font(.kb(10, .semibold)).foregroundStyle(KB.tangerine)
                 } else if let m = MatchEngine.bestMatch(for: tx, in: model), m.verdict != .unrelated {
                     // 어떤 일정과 이어질 것 같은지 한 줄로. 자세한 근거는 탭하면 펼쳐진다.
                     HStack(spacing: 3) {
                         Image(systemName: "link").font(.system(size: 8, weight: .bold))
                         Text(m.event.title).lineLimit(1)
                     }
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.kb(10, .semibold))
                     .foregroundStyle(verdictColor(m.verdict))
                 }
             }

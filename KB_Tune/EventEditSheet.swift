@@ -66,7 +66,7 @@ struct EventEditSheet: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("저장") { save() }
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.kb(15, .semibold))
                         .foregroundStyle(changed ? KB.ink : KB.muted)
                         .disabled(!changed)
                 }
@@ -80,9 +80,9 @@ struct EventEditSheet: View {
         HStack(spacing: 11) {
             IconBadge(systemName: event.symbol, size: 42)
             VStack(alignment: .leading, spacing: 3) {
-                Text(event.title).font(.system(size: 16, weight: .bold)).foregroundStyle(KB.ink)
+                Text(event.title).font(.kb(16, .bold)).foregroundStyle(KB.ink)
                 Text("7월 \(dayNumber)일 · \(event.category)")
-                    .font(.system(size: 12.5)).foregroundStyle(KB.muted)
+                    .font(.kb(12.5)).foregroundStyle(KB.muted)
             }
             Spacer()
         }
@@ -93,7 +93,7 @@ struct EventEditSheet: View {
 
     private var timeField: some View {
         VStack(alignment: .leading, spacing: 9) {
-            Text("시작 시각").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+            Text("시작 시각").font(.kb(13, .semibold)).foregroundStyle(KB.muted)
             HStack {
                 Text(timeLabel(startHour)).money(20).foregroundStyle(KB.ink)
                 Spacer()
@@ -103,25 +103,25 @@ struct EventEditSheet: View {
             .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(KB.line, lineWidth: 1))
             Text("30분 단위로 옮길 수 있어요. 길이(\(Int(event.duration))시간)는 그대로예요.")
-                .font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                .font(.kb(11.5)).foregroundStyle(KB.muted)
         }
     }
 
     private var amountField: some View {
         VStack(alignment: .leading, spacing: 9) {
-            Text("예상 지출 금액").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+            Text("예상 지출 금액").font(.kb(13, .semibold)).foregroundStyle(KB.muted)
             HStack(spacing: 6) {
                 TextField("", text: $amountText, prompt: Text("금액을 입력하세요"))
-                    .font(.system(size: 16)).keyboardType(.numberPad)
+                    .font(.kb(16)).keyboardType(.numberPad)
                 if !amountText.isEmpty {
-                    Text("원").font(.system(size: 16)).foregroundStyle(KB.muted)
+                    Text("원").font(.kb(16)).foregroundStyle(KB.muted)
                 }
             }
             .padding(14)
             .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(KB.line, lineWidth: 1))
             if let basis = event.estimateBasis {
-                Text(basis).font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                Text(basis).font(.kb(11.5)).foregroundStyle(KB.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -129,11 +129,11 @@ struct EventEditSheet: View {
 
     private var impactCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("바꾸면").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+            Text("바꾸면").font(.kb(13, .semibold)).foregroundStyle(KB.muted)
             HStack {
-                Text("이번 주 추가 사용 가능액").font(.system(size: 13.5)).foregroundStyle(KB.ink)
+                Text("이번 주 추가 사용 가능액").font(.kb(13.5)).foregroundStyle(KB.ink)
                 Spacer()
-                Text(formatWon(model.weeklyBudget)).font(.system(size: 13))
+                Text(formatWon(model.weeklyBudget)).font(.kb(13))
                     .foregroundStyle(KB.muted).strikethrough()
                 Image(systemName: "arrow.right").font(.system(size: 10)).foregroundStyle(KB.muted)
                 Text(formatWon(previewWeekly)).money(15)
@@ -150,7 +150,7 @@ struct EventEditSheet: View {
             Button(role: .destructive) { confirmingDelete = true } label: {
                 HStack(spacing: 7) {
                     Image(systemName: "trash").font(.system(size: 14))
-                    Text("이 일정 삭제").font(.system(size: 15, weight: .semibold))
+                    Text("이 일정 삭제").font(.kb(15, .semibold))
                 }
                 .foregroundStyle(KB.expenseRed)
                 .frame(maxWidth: .infinity).padding(.vertical, 14)
@@ -163,7 +163,7 @@ struct EventEditSheet: View {
             Text(event.calendarEventID != nil
                  ? "기기 캘린더에서도 함께 지워져요."
                  : "이 일정은 앱에만 있어서, 기기 캘린더는 그대로예요.")
-                .font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                .font(.kb(11.5)).foregroundStyle(KB.muted)
         }
         .padding(.top, 4)
         .confirmationDialog("‘\(event.title)’을 삭제할까요?",
