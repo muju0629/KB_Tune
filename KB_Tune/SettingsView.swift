@@ -13,6 +13,9 @@ struct SettingsView: View {
     enum EditField: Identifiable { case income, savings; var id: Int { hashValue } }
     @State private var editing: EditField?
 
+    /// EventTitleConsent 와 같은 키를 본다 — 여기서 끄면 전송도 즉시 멈춘다.
+    @AppStorage("sharesEventTitlesWithLLM") private var sharesEventTitles = false
+
     private var savingPct: Int {
         model.monthlyIncome > 0
             ? Int((Double(model.savingsGoal) / Double(model.monthlyIncome) * 100).rounded())
@@ -27,6 +30,7 @@ struct SettingsView: View {
                     planSection
                     keepsSection
                     calendarBasisSection
+                    privacySection
                     infoSection
                 }
                 .padding(20)
@@ -137,6 +141,32 @@ struct SettingsView: View {
                 .multilineTextAlignment(.trailing)
         }
         .padding(.horizontal, 16).padding(.vertical, 14)
+    }
+
+    // MARK: 개인정보
+
+    private var privacySection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("개인정보").font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+            VStack(spacing: 0) {
+                Toggle(isOn: $sharesEventTitles) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("일정 제목까지 함께 분석")
+                            .font(.system(size: 14.5)).foregroundStyle(KB.ink)
+                        Text("끄면 일정 유형과 금액만 넘어가요")
+                            .font(.system(size: 11.5)).foregroundStyle(KB.muted)
+                    }
+                }
+                .tint(KB.green)
+                .padding(.horizontal, 16).padding(.vertical, 12)
+            }
+            .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
+
+            Text("대화 기능을 켰을 때만 해당돼요. 일정 제목에는 병원·종교처럼 민감한 내용이 들어갈 수 있어서 기본은 꺼져 있어요. 이름과 나이는 어느 쪽이든 보내지 않아요.")
+                .font(.system(size: 11)).foregroundStyle(KB.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     // MARK: 앱 정보
