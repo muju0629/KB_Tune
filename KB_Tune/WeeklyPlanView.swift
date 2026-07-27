@@ -63,6 +63,9 @@ struct WeeklyPlanView: View {
                                                  onKeep: { ev in
                                                      model.acceptRisk(of: ev, on: day.dayNumber)
                                                      selectedDay = model.day(number: day.dayNumber)
+                                                 },
+                                                 onEdit: { ev in
+                                                     editing = EditTarget(event: ev, day: day.dayNumber)
                                                  })
                                     .transition(.move(edge: .trailing).combined(with: .opacity))
                             } else if mode == .week {
@@ -896,7 +899,8 @@ struct WeeklyPlanView: View {
             if let day {
                 DayTimetableBody(day: day, onAction: { flash($0) },
                                  onMove: { model.moveEventToNextWeek($0, from: day.dayNumber) },
-                                 onKeep: { model.acceptRisk(of: $0, on: day.dayNumber) })
+                                 onKeep: { model.acceptRisk(of: $0, on: day.dayNumber) },
+                                 onEdit: { editing = EditTarget(event: $0, day: day.dayNumber) })
             } else {
                 HStack(spacing: 8) {
                     Image(systemName: "info.circle").foregroundStyle(KB.muted)
@@ -1044,6 +1048,7 @@ struct DayTimetableView: View {
     var onAction: (String) -> Void
     var onMove: ((DayEvent) -> Void)? = nil    // 위험 일정 → 다음 주로 이동
     var onKeep: ((DayEvent) -> Void)? = nil    // 위험 감수하고 유지(경고 해제)
+    var onEdit: ((DayEvent) -> Void)? = nil    // 일정 탭 → 시간·금액 수정/삭제
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -1071,7 +1076,17 @@ struct DayTimetableView: View {
                 }
             }
 
-            DayTimetableBody(day: day, onAction: onAction, onMove: onMove, onKeep: onKeep)
+            // 누를 수 있다는 걸 알려주지 않으면 아무도 안 누른다.
+            if onEdit != nil, day.hasSpend {
+                HStack(spacing: 5) {
+                    Image(systemName: "hand.tap").font(.system(size: 11))
+                    Text("일정을 누르면 시간·금액을 바꾸거나 지울 수 있어요")
+                        .font(.system(size: 12))
+                }
+                .foregroundStyle(KB.muted)
+            }
+
+            DayTimetableBody(day: day, onAction: onAction, onMove: onMove, onKeep: onKeep, onEdit: onEdit)
         }
     }
 }
@@ -1082,6 +1097,7 @@ struct DayTimetableBody: View {
     var onAction: (String) -> Void
     var onMove: ((DayEvent) -> Void)? = nil
     var onKeep: ((DayEvent) -> Void)? = nil
+    var onEdit: ((DayEvent) -> Void)? = nil
 
     private let startHour: Double = 8
     private let endHour: Double = 24
@@ -1224,7 +1240,9 @@ struct DayTimetableBody: View {
                 let lane = geo.size.width - gutter
                 ForEach(placedEvents) { slot in
                     let width = (lane - CGFloat(slot.columnCount - 1) * columnGap) / CGFloat(slot.columnCount)
-                    eventBlock(slot.event)
+                    Button { onEdit?(slot.event) } label: { eventBlock(slot.event) }
+                        .buttonStyle(.plain)
+                        .disabled(onEdit == nil || slot.event.amount == 0)
                         .frame(width: width)
                         .offset(x: gutter + CGFloat(slot.column) * (width + columnGap),
                                 y: CGFloat(slot.event.startHour - startHour) * hourHeight + 4)
