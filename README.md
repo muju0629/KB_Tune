@@ -19,12 +19,21 @@
 
 <br/><br/>
 
-<img src="docs/appstore/01-intro.png" width="200" alt="가계부, 캘린더, AI가 만나다" />
-<img src="docs/appstore/02-chat.png" width="200" alt="대화로 일정 추가" />
-<img src="docs/appstore/03-forecast.png" width="200" alt="예상 지출" />
-<img src="docs/appstore/08-privacy.png" width="200" alt="기기 안에서만" />
+<img src="docs/appstore/01-intro.png" width="190" alt="가계부, 캘린더, AI가 만나다" />
+<img src="docs/appstore/02-chat.png" width="190" alt="대화로 일정 추가" />
+<img src="docs/appstore/03-forecast.png" width="190" alt="예상 지출" />
+<img src="docs/appstore/04-basis.png" width="190" alt="계산 근거" />
 
-<sub>이번 주 예산 · 대화로 일정 추가 · 예상 지출 · 기기 안에서만</sub>
+<sub>이번 주 예산 · 대화로 일정 추가 · 예상 지출 · 계산 근거</sub>
+
+<br/><br/>
+
+<img src="docs/appstore/05-ask.png" width="190" alt="언제든 물어보기" />
+<img src="docs/appstore/06-analysis.png" width="190" alt="소비 분석" />
+<img src="docs/appstore/07-products.png" width="190" alt="카드·적금" />
+<img src="docs/appstore/08-privacy.png" width="190" alt="기기 안에서만" />
+
+<sub>언제든 물어보기 · 소비 분석 · 카드·적금 · 기기 안에서만</sub>
 
 </div>
 
@@ -144,37 +153,9 @@
 설정은 주간 화면 오른쪽 위 동그라미를 누르면 나와요.
 탭은 좌우로 밀어도 넘어가요. 주간 탭에서 **주간을 한 번 더 누르면** 맨 위로 올라가요.
 
-<details>
-<summary><b>화면 더 보기 (8장)</b></summary>
-<br/>
-
-<div align="center">
-
-<img src="docs/appstore/01-intro.png" width="170" alt="가계부, 캘린더, AI가 만나다" />
-<img src="docs/appstore/02-chat.png" width="170" alt="대화로 일정 추가" />
-<img src="docs/appstore/03-forecast.png" width="170" alt="예상 지출" />
-<img src="docs/appstore/04-basis.png" width="170" alt="계산 근거" />
-
-<sub>이번 주 예산 · 대화로 일정 추가 · 예상 지출 · 계산 근거</sub>
-
-<br/><br/>
-
-<img src="docs/appstore/05-ask.png" width="170" alt="언제든 물어보기" />
-<img src="docs/appstore/06-analysis.png" width="170" alt="소비 분석" />
-<img src="docs/appstore/07-products.png" width="170" alt="카드·적금" />
-<img src="docs/appstore/08-privacy.png" width="170" alt="기기 안에서만" />
-
-<sub>언제든 물어보기 · 소비 분석 · 카드·적금 · 기기 안에서만</sub>
-
-</div>
-
-<br/>
-
-App Store에 올리는 스크린샷 그대로예요. 폰 안에 들어간 화면은 사람이 캡처한 게 아니라
+맨 위 8장은 App Store에 올리는 스크린샷 그대로예요. 폰 안에 들어간 화면은 사람이 캡처한 게 아니라
 UI 테스트가 앱을 켜서 탭을 돌며 찍기 때문에, 화면이 바뀌면 스크린샷도 같이 바뀌어요.
-여기 보이는 건 README용으로 줄인 것이고, 제출용 원본은 6.9"(1320×2868)로 따로 뽑아 둡니다.
-
-</details>
+README에는 폭을 줄인 사본만 넣었고, 제출용 원본은 6.9"(1320×2868)로 따로 뽑아 둡니다.
 
 <br/>
 
