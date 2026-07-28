@@ -150,7 +150,7 @@ struct AnalysisView: View {
                     Text(isExtracting ? "캡처를 읽는 중…" : "캡처에서 거래 읽기")
                         .font(.kb(14, .semibold))
                 }
-                .foregroundStyle(KB.ink)
+                .foregroundStyle(KB.onYellow)
                 .frame(maxWidth: .infinity).frame(height: 48)
                 .background(KB.yellow, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
@@ -205,7 +205,7 @@ struct AnalysisView: View {
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(KB.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
                 .transition(.opacity)
             }
@@ -344,7 +344,7 @@ struct AnalysisView: View {
             ForEach(items) { item in bucketRow(item, maxTotal: maxTotal) }
         }
         .padding(16)
-        .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(KB.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KB.line, lineWidth: 1))
     }
 
@@ -387,7 +387,7 @@ struct AnalysisView: View {
         HStack(alignment: .top, spacing: 12) {
             ZStack {
                 Circle().fill(KB.yellow).frame(width: 40, height: 40)
-                Image(systemName: "sparkles").font(.system(size: 18)).foregroundStyle(KB.ink)
+                Image(systemName: "sparkles").font(.system(size: 18)).foregroundStyle(KB.onYellow)
             }
             VStack(alignment: .leading, spacing: 5) {
                 Text("이번 달은 식비와 병원비가 크게 나갔어요.").font(.kb(14, .semibold)).foregroundStyle(KB.ink)
@@ -397,7 +397,7 @@ struct AnalysisView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(KB.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KB.line, lineWidth: 1))
     }
 
@@ -414,7 +414,7 @@ struct AnalysisView: View {
                 }
                 .foregroundStyle(KB.ink)
                 .padding(16)
-                .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(KB.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
             }
             .buttonStyle(.plain)

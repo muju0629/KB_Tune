@@ -29,6 +29,8 @@ struct ChatMessage: Identifiable {
         /// 되묻기 — 모르는 걸 추측해서 답하지 않고 사용자가 고르게 한다.
         /// 고른 답이 다시 질문으로 들어가 대화가 이어진다.
         case choices([String])
+        /// 앱 데이터로는 답할 수 없는 질문. 누르면 그때 질문 원문이 검색으로 나간다.
+        case searchWeb(String)
     }
     let role: Role
     var conclusion: String                 // 결론(본문)
@@ -38,6 +40,14 @@ struct ChatMessage: Identifiable {
     var preview: EventPreview? = nil       // 대화 속 일정 미리보기
     var actions: Actions? = nil
     var isStream: Bool = false             // 백엔드 스트리밍 응답(자유 문장)
+}
+
+/// 검색 동의 시트에 실어 보낼 질문. `sheet(item:)`이 Identifiable을 요구해서 한 겹 감싼다.
+private struct SearchPrompt: Identifiable {
+    let id = UUID()
+    let query: String
+    /// true면 이 질문 하나를 검색하는 게 아니라 입력줄의 검색 스위치를 켜는 자리다.
+    var turnsOnMode = false
 }
 
 /// 모델이 보내온 자유 문장을 읽기 좋게 그린다.
@@ -168,6 +178,13 @@ struct ChatbotView: View {
     @State private var thinkingStep = 0
     @State private var toast: String?
     @State private var showConsent = false
+    /// 검색 동의를 아직 안 받았을 때 띄우는 시트. 검색이 필요한 질문이 나온 순간에만 뜬다.
+    @State private var pendingSearchQuery: SearchPrompt?
+    /// 지금 이 순간 질문 원문이 검색으로 나가는 중인지. 배지가 이걸 보고 바뀐다.
+    @State private var searchingNow = false
+    /// 입력줄의 검색 스위치. 켜 두면 보내는 말이 예산 계산이 아니라 웹 검색으로 간다.
+    /// 언제 원문이 나가는지를 앱이 눈치로 정하지 않고 사용자가 직접 정하게 하는 자리다.
+    @State private var searchMode = false
     @FocusState private var inputFocused: Bool
 
     // 데모 흐름 순서대로 — 소비 질문 → 절감 지점 → 패턴 → 다음 달 방향 → 적금
@@ -247,6 +264,78 @@ struct ChatbotView: View {
             showConsent = agent.requiresOffDeviceConsent && !CloudAIConsent.asked
         }
         .sheet(isPresented: $showConsent) { consentSheet }
+        .sheet(item: $pendingSearchQuery) { searchConsentSheet($0) }
+    }
+
+    // MARK: 검색 동의
+
+    /// 검색이 필요한 질문이 나온 그 순간에만 묻는다. 앱을 처음 켤 때 미리 받아두지 않는다 —
+    /// 무엇이 나가는지 사용자가 눈앞의 질문으로 확인할 수 있을 때 물어야 판단이 된다.
+    private func searchConsentSheet(_ prompt: SearchPrompt) -> some View {
+        let query = prompt.query.trimmingCharacters(in: .whitespaces)
+        return SheetContainer(title: prompt.turnsOnMode ? "웹 검색을 켤까요?" : "검색해서 알아볼까요?") {
+            VStack(alignment: .leading, spacing: 16) {
+                Text(prompt.turnsOnMode
+                     ? "켜 두는 동안 보내는 말이 그대로 검색에 나가요. 예산 계산은 하지 않아요."
+                     : "이 질문 한 줄이 그대로 검색에 나가요.")
+                    .font(.kb(14)).foregroundStyle(KB.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if !query.isEmpty {
+                    Text("“\(query)”")
+                        .font(.kb(14, .semibold)).foregroundStyle(KB.ink)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(KB.canvas, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(KB.line, lineWidth: 1))
+                }
+
+                consentRow(icon: "magnifyingglass", tint: KB.caution, title: "나가는 것",
+                           detail: prompt.turnsOnMode ? "검색이 켜져 있을 때 보내는 문장이에요."
+                                                      : "위 질문 문장 하나예요.")
+                consentRow(icon: "lock", tint: KB.green, title: "나가지 않는 것",
+                           detail: "일정 제목, 금액, 예산, 카드 내역, 이름은 검색으로 보내지 않아요.")
+
+                Text("검색을 쓰는 동안에는 위쪽 배지가 ‘검색 사용 중’으로 바뀌어요. 입력줄의 돋보기를 다시 누르면 꺼지고, 설정에서도 끌 수 있어요.")
+                    .font(.kb(11.5)).foregroundStyle(KB.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                VStack(spacing: 9) {
+                    consentButton(prompt.turnsOnMode ? "켤게요" : "검색할게요", filled: true) {
+                        WebSearchConsent.set(true)
+                        pendingSearchQuery = nil
+                        if prompt.turnsOnMode {
+                            searchMode = true
+                        } else {
+                            Task { await runSearch(query) }
+                        }
+                    }
+                    consentButton("안 할래요", filled: false) {
+                        WebSearchConsent.set(false)
+                        pendingSearchQuery = nil
+                    }
+                }
+            }
+        }
+    }
+
+    /// 질문 원문을 검색에 보내고 결과를 답변으로 붙인다.
+    /// 이 함수가 도는 동안에만 배지가 '검색 사용 중'이 된다.
+    @MainActor
+    private func runSearch(_ query: String) async {
+        searchingNow = true
+        isThinking = true
+        defer {
+            searchingNow = false
+            isThinking = false
+        }
+        let answer = await agent.search(query)
+        messages.append(answer ?? ChatMessage(
+            role: .agent,
+            conclusion: "검색이 지금은 안 돼요.",
+            reason: "검색을 담당하는 서버에 닿지 못했어요. 잠시 뒤에 다시 물어봐 주세요.",
+            basis: "검색 요청 실패"
+        ))
     }
 
     // MARK: 외부 AI 동의
@@ -302,10 +391,10 @@ struct ChatbotView: View {
         Button(action: action) {
             Text(label)
                 .font(.kb(14, .semibold))
-                .foregroundStyle(KB.ink)
+                .foregroundStyle(filled ? KB.onYellow : KB.ink)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 13)
-                .background(filled ? KB.yellow : .white,
+                .background(filled ? KB.yellow : KB.surface,
                             in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(filled ? .clear : KB.line, lineWidth: 1))
@@ -336,7 +425,7 @@ struct ChatbotView: View {
                         .font(.kb(9.5, .medium))
                         .foregroundStyle(KB.green)
                         .padding(.horizontal, 6).padding(.vertical, 3)
-                        .background(.white.opacity(0.75), in: Capsule())
+                        .background(KB.surface.opacity(0.75), in: Capsule())
                 }
                     .font(.kb(15, .semibold))
                     .foregroundStyle(KB.ink)
@@ -349,7 +438,7 @@ struct ChatbotView: View {
                 .font(.kb(11.5, .semibold))
                 .foregroundStyle(KB.ink)
                 .padding(.horizontal, 10).padding(.vertical, 7)
-                .background(.white.opacity(0.8), in: Capsule())
+                .background(KB.surface.opacity(0.8), in: Capsule())
         }
         .padding(.horizontal, 18).padding(.vertical, 10)
         .background(KB.yellowSoft)
@@ -357,7 +446,10 @@ struct ChatbotView: View {
         .accessibilityLabel("Tune 계획 도우미. \(privacyBadgeLabel). 이번 주 추가 사용 가능액 \(formatWon(model.weeklyBudget))")
     }
 
+    /// 지금 이 대화에서 무엇이 기기 밖으로 나가는지 한 줄로 알린다.
+    /// 검색은 질문 원문이 그대로 나가므로 가장 강한 표기가 되어야 한다.
     private var privacyBadgeLabel: String {
+        if searchingNow || searchMode { return "검색 사용 중" }
         guard CloudAIConsent.granted else { return "기기 안에서만" }
         return "직접식별자·원문 비공개"
     }
@@ -370,7 +462,7 @@ struct ChatbotView: View {
             HStack {
                 Spacer(minLength: 40)
                 Text(msg.conclusion)
-                    .font(.kb(14)).foregroundStyle(KB.ink)
+                    .font(.kb(14)).foregroundStyle(KB.onYellow)
                     .padding(.horizontal, 14).padding(.vertical, 10)
                     .background(KB.yellow, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
@@ -433,7 +525,7 @@ struct ChatbotView: View {
             actionButtons(for: msg)
         }
         .padding(14)
-        .background(.white, in: UnevenRoundedRectangle(topLeadingRadius: 5, bottomLeadingRadius: 16,
+        .background(KB.surface, in: UnevenRoundedRectangle(topLeadingRadius: 5, bottomLeadingRadius: 16,
                                                        bottomTrailingRadius: 16, topTrailingRadius: 16,
                                                        style: .continuous))
         .shadow(color: KB.cardShadow.opacity(0.65), radius: 8, x: 0, y: 3)
@@ -456,7 +548,7 @@ struct ChatbotView: View {
 
     private func smallAction(_ title: String, filled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title).font(.kb(12.5, .semibold)).foregroundStyle(KB.ink)
+            Text(title).font(.kb(12.5, .semibold)).foregroundStyle(filled ? KB.onYellow : KB.ink)
                 .padding(.horizontal, 14).padding(.vertical, 8)
                 .background(filled ? KB.yellow : .clear, in: Capsule())
                 .overlay(Capsule().stroke(filled ? .clear : KB.line, lineWidth: 1))
@@ -511,6 +603,24 @@ struct ChatbotView: View {
                 }
             }
             .padding(.top, 4)
+
+        case .searchWeb(let query):
+            // 검색은 사용자가 이 버튼을 누를 때만 시작한다. 누르기 전까지 원문은 기기 밖으로
+            // 나가지 않는다. 동의를 아직 안 받았으면 여기서 시트가 먼저 뜬다.
+            HStack(spacing: 8) {
+                smallAction("검색해서 알아보기", filled: true) {
+                    consumeAction(message.id)
+                    if WebSearchConsent.granted {
+                        Task { await runSearch(query) }
+                    } else {
+                        pendingSearchQuery = SearchPrompt(query: query)
+                    }
+                }
+                smallAction("괜찮아요", filled: false) {
+                    consumeAction(message.id)
+                }
+            }
+            .padding(.top, 2)
 
         case .openProducts:
             HStack(spacing: 8) {
@@ -620,7 +730,7 @@ struct ChatbotView: View {
                     Button { send(q) } label: {
                         Text(q).font(.kb(13)).foregroundStyle(KB.ink)
                             .padding(.horizontal, 14).padding(.vertical, 9)
-                            .background(.white, in: Capsule())
+                            .background(KB.surface, in: Capsule())
                             .overlay(Capsule().stroke(KB.line, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
@@ -669,11 +779,14 @@ struct ChatbotView: View {
 
     private var inputRow: some View {
         HStack(spacing: 10) {
-            TextField("편하게 말해 주세요", text: $input)
+            searchToggle
+
+            TextField(searchMode ? "웹에서 찾아볼 내용을 적어 주세요" : "편하게 말해 주세요", text: $input)
                 .font(.kb(14))
                 .padding(.horizontal, 16).padding(.vertical, 12)
-                .background(.white, in: Capsule())
-                .overlay(Capsule().stroke(KB.line, lineWidth: 1))
+                .background(KB.surface, in: Capsule())
+                .overlay(Capsule().stroke(searchMode ? KB.caution : KB.line,
+                                          lineWidth: searchMode ? 1.5 : 1))
                 .submitLabel(.send)
                 .onSubmit { send(input) }
                 .focused($inputFocused)
@@ -697,7 +810,7 @@ struct ChatbotView: View {
                 send(input)
             } label: {
                 Image(systemName: "arrow.up")
-                    .font(.kb(17, .bold)).foregroundStyle(KB.ink)
+                    .font(.kb(17, .bold)).foregroundStyle(KB.onYellow)
                     .frame(width: 44, height: 44)
                     .background(KB.yellow, in: Circle())
             }
@@ -705,6 +818,30 @@ struct ChatbotView: View {
             .opacity(input.trimmingCharacters(in: .whitespaces).isEmpty ? 0.5 : 1)
             .accessibilityLabel("질문 보내기")
         }
+    }
+
+    /// 검색 스위치. 켜는 순간이 곧 동의를 묻는 자리다 — 무엇이 나가는지
+    /// 눈앞의 질문으로 확인할 수 있을 때 물어야 판단이 된다.
+    private var searchToggle: some View {
+        Button {
+            if searchMode {
+                searchMode = false
+            } else if WebSearchConsent.granted {
+                searchMode = true
+            } else {
+                pendingSearchQuery = SearchPrompt(query: input, turnsOnMode: true)
+            }
+        } label: {
+            Image(systemName: "magnifyingglass")
+                .font(.kb(16, .bold))
+                .foregroundStyle(searchMode ? KB.onYellow : KB.muted)
+                .frame(width: 44, height: 44)
+                .background(searchMode ? KB.yellow : KB.surface, in: Circle())
+                .overlay(Circle().stroke(searchMode ? .clear : KB.line, lineWidth: 1))
+        }
+        .disabled(isThinking)
+        .accessibilityLabel(searchMode ? "웹 검색 켜짐. 누르면 끕니다" : "웹 검색 켜기")
+        .accessibilityAddTraits(searchMode ? .isSelected : [])
     }
 
     /// 녹음 시작/정지. 멈출 때 알아들은 문장을 입력창으로 옮긴다.
@@ -744,6 +881,14 @@ struct ChatbotView: View {
         input = ""
         inputFocused = false
         thinkingStep = 0
+
+        // 검색 스위치가 켜져 있으면 예산 규칙도 LLM도 거치지 않고 곧장 검색으로 간다.
+        // 사용자가 켜 둔 동안에는 무엇이 나가는지가 화면 위 배지로 계속 보인다.
+        if searchMode {
+            Task { await runSearch(trimmed) }
+            return
+        }
+
         withAnimation(.easeOut(duration: 0.25)) { isThinking = true }
 
         Task {
@@ -961,19 +1106,61 @@ struct ChatbotView: View {
         }
 
         // ① 지금 이걸 사도 되나 — 이번 주 예산 + 앞으로의 일정 + 다음 달 카드값을 함께 본다.
+        //
+        // 안 되는 상황에서는 결론을 흐리지 않는다. "흔들려요"처럼 여지를 두면 사도 된다는
+        // 뜻으로 읽힌다. 안 된다고 먼저 말하고, 얼마가 모자라고 무엇이 깨지는지 숫자로 보여준
+        // 다음에 대안을 준다. 다만 사람을 평가하지는 않는다 — 판단은 돈에 대해서만 한다.
         if q.contains("사도") || q.contains("살까") || q.contains("바지") || q.contains("구매") || q.contains("지를") {
             let over = max(0, upcomingTotal - model.remainingBudget)
-            let tight = model.weeklyBudget == 0 || over > 0
+            // 얼마짜리인지 말했으면 그 금액으로 따진다. 안 말했으면 초과액을 지어내지 않고
+            // 예산 상태만 말한다 — 물건값을 모르는데 "N원 모자라요"라고 하면 틀린 숫자가 된다.
+            let price = EventPhrase.amount(in: text)
+            let exceeds = price.map { $0 > model.weeklyBudget } ?? false
+            let tight = exceeds || over > 0 || model.weeklyBudget == 0
+
+            let verdict: String
+            if let price, exceeds {
+                verdict = "지금은 안 돼요. 이번 주에 더 쓸 수 있는 돈이 \(formatWon(model.weeklyBudget))인데, \(formatWon(price))을 쓰면 \(formatWon(price - model.weeklyBudget))을 넘겨요."
+            } else if over > 0 {
+                verdict = "지금은 안 돼요. 이미 잡힌 일정이 이번 달 남은 예산을 \(formatWon(over)) 넘어서 있어요."
+            } else if model.weeklyBudget == 0 {
+                verdict = "지금은 안 돼요. 이번 주에 더 쓸 수 있는 돈이 0원이에요."
+            } else if let price {
+                verdict = "\(formatWon(price))이면 이번 주 여유 \(formatWon(model.weeklyBudget)) 안에서 가능해요. 다만 \(b.payLabel) 카드 청구액도 같이 보고 정하는 게 좋아요."
+            } else {
+                verdict = "이번 주 여유 안에서는 가능해요. 다만 다음 달 카드 청구액도 같이 보고 정하는 게 좋아요."
+            }
+
             return ChatMessage(
                 role: .agent,
-                conclusion: tight
-                    ? "지금 사면 이번 달 계획이 흔들려요. 사고 싶으면 앞으로의 약속 중 하나를 다음 달로 옮기는 걸 먼저 볼게요."
-                    : "이번 주 여유 안에서는 가능해요. 다만 다음 달 카드 청구액도 같이 보고 정하는 게 좋아요.",
-                reason: upcomingEvents.isEmpty
-                    ? "이번 주 남은 확정 일정은 없어요."
-                    : "앞으로 \(upcomingSummary)이 잡혀 있어서 남은 예산 \(formatWon(model.remainingBudget))에서 \(formatWon(upcomingTotal))이 이미 예약된 상태예요.",
-                impact: "이번 주 추가 사용 가능액 \(formatWon(model.weeklyBudget)) · \(b.payLabel) 카드 청구액 \(formatWon(b.dueNext))에 얹혀요",
+                conclusion: verdict,
+                reason: tight
+                    ? (upcomingEvents.isEmpty
+                        ? "이번 주 예산이 이미 다 찼어요. 여기서 더 쓰면 \(b.payLabel) 카드 청구액 \(formatWon(b.dueNext))을 그대로 떠안게 돼요."
+                        : "앞으로 \(upcomingSummary)이 잡혀 있어요. 이건 이미 약속한 돈이라, 새로 사는 건 이 약속들을 깨야 가능해요.")
+                    : (upcomingEvents.isEmpty
+                        ? "이번 주 남은 확정 일정은 없어요."
+                        : "앞으로 \(upcomingSummary)이 잡혀 있어서 남은 예산 \(formatWon(model.remainingBudget))에서 \(formatWon(upcomingTotal))이 이미 예약된 상태예요."),
+                impact: tight
+                    ? "그래도 사려면 위 약속 중 하나를 다음 달로 옮겨야 해요. 적금 목표 확률은 지금 \(model.probability)%예요."
+                    : "이번 주 추가 사용 가능액 \(formatWon(model.weeklyBudget)) · \(b.payLabel) 카드 청구액 \(formatWon(b.dueNext))에 얹혀요",
                 basis: "7월 캘린더 · KB ALL 카드 이용내역 \(b.count)건 \(formatWon(b.usage)) · 할부 이월 \(formatWon(b.carryover))"
+            )
+        }
+
+        // ①-b 연체·미납 — 유일하게 대안을 나중에 두는 자리다.
+        //
+        // 다른 소비는 선택이지만 연체는 손해가 확정이다. 연체이자가 붙고 신용점수가
+        // 떨어지고 카드가 정지된다. 여기서 "대안을 먼저"를 지키면 연체가 선택지 중
+        // 하나처럼 보인다. 그래서 안 된다고 먼저 말한다.
+        // 이율·점수 같은 구체적 숫자는 앱이 모르므로 말하지 않는다.
+        if ["연체", "미납", "안갚", "못갚", "밀려도", "밀리면", "리볼빙", "돌려막"].contains(where: { q.contains($0) }) {
+            return ChatMessage(
+                role: .agent,
+                conclusion: "연체는 안 돼요. 이건 아껴 쓰는 것과 다른 문제예요.",
+                reason: "하루만 밀려도 연체이자가 붙고, 기간이 길어지면 신용점수가 떨어져요. 신용점수는 나중에 전세대출이나 카드 발급 조건까지 따라와서, 지금 아낀 돈보다 훨씬 비싸게 돌아와요. 리볼빙이나 돌려막기도 결국 이자를 뒤로 미루는 거라 같은 자리예요.",
+                impact: "\(b.payLabel) 카드 청구액이 \(formatWon(b.dueNext))이에요. 이건 먼저 막고, 부족한 만큼은 앞으로의 일정에서 빼는 쪽으로 볼게요.",
+                basis: "KB ALL 카드 이용내역 \(b.count)건 \(formatWon(b.usage)) · 할부 이월 \(formatWon(b.carryover))"
             )
         }
 
@@ -1176,12 +1363,15 @@ struct ChatbotView: View {
             )
         }
 
+        // 앱이 가진 데이터로 답이 안 되는 질문. 모른다고 말하되 그냥 끝내지 않고,
+        // 원하면 검색해서 알아보겠다고 제안한다. 누르기 전에는 아무것도 나가지 않는다.
         return ChatMessage(
             role: .agent,
             conclusion: Self.unknownConclusion,
-            reason: "사려는 것의 금액이나 바꾸고 싶은 일정 이름을 한 가지만 더 알려주실래요? 자연스럽게 이어서 말해도 괜찮아요.",
+            reason: "저는 성제님의 일정과 소비만 보고 있어서, 그 밖의 건 알지 못해요. 원하시면 검색해서 알아볼게요. 그때는 이 질문 한 줄이 그대로 검색에 나가요.",
             impact: "현재 추가 사용 가능액 \(formatWon(model.weeklyBudget))",
-            basis: "2026년 7월 캘린더 · 입력한 월수입과 저축 목표"
+            basis: "2026년 7월 캘린더 · 입력한 월수입과 저축 목표",
+            actions: .searchWeb(text)
         )
     }
 

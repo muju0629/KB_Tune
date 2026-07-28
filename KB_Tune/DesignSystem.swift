@@ -6,28 +6,45 @@
 //
 
 import SwiftUI
+import UIKit
 
 /// KB Tune 색상 토큰
+///
+/// 밝을 때와 어두울 때 두 값을 함께 들고 있다. 노랑만 양쪽이 같다 —
+/// 브랜드 색이라 배경이 뒤집혀도 그대로 둔다. 나머지는 어두운 배경에서
+/// 대비가 죽지 않도록 한 단계씩 밝힌 값을 쓴다.
 enum KB {
-    static let yellow = Color(hex: 0xFFCC00)      // 주요 버튼 · 선택 · 핵심 일정
-    static let yellowSoft = Color(hex: 0xFFF7CF)  // 선택 배경 · 약한 강조
-    static let ink = Color(hex: 0x25241F)         // 제목 · 주요 숫자 · 아이콘
-    static let canvas = Color(hex: 0xFBFAF7)      // 기본 화면 배경
-    static let muted = Color(hex: 0x747168)       // 보조 설명 · 메타 정보
-    static let line = Color(hex: 0xE6E2D8)        // 구분선 · 목록 경계
-    static let green = Color(hex: 0x3F8A55)       // 목표 유지 · 긍정 결과
-    static let greenSoft = Color(hex: 0xEEF5EC)   // 아이콘 배경 · 보호 상태
-    static let caution = Color(hex: 0xB4540A)     // 차분한 주의(예산 초과 등) — 오류용 빨강 아님
-    static let cautionSoft = Color(hex: 0xFBEEE2) // 주의 배경
-    static let expenseRed = Color(hex: 0xD64545)  // 월간 캘린더 등 지출 금액 표기
+    static let yellow = Color(hex: 0xFFCC00)                            // 주요 버튼 · 선택 · 핵심 일정
+    static let yellowSoft = Color(light: 0xFFF7CF, dark: 0x453A12)      // 선택 배경 · 약한 강조
+    static let ink = Color(light: 0x25241F, dark: 0xF2F0EA)             // 제목 · 주요 숫자 · 아이콘
+    static let canvas = Color(light: 0xFBFAF7, dark: 0x161513)          // 기본 화면 배경
+    static let surface = Color(light: 0xFFFFFF, dark: 0x222120)         // 배경 위에 떠 있는 카드 면
+    static let muted = Color(light: 0x747168, dark: 0xA6A29A)           // 보조 설명 · 메타 정보
+    static let line = Color(light: 0xE6E2D8, dark: 0x38352F)            // 구분선 · 목록 경계
+    static let green = Color(light: 0x3F8A55, dark: 0x5FB878)           // 목표 유지 · 긍정 결과
+    static let greenSoft = Color(light: 0xEEF5EC, dark: 0x1D2C21)       // 아이콘 배경 · 보호 상태
+    static let caution = Color(light: 0xB4540A, dark: 0xE08A46)         // 차분한 주의(예산 초과 등) — 오류용 빨강 아님
+    static let cautionSoft = Color(light: 0xFBEEE2, dark: 0x3A2716)     // 주의 배경
+    static let expenseRed = Color(light: 0xD64545, dark: 0xF07A7A)      // 월간 캘린더 등 지출 금액 표기
+
+    // 노랑 위에 얹는 글자·아이콘. 노랑은 어두울 때도 그대로 밝아서,
+    // 여기에 ink를 쓰면 다크에서 글자가 같이 밝아져 대비가 사라진다. 항상 어둡게 고정한다.
+    static let onYellow = Color(hex: 0x25241F)
+
+    // 토스트처럼 배경과 글자를 통째로 뒤집는 자리. ink를 배경으로 쓰면
+    // 어두울 때 ink가 밝아지면서 흰 글자가 사라지므로 따로 둔다.
+    static let inverseSurface = Color(light: 0x25241F, dark: 0xEDEAE3)
+    static let onInverse = Color(light: 0xFBFAF7, dark: 0x1A1917)
 
     // 종이 위에 카드를 얇은 테두리 대신 '깊이'로 띄우는 그림자.
-    static let cardShadow = Color(hex: 0x2A2822).opacity(0.07)
+    // 어두울 때는 같은 세기로는 안 보여서 더 짙게 깐다.
+    static let cardShadow = Color(lightColor: UIColor(hex: 0x2A2822).withAlphaComponent(0.07),
+                                  darkColor: UIColor.black.withAlphaComponent(0.45))
 
     // KB Pay 3.0의 라벨 뱃지 색. 카테고리를 색으로 먼저 알려주고 제목을 읽게 한다.
-    static let violet = Color(hex: 0x7A5CF0)       // AI·개인화 (My혜택·KB금융그룹 계열)
-    static let tangerine = Color(hex: 0xF07C1E)    // 추천·이벤트
-    static let info = Color(hex: 0x2A72E5)         // 강조 수치 — KB Pay가 금액 하이라이트에 쓰는 파랑
+    static let violet = Color(light: 0x7A5CF0, dark: 0x9E86FF)      // AI·개인화 (My혜택·KB금융그룹 계열)
+    static let tangerine = Color(light: 0xF07C1E, dark: 0xFF9A45)   // 추천·이벤트
+    static let info = Color(light: 0x2A72E5, dark: 0x6FA8FF)        // 강조 수치 — KB Pay가 금액 하이라이트에 쓰는 파랑
 }
 
 // MARK: - 라벨 뱃지 (KB Pay 3.0 문법)
@@ -89,33 +106,11 @@ extension View {
     }
 
     /// 떠 있는 카드 표면 — 테두리 대신 부드러운 그림자로 종이 위에 띄운다.
-    func elevatedCard(_ radius: CGFloat = 18, fill: Color = .white) -> some View {
+    func elevatedCard(_ radius: CGFloat = 18, fill: Color = KB.surface) -> some View {
         background(fill, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
             .shadow(color: KB.cardShadow, radius: 12, x: 0, y: 5)
     }
 
-    /// 화면에 들어올 때 순서대로 떠오르는 카드. index가 클수록 조금씩 늦게 나타난다.
-    /// 한꺼번에 나타나면 어디부터 읽어야 할지 알 수 없어서, 읽는 순서를 모션으로 안내한다.
-    func appearStagger(_ index: Int, base: Double = 0.05) -> some View {
-        modifier(StaggerAppear(index: index, base: base))
-    }
-}
-
-/// 카드 등장 연출 — 살짝 아래에서 떠오르며 페이드인.
-struct StaggerAppear: ViewModifier {
-    let index: Int
-    let base: Double
-    @State private var shown = false
-
-    func body(content: Content) -> some View {
-        content
-            .opacity(shown ? 1 : 0)
-            .offset(y: shown ? 0 : 14)
-            .onAppear {
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.85)
-                    .delay(Double(index) * base)) { shown = true }
-            }
-    }
 }
 
 /// 금액이 마지막 구간만 조용히 올라와 자리를 잡는 연출.
@@ -158,6 +153,26 @@ extension Color {
             opacity: 1
         )
     }
+
+    /// 밝을 때와 어두울 때 값을 따로 주는 색. 시스템 설정이 바뀌면 알아서 따라간다.
+    init(light: UInt, dark: UInt) {
+        self.init(lightColor: UIColor(hex: light), darkColor: UIColor(hex: dark))
+    }
+
+    init(lightColor: UIColor, darkColor: UIColor) {
+        self.init(UIColor { $0.userInterfaceStyle == .dark ? darkColor : lightColor })
+    }
+}
+
+extension UIColor {
+    convenience init(hex: UInt) {
+        self.init(
+            red: CGFloat((hex >> 16) & 0xFF) / 255,
+            green: CGFloat((hex >> 8) & 0xFF) / 255,
+            blue: CGFloat(hex & 0xFF) / 255,
+            alpha: 1
+        )
+    }
 }
 
 /// 86000 -> "86,000"
@@ -186,7 +201,10 @@ struct PrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.kb(16, .semibold))
-            .foregroundStyle(KB.ink)
+            .foregroundStyle(KB.onYellow)
+            // 라벨이 제목과 금액처럼 좌우로 벌어지는 경우 글자가 둥근 모서리에 닿는다.
+            // 가운데 정렬 라벨에는 영향이 없으므로 스타일에서 한 번에 띄운다.
+            .padding(.horizontal, 18)
             .frame(maxWidth: .infinity)
             .frame(height: 52)
             .background(KB.yellow, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -205,7 +223,7 @@ struct SecondaryButtonStyle: ButtonStyle {
             .foregroundStyle(KB.ink)
             .frame(maxWidth: .infinity)
             .frame(height: 52)
-            .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(KB.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .stroke(KB.line, lineWidth: 1)

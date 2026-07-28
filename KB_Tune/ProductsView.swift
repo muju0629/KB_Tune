@@ -75,7 +75,7 @@ struct ProductsHome: View {
             segButton("적금·통장", 1)
         }
         .padding(4)
-        .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(KB.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(KB.line, lineWidth: 1))
     }
 
@@ -85,7 +85,7 @@ struct ProductsHome: View {
         } label: {
             Text(title)
                 .font(.kb(14, segment == index ? .semibold : .medium))
-                .foregroundStyle(KB.ink)
+                .foregroundStyle(segment == index ? KB.onYellow : KB.ink)
                 .frame(maxWidth: .infinity)
                 .frame(height: 36)
                 .background(segment == index ? KB.yellow : .clear,
@@ -137,7 +137,7 @@ struct CardRecommendPage: View {
                             .rotationEffect(.degrees(showMore ? 180 : 0))
                     }
                     .padding(.horizontal, 14).frame(height: 44)
-                    .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(KB.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(KB.line, lineWidth: 1))
                 }
                 .buttonStyle(.plain)
@@ -241,7 +241,7 @@ struct CardHeroRow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     // 배지를 이름과 같은 줄에 두면 긴 카드명이 2줄로 깨져 별도 행으로 분리
                     Text(badge)
-                        .font(.kb(10, .bold)).foregroundStyle(KB.ink)
+                        .font(.kb(10, .bold)).foregroundStyle(badge == "추천" ? KB.onYellow : KB.ink)
                         .padding(.horizontal, 7).padding(.vertical, 2)
                         .background(badge == "추천" ? KB.yellow : KB.line, in: Capsule())
                     Text(eval.product.name)
@@ -261,7 +261,7 @@ struct CardHeroRow: View {
                 Image(systemName: "chevron.right").font(.system(size: 13)).foregroundStyle(KB.muted)
             }
             .padding(16)
-            .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(KB.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(badge == "추천" ? KB.yellow : KB.line.opacity(0.001), lineWidth: badge == "추천" ? 1.5 : 0))
             .shadow(color: KB.cardShadow, radius: 12, x: 0, y: 5)
@@ -370,7 +370,7 @@ struct CardDetailView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(KB.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KB.line, lineWidth: 1))
     }
 
@@ -513,7 +513,7 @@ struct SavingsRecommendPage: View {
                             .foregroundStyle(KB.muted).rotationEffect(.degrees(showExcluded ? 180 : 0))
                     }
                     .padding(.horizontal, 14).frame(height: 44)
-                    .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(KB.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(KB.line, lineWidth: 1))
                 }
                 .buttonStyle(.plain)
@@ -559,7 +559,7 @@ struct SavingsRecommendPage: View {
             }
         }
         .padding(16)
-        .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(KB.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
     }
 
@@ -579,7 +579,7 @@ struct SavingsRecommendPage: View {
     private func step(_ n: Int, _ title: String) -> some View {
         HStack(spacing: 8) {
             Text("\(n)")
-                .font(.kb(12, .bold)).foregroundStyle(KB.ink)
+                .font(.kb(12, .bold)).foregroundStyle(KB.onYellow)
                 .frame(width: 22, height: 22)
                 .background(KB.yellow, in: Circle())
             Text(title).font(.kb(14, .semibold)).foregroundStyle(KB.ink)
@@ -648,7 +648,7 @@ struct SavingsRow: View {
             Image(systemName: "chevron.right").font(.system(size: 13)).foregroundStyle(KB.muted)
         }
         .padding(15)
-        .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(KB.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
             .stroke(eval.verdict == .pick ? KB.yellow : Color.clear, lineWidth: eval.verdict == .pick ? 1.5 : 0))
         .shadow(color: KB.cardShadow, radius: 12, x: 0, y: 5)
@@ -767,7 +767,7 @@ struct SavingsDetailView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(KB.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
     }
 
@@ -818,7 +818,7 @@ struct ProductLinkFooter: View {
                         Spacer()
                         Image(systemName: "arrow.up.right")
                     }
-                    .font(.kb(15, .semibold)).foregroundStyle(KB.ink)
+                    .font(.kb(15, .semibold)).foregroundStyle(KB.onYellow)
                     .padding(.horizontal, 16).frame(height: 50)
                     .background(KB.yellow, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }

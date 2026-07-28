@@ -162,7 +162,7 @@ struct CalendarImportView: View {
                     HStack { Image(systemName: "arrow.clockwise"); Text("캘린더 다시 불러오기") }
                         .font(.kb(14, .medium)).foregroundStyle(KB.ink)
                         .frame(maxWidth: .infinity).padding(.vertical, 13)
-                        .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .background(KB.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(KB.line, lineWidth: 1))
                 }
                 .padding(.top, 4)
@@ -196,7 +196,7 @@ struct CalendarImportView: View {
             }
         }
         .padding(14)
-        .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(KB.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
     }
 }

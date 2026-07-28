@@ -185,7 +185,7 @@ struct BillingDetailSheet: View {
                         dismiss()
                     } label: {
                         Text("맞아요, 연결할게요")
-                            .font(.kb(12.5, .semibold)).foregroundStyle(KB.ink)
+                            .font(.kb(12.5, .semibold)).foregroundStyle(KB.onYellow)
                             .frame(maxWidth: .infinity).padding(.vertical, 9)
                             .background(KB.yellow, in: Capsule())
                     }
@@ -195,7 +195,7 @@ struct BillingDetailSheet: View {
                         Text("관련 없어요")
                             .font(.kb(12.5, .medium)).foregroundStyle(KB.muted)
                             .frame(maxWidth: .infinity).padding(.vertical, 9)
-                            .background(.white, in: Capsule())
+                            .background(KB.surface, in: Capsule())
                             .overlay(Capsule().stroke(KB.line, lineWidth: 1))
                     }
                 }
@@ -241,7 +241,7 @@ struct BillingDetailSheet: View {
                         Text(category).font(.kb(11)).foregroundStyle(KB.muted)
                     }
                     if tx.isKBPay {
-                        Text("KB Pay").font(.kb(9, .bold)).foregroundStyle(KB.ink)
+                        Text("KB Pay").font(.kb(9, .bold)).foregroundStyle(KB.onYellow)
                             .padding(.horizontal, 4).padding(.vertical, 1.5)
                             .background(KB.yellow, in: RoundedRectangle(cornerRadius: 3))
                     }
