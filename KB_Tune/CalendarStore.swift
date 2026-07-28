@@ -57,9 +57,16 @@ final class CalendarStore: ObservableObject {
         case .some(false):
             access = .denied
             lastError = nil
-        case .none:   // 타임아웃 — 응답 없음
-            access = .notDetermined
-            lastError = "캘린더 권한 응답이 없어요. 다시 시도하거나, 설정 앱에서 캘린더 접근을 켜주세요."
+        case .none:
+            // 타임아웃. 사용자가 뒤늦게 허용했을 수 있으니 시스템 상태를 다시 읽는다 —
+            // 안 그러면 실제로는 허용됐는데 화면은 계속 '연결 안 됨'으로 남는다.
+            refreshAccessStatus()
+            if access == .authorized {
+                lastError = nil
+                fetchThisWeek()
+            } else {
+                lastError = "캘린더 권한 응답이 없어요. 다시 시도하거나, 설정 앱에서 캘린더 접근을 켜주세요."
+            }
         }
     }
 
@@ -81,74 +88,73 @@ final class CalendarStore: ObservableObject {
         }
     }
 
-    // MARK: - 데모용 모의 일정
-    //
-    // 아이폰 **기본 캘린더**에 그대로 넣어 캘린더 앱에서 자연스럽게 보이게 한다.
-    // 대신 메모에 숨은 마커를 심어, 삭제는 **마커가 있는 일정만** 대상으로 한다
-    // → 사용자의 진짜 일정은 어떤 경우에도 지워지지 않는다.
+    // MARK: 쓰기 — 앱에서 잡은 일정을 기기 캘린더에 남긴다
 
-    static let demoMarker = "KBTUNE_DEMO"
-
-    private func writableCalendar() -> EKCalendar? {
-        if let def = store.defaultCalendarForNewEvents, def.allowsContentModifications { return def }
-        return store.calendars(for: .event).first { $0.allowsContentModifications }
+    /// `day`는 7월 1일을 1로 세는 통산일이라, 실제 달력으로 되돌려서 쓴다.
+    private func date(day: Int, hour: Double) -> Date? {
+        var comps = DateComponents()
+        comps.year = DemoClock.demoYear
+        comps.month = DemoClock.month(of: day)
+        comps.day = DemoClock.dayOfMonth(of: day)
+        comps.hour = Int(hour)
+        comps.minute = Int((hour - Double(Int(hour))) * 60)
+        return Calendar(identifier: .gregorian).date(from: comps)
     }
 
-    /// 데모용 일정 5건을 기기 기본 캘린더에 생성 (기존 데모 일정은 먼저 정리).
+    /// 일정을 기본 캘린더에 쓰고 식별자를 돌려준다. 권한이 없거나 실패하면 nil.
+    /// 이 식별자가 있어야 나중에 같은 일정을 지우거나 시간을 옮길 수 있다.
+    func save(title: String, day: Int, startHour: Double, duration: Double) -> String? {
+        guard access == .authorized, let start = date(day: day, hour: startHour) else { return nil }
+
+        let event = EKEvent(eventStore: store)
+        event.title = title
+        event.startDate = start
+        event.endDate = start.addingTimeInterval(duration * 3600)
+        event.calendar = store.defaultCalendarForNewEvents
+        event.notes = "KB Tune에서 예산을 잡은 일정이에요."
+
+        do {
+            try store.save(event, span: .thisEvent, commit: true)
+            return event.eventIdentifier
+        } catch {
+            lastError = "캘린더에 일정을 쓰지 못했어요. 설정에서 캘린더 접근을 확인해 주세요."
+            return nil
+        }
+    }
+
+    /// 앱이 쓴 일정을 기기 캘린더에서 지운다.
+    /// 식별자가 있는 일정만 지우므로, 사용자가 캘린더 앱에서 직접 만든 일정은 건드리지 않는다.
     @discardableResult
-    func seedDemoEvents() -> Int {
-        guard access == .authorized, let cal = writableCalendar() else { return 0 }
-        removeDemoEvents(refresh: false)
-
-        // (제목, 며칠 뒤, 시작 시각, 소요 시간)
-        let items: [(String, Int, Int, Int)] = [
-            ("팀플 스터디", 1, 14, 2),
-            ("동아리 정기모임", 2, 18, 3),
-            ("생일파티 2차", 3, 19, 3),
-            ("지민 결혼식", 4, 12, 3),
-            ("영화 약속", 5, 15, 2),
-        ]
-
-        var made = 0
-        let calc = Calendar.current
-        for (title, offset, hour, hours) in items {
-            guard let base = calc.date(byAdding: .day, value: offset, to: Date()) else { continue }
-            var comp = calc.dateComponents([.year, .month, .day], from: base)
-            comp.hour = hour
-            guard let start = calc.date(from: comp) else { continue }
-
-            let ev = EKEvent(eventStore: store)
-            ev.calendar = cal
-            ev.title = title
-            ev.startDate = start
-            ev.endDate = start.addingTimeInterval(TimeInterval(hours * 3600))
-            ev.notes = Self.demoMarker      // 숨은 마커 — 삭제 대상 식별용
-            if (try? store.save(ev, span: .thisEvent, commit: false)) != nil { made += 1 }
+    func remove(eventID: String) -> Bool {
+        guard access == .authorized,
+              let event = store.event(withIdentifier: eventID) else { return false }
+        do {
+            try store.remove(event, span: .thisEvent, commit: true)
+            return true
+        } catch {
+            lastError = "캘린더에서 일정을 지우지 못했어요."
+            return false
         }
-        try? store.commit()
-        fetchUpcoming()
-        return made
     }
 
-    /// 마커가 있는 데모 일정만 삭제 (사용자의 실제 일정은 절대 건드리지 않음).
-    func removeDemoEvents(refresh: Bool = true) {
-        let from = Date().addingTimeInterval(-60 * 60 * 24 * 60)
-        let to = Date().addingTimeInterval(60 * 60 * 24 * 120)
-        let predicate = store.predicateForEvents(withStart: from, end: to, calendars: nil)
-        for ev in store.events(matching: predicate)
-        where (ev.notes ?? "").contains(Self.demoMarker) {
-            try? store.remove(ev, span: .thisEvent, commit: false)
-        }
-        try? store.commit()
-        if refresh { fetchUpcoming() }
-    }
+    /// 시작 시각을 옮긴다(길이는 그대로 유지).
+    @discardableResult
+    func reschedule(eventID: String, day: Int, startHour: Double) -> Bool {
+        guard access == .authorized,
+              let event = store.event(withIdentifier: eventID),
+              let oldStart = event.startDate, let oldEnd = event.endDate,
+              let start = date(day: day, hour: startHour) else { return false }
 
-    /// 현재 남아있는 데모 일정 수
-    func demoEventCount() -> Int {
-        let from = Date().addingTimeInterval(-60 * 60 * 24 * 60)
-        let to = Date().addingTimeInterval(60 * 60 * 24 * 120)
-        let predicate = store.predicateForEvents(withStart: from, end: to, calendars: nil)
-        return store.events(matching: predicate).filter { ($0.notes ?? "").contains(Self.demoMarker) }.count
+        let length = oldEnd.timeIntervalSince(oldStart)
+        event.startDate = start
+        event.endDate = start.addingTimeInterval(length)
+        do {
+            try store.save(event, span: .thisEvent, commit: true)
+            return true
+        } catch {
+            lastError = "캘린더에서 일정 시간을 바꾸지 못했어요."
+            return false
+        }
     }
 
     /// 다가오는 N일간의 기기 캘린더 일정 (일정 추가 화면의 '가져오기' 목록용).
@@ -162,23 +168,35 @@ final class CalendarStore: ObservableObject {
         formatter.locale = Locale(identifier: "ko_KR")
         formatter.dateFormat = "M월 d일 (E) HH:mm"
 
-        let dayOfMonth = Calendar.current.component(.day, from: now)
-
         events = store.events(matching: predicate)
             .sorted { $0.startDate < $1.startDate }
             .prefix(50)
-            .map { ek in
-                PlanEvent(
+            .compactMap { ek -> PlanEvent? in
+                let serialDay = Self.serialDay(of: ek.startDate)
+                // 앱의 7~8월 데모 창 밖 일정을 골랐을 때 오늘 일정으로 잘못
+                // 들어가는 것보다, 가져오기 목록에서 제외하는 편이 안전하다.
+                guard serialDay > 0 else { return nil }
+                let components = Calendar.current.dateComponents([.hour, .minute], from: ek.startDate)
+                let startHour = Double(components.hour ?? 19) + Double(components.minute ?? 0) / 60
+                return PlanEvent(
                     title: ek.title ?? "일정",
                     amount: 0,
                     symbol: "calendar",
                     dayLabel: formatter.string(from: ek.startDate),
                     fromDeviceCalendar: true,
-                    dayOfMonth: Calendar.current.component(.day, from: ek.startDate)
+                    dayOfMonth: serialDay,
+                    startHour: startHour
                 )
             }
-        _ = dayOfMonth
         didFetch = true
+    }
+
+    /// 기기 캘린더의 실제 날짜를 앱이 쓰는 통산일로 옮긴다. 데모 기간 밖이면 0.
+    static func serialDay(of date: Date) -> Int {
+        let c = Calendar(identifier: .gregorian).dateComponents([.year, .month, .day], from: date)
+        guard c.year == DemoClock.demoYear, let m = c.month, let d = c.day,
+              DemoClock.months.contains(m) else { return 0 }
+        return DemoClock.serial(month: m, day: d)
     }
 
     /// 이번 주(오늘 기준) 기기 캘린더 일정 로드

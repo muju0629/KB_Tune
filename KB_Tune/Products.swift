@@ -12,7 +12,7 @@ import Foundation
 let productVerifiedAt = "2026.07.21"
 
 let productDisclaimer =
-    "본 추천은 회원님의 최근 3개월 소비 데이터 기준의 참고 정보예요. 금리·혜택·판매 상태는 변동될 수 있으니 가입 전 공식 안내에서 꼭 확인해 주세요."
+    "본 추천은 2026년 7월 캘린더의 예상 지출을 바탕으로 한 참고 정보예요. 실제 결제액과 다를 수 있으며, 가입 전 금리·혜택·판매 상태를 공식 안내에서 확인해 주세요."
 
 // MARK: - 카드
 
@@ -48,6 +48,9 @@ struct CardProduct: Identifiable {
     let spendNote: String
     var ageRange: ClosedRange<Int>? = nil
     var needsTravel: Bool = false
+    /// 규칙별 한도를 모두 적용한 뒤 마지막으로 적용하는 상품 전체 월 한도.
+    /// 0이면 상품 전체 한도가 없거나 현재 데이터로 확정할 수 없다는 뜻이다.
+    var monthlyBenefitCap: Int = 0
     let capNote: String         // 최대 한도 요약(최대치 ≠ 예상치 구분 표기용)
     let packs: [BenefitPack]
     let appCopy: String         // 기준서 '앱 노출 문구'
@@ -56,7 +59,7 @@ struct CardProduct: Identifiable {
     let url: String
 }
 
-private let allCategories = ["외식", "술·모임", "쇼핑", "카페", "교통", "배달", "구독"]
+private let allCategories = ["외식", "술·모임", "쇼핑", "카페", "교통", "배달", "구독", "문화", "기타"]
 
 enum CardCatalog {
 
@@ -206,11 +209,12 @@ enum CardCatalog {
             short: "대학생·사회초년생 일상형",
             annualFee: 0, feeNote: "연회비 없음",
             spendRequirement: 200_000, spendNote: "전월실적 20만원 이상 (커피는 실적 없음)",
+            monthlyBenefitCap: 20_000,
             capNote: "통합한도 월 2만원 (20만원 구간)",
             packs: [BenefitPack(name: nil, rules: [
                 BenefitRule(label: "커피 10% — 스타벅스·커피빈 (월 3천원, 실적 없음)", categories: ["카페"], rate: 0.10, cap: 3_000),
-                BenefitRule(label: "앱·문화 10% — 구글플레이·앱스토어", categories: ["구독"], rate: 0.10),
-                BenefitRule(label: "뷰티·편의점 5% — 올리브영·GS25·CU", categories: ["쇼핑"], rate: 0.05),
+                BenefitRule(label: "앱·문화 10% — 구글플레이·앱스토어", categories: ["구독", "문화"], rate: 0.10, cap: 7_000),
+                BenefitRule(label: "뷰티·편의점 5% — 올리브영·GS25·CU", categories: ["쇼핑"], rate: 0.05, cap: 2_000),
                 BenefitRule(label: "구독·배달 정액 할인 (조건별 월 1~2회)", categories: ["배달"], fixed: 1_000),
                 BenefitRule(label: "KB Pay 추가 2% (월 5천원)", categories: allCategories, rate: 0.02, cap: 5_000, minSpend: 300_000, isBase: true),
             ])],

@@ -1,14 +1,19 @@
-"""소비 분석 — 카테고리별 월평균·비중, 이상 급증 탐지. (결정론적)"""
+"""캘린더 기반 7월 예상 지출을 카테고리별로 요약한다."""
 from __future__ import annotations
 
-from ..data import HISTORY_MONTHLY, TRANSACTIONS_THIS_MONTH
+from ..data import HISTORY_MONTHLY, TRANSACTIONS_THIS_MONTH, UPCOMING_EVENTS
 from ..models import CategoryStat, SpendingAnalysis, Transaction
 
 
 def analyze(history: dict[str, int] | None = None,
             txns: list[Transaction] | None = None) -> SpendingAnalysis:
-    history = history or HISTORY_MONTHLY
+    using_calendar_default = history is None
+    history = dict(HISTORY_MONTHLY if history is None else history)
     txns = txns if txns is not None else TRANSACTIONS_THIS_MONTH
+
+    if using_calendar_default:
+        for event in UPCOMING_EVENTS:
+            history[event.category] = history.get(event.category, 0) + event.amount
 
     total = sum(history.values())
     cats = [
@@ -16,19 +21,10 @@ def analyze(history: dict[str, int] | None = None,
         for k, v in sorted(history.items(), key=lambda x: -x[1])
     ]
 
-    # 이번 달 카테고리별 누적
-    month: dict[str, int] = {}
-    for t in txns:
-        month[t.category] = month.get(t.category, 0) + t.amount
-
-    anomalies: list[str] = []
-    for cat, spent in month.items():
-        hist = history.get(cat)
-        if hist and spent >= hist * 0.9:  # 20일 만에 월평균의 90%↑ → 급증
-            anomalies.append(f"{cat}이(가) 20일 만에 월평균 {hist:,}원의 {round(spent/hist*100)}%에 도달했어요")
+    anomalies = ["레이저 제모 결제 여부에 따라 7월 예상액이 50,000원 달라져요."]
 
     return SpendingAnalysis(
-        period="2026.04~06",
+        period="2026.07 캘린더 예상",
         monthly_variable_avg=total,
         categories=cats,
         top_category=cats[0].name,

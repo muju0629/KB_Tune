@@ -4,8 +4,8 @@
 //
 //  AI 기능 ② 앱 절반 — 캡처 이미지에서 텍스트 인식(온디바이스).
 //  Apple Vision 프레임워크: 무료·오프라인·서버 불필요. 한국어 인식 지원.
-//  인식된 텍스트는 백엔드 /api/extract 가 거래로 구조화하고,
-//  백엔드가 없으면 아래 LocalExtractor 가 같은 규칙으로 대신 파싱한다.
+//  인식된 텍스트도 아래 LocalExtractor가 기기 안에서 구조화한다.
+//  원본 이미지와 OCR 원문 모두 서버로 보내지 않는다.
 //
 
 import Foundation
@@ -72,14 +72,9 @@ enum OCRService {
                 .joined(separator: "  ")
         }.joined(separator: "\n")
     }
-
-    /// 여러 장을 순서대로 인식해 하나의 텍스트로.
-    nonisolated static func recognizeAll(_ images: [UIImage]) -> String {
-        images.map { recognize($0) }.joined(separator: "\n")
-    }
 }
 
-// MARK: - 로컬 파서 (백엔드 없을 때 폴백 · 백엔드와 동일 규칙)
+// MARK: - 온디바이스 파서
 
 enum LocalExtractor {
 

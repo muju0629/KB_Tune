@@ -74,7 +74,7 @@ struct MoneyDial: View {
             .overlay(alignment: .trailing) {
                 // 고정 단위 라벨 — 휠에는 숫자만 굴러감
                 Text("만원")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.kb(13, .medium))
                     .foregroundStyle(KB.muted)
                     .padding(.trailing, 4)
                     .allowsHitTesting(false)
@@ -84,7 +84,7 @@ struct MoneyDial: View {
                 Image(systemName: "chevron.up.chevron.down")
                 Text("위아래로 조절")
             }
-            .font(.system(size: 10))
+            .font(.kb(10))
             .foregroundStyle(KB.muted.opacity(0.8))
         }
         .sensoryFeedback(.selection, trigger: value)
@@ -100,7 +100,7 @@ struct MoneyDial: View {
         let opacity: Double = d > 2.6 ? 0 : max(0.06, 1 - 0.42 * Double(d))
         let y: CGFloat = size.height / 2 + (CGFloat(i) - position) * rowHeight
         return Text("\((range.lowerBound + i * step) / 10_000)")
-            .font(.system(size: 29, weight: .bold))
+            .font(.kb(29, .bold))
             .monospacedDigit()
             .foregroundStyle(KB.ink)
             .scaleEffect(scale)

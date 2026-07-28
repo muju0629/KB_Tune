@@ -12,10 +12,37 @@
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject private var model = AppModel()
+    @StateObject private var model: AppModel
 
     enum Phase { case splash, onboarding, main }
-    @State private var phase: Phase = .splash
+    @State private var phase: Phase
+
+    init() {
+        #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("-ui-test-date-22") {
+            DemoClock.fixedToday = 22
+        }
+
+        let appModel = AppModel()
+        if let current = appModel.thisWeekBudget?.carriesForward {
+            if arguments.contains("-ui-test-budget-positive") {
+                appModel.openingRollover += 100_000 - current
+            } else if arguments.contains("-ui-test-budget-zero") {
+                appModel.openingRollover -= current
+            } else if arguments.contains("-ui-test-budget-negative") {
+                appModel.openingRollover += -100_000 - current
+            }
+        }
+        _model = StateObject(wrappedValue: appModel)
+
+        let startsOnMain = arguments.contains("-ui-test-main")
+        _phase = State(initialValue: startsOnMain ? .main : .splash)
+        #else
+        _model = StateObject(wrappedValue: AppModel())
+        _phase = State(initialValue: .splash)
+        #endif
+    }
 
     var body: some View {
         ZStack {

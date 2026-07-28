@@ -10,10 +10,10 @@ from ..engine import build_plan
 
 CASES = [
     # (방향, 후보반영, 기대 사용가능액, 기대 확률)
-    ("reduce", False, 38_000, 86),
-    ("maintain", False, 52_000, 78),
-    ("increase", False, 70_000, 69),
-    ("maintain", True, 12_000, 60),  # 위험 후보(생일파티 2차) 반영 시
+    ("reduce", False, 47_720, 88),
+    ("maintain", False, 62_000, 81),
+    ("increase", False, 80_360, 74),
+    ("maintain", True, 62_000, 81),  # 미확정 후보가 없어 결과가 같아야 함
 ]
 
 
@@ -22,7 +22,7 @@ def run_golden() -> tuple[int, int, list[str]]:
     details: list[str] = []
     for direction, include, exp_avail, exp_prob in CASES:
         p = PROFILE.model_copy(update={"direction": direction})
-        r = build_plan(p, today=21, include_candidate=include)
+        r = build_plan(p, today=22, include_candidate=include)
         ok = r.weekly_available == exp_avail and r.probability == exp_prob
         passed += int(ok)
         tag = f"{direction}{'+후보' if include else ''}"

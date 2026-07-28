@@ -42,18 +42,18 @@ struct CalendarImportView: View {
         VStack(spacing: 0) {
             Spacer()
             Image(systemName: "calendar.badge.clock")
-                .font(.system(size: 60, weight: .thin))
+                .font(.kb(60, .thin))
                 .foregroundStyle(KB.yellow)
 
             Text("일정을 불러오면\n예상 지출을 함께 계산해요")
-                .font(.system(size: 22, weight: .bold))
+                .font(.kb(22, .bold))
                 .foregroundStyle(KB.ink)
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
                 .padding(.top, 22)
 
-            Text("이번 주 약속·모임을 읽어와, 각 일정에 예상 지출을 붙이고 사용 가능액을 다시 계산해요. 캘린더 내용은 기기에서만 사용해요.")
-                .font(.system(size: 13.5))
+            Text("이번 주 약속·모임을 읽어와, 각 일정에 예상 지출을 붙이고 추가 사용 가능액을 다시 계산해요. 캘린더 내용은 기기에서만 사용해요.")
+                .font(.kb(13.5))
                 .foregroundStyle(KB.muted)
                 .multilineTextAlignment(.center)
                 .lineSpacing(3)
@@ -92,13 +92,13 @@ struct CalendarImportView: View {
         VStack(spacing: 0) {
             Spacer()
             Image(systemName: "calendar.badge.exclamationmark")
-                .font(.system(size: 56, weight: .thin))
+                .font(.kb(56, .thin))
                 .foregroundStyle(KB.muted)
             Text("캘린더 접근이 꺼져 있어요")
-                .font(.system(size: 20, weight: .bold)).foregroundStyle(KB.ink)
+                .font(.kb(20, .bold)).foregroundStyle(KB.ink)
                 .padding(.top, 20)
             Text("설정에서 캘린더 접근을 켜면 실제 일정으로 계획을 세울 수 있어요. 지금은 데모 일정으로 계속할 수 있어요.")
-                .font(.system(size: 13.5)).foregroundStyle(KB.muted)
+                .font(.kb(13.5)).foregroundStyle(KB.muted)
                 .multilineTextAlignment(.center).lineSpacing(3)
                 .padding(.horizontal, 34).padding(.top, 12)
             Spacer()
@@ -125,9 +125,9 @@ struct CalendarImportView: View {
                 // 요약 헤더
                 VStack(alignment: .leading, spacing: 6) {
                     Text("이번 주 일정")
-                        .font(.system(size: 22, weight: .bold)).foregroundStyle(KB.ink)
+                        .font(.kb(22, .bold)).foregroundStyle(KB.ink)
                     Text("불러온 일정에 예상 지출을 붙여 계획에 반영해요.")
-                        .font(.system(size: 13)).foregroundStyle(KB.muted)
+                        .font(.kb(13)).foregroundStyle(KB.muted)
                 }
                 .padding(.top, 8)
 
@@ -150,7 +150,7 @@ struct CalendarImportView: View {
                     HStack(spacing: 10) {
                         Image(systemName: "info.circle").foregroundStyle(KB.muted)
                         Text("이번 주 기기 캘린더에 등록된 일정이 없어요. 데모 계획 일정으로 이어서 볼 수 있어요.")
-                            .font(.system(size: 12.5)).foregroundStyle(KB.muted)
+                            .font(.kb(12.5)).foregroundStyle(KB.muted)
                     }
                     .padding(14)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -160,9 +160,9 @@ struct CalendarImportView: View {
                 // 다시 불러오기
                 Button { calendar.fetchThisWeek() } label: {
                     HStack { Image(systemName: "arrow.clockwise"); Text("캘린더 다시 불러오기") }
-                        .font(.system(size: 14, weight: .medium)).foregroundStyle(KB.ink)
+                        .font(.kb(14, .medium)).foregroundStyle(KB.ink)
                         .frame(maxWidth: .infinity).padding(.vertical, 13)
-                        .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .background(KB.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(KB.line, lineWidth: 1))
                 }
                 .padding(.top, 4)
@@ -174,9 +174,9 @@ struct CalendarImportView: View {
 
     private func sectionLabel(_ title: String, count: Int) -> some View {
         HStack {
-            Text(title).font(.system(size: 13, weight: .semibold)).foregroundStyle(KB.muted)
+            Text(title).font(.kb(13, .semibold)).foregroundStyle(KB.muted)
             Spacer()
-            Text("\(count)건").font(.system(size: 12)).foregroundStyle(KB.muted)
+            Text("\(count)건").font(.kb(12)).foregroundStyle(KB.muted)
         }
     }
 
@@ -185,18 +185,18 @@ struct CalendarImportView: View {
             IconBadge(systemName: ev.symbol,
                       background: ev.fromDeviceCalendar ? KB.line.opacity(0.4) : (ev.featured ? KB.yellowSoft : KB.greenSoft))
             VStack(alignment: .leading, spacing: 3) {
-                Text(ev.title).font(.system(size: 15, weight: .medium)).foregroundStyle(KB.ink).lineLimit(1)
-                Text(ev.dayLabel).font(.system(size: 12)).foregroundStyle(KB.muted)
+                Text(ev.title).font(.kb(15, .medium)).foregroundStyle(KB.ink).lineLimit(1)
+                Text(ev.dayLabel).font(.kb(12)).foregroundStyle(KB.muted)
             }
             Spacer()
             if ev.amount > 0 {
-                Text(formatWon(ev.amount)).font(.system(size: 14, weight: .semibold)).foregroundStyle(KB.ink)
+                Text(formatWon(ev.amount)).font(.kb(14, .semibold)).foregroundStyle(KB.ink)
             } else {
-                Text("지출 미정").font(.system(size: 12.5)).foregroundStyle(KB.muted)
+                Text("지출 미정").font(.kb(12.5)).foregroundStyle(KB.muted)
             }
         }
         .padding(14)
-        .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(KB.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
     }
 }

@@ -1,0 +1,41 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "03255FB7-CD5A-4906-BC95-E2631F41EBE6",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "ED534D68-D2B5-4940-8917-810CE4D83A52.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "chat-move-action_0_4C9D06E2-F570-4D5F-8C02-685B5CBE2409.png",
+        "timestamp" : 1785218547.268
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "03255FB7-CD5A-4906-BC95-E2631F41EBE6",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "507BC1B3-ABBC-480D-A81B-6657E9F4B495.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "chat-natural-reply_0_D17A40DB-1FF5-4CA1-9A29-F8D6E7E58658.png",
+        "timestamp" : 1785218542.961
+      }
+    ],
+    "testIdentifier" : "KB_TuneUITests/testChatFeelsConversationalAndOffersAnAction()",
+    "testIdentifierURL" : "test://com.apple.xcode/KB_Tune/KB_TuneUITests/KB_TuneUITests/testChatFeelsConversationalAndOffersAnAction"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "03255FB7-CD5A-4906-BC95-E2631F41EBE6",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "CA5FD6F9-96DF-4639-839A-BB5F4FABC074.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "chat-private-cafe-proposal_0_A91A129E-BFD7-445D-8017-014E998C08B4.png",
+        "timestamp" : 1785218561.271
+      }
+    ],
+    "testIdentifier" : "KB_TuneUITests/testPrivateOnDeviceCafeEventProposalScreenshot()",
+    "testIdentifierURL" : "test://com.apple.xcode/KB_Tune/KB_TuneUITests/KB_TuneUITests/testPrivateOnDeviceCafeEventProposalScreenshot"
+  }
+]

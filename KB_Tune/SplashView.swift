@@ -16,25 +16,23 @@ struct SplashView: View {
         VStack(spacing: 0) {
             Spacer()
 
-            // 브랜드 마크
-            ZStack {
-                RoundedRectangle(cornerRadius: 26, style: .continuous)
-                    .fill(KB.yellow)
-                    .frame(width: 96, height: 96)
-                Image(systemName: "chart.line.uptrend.xyaxis")
-                    .font(.system(size: 42, weight: .semibold))
-                    .foregroundStyle(KB.ink)
-            }
+            // 일정과 소비를 조율하는 Tune의 성격이 바로 보이는 브랜드 마크
+            Image("BrandLogo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 112, height: 112)
+                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .shadow(color: KB.cardShadow.opacity(0.7), radius: 10, y: 5)
             .scaleEffect(appear ? 1 : 0.8)
             .opacity(appear ? 1 : 0)
 
             Text("KB Tune")
-                .font(.system(size: 34, weight: .bold))
+                .font(.kb(34, .bold))
                 .foregroundStyle(KB.ink)
                 .padding(.top, 24)
 
             Text("중요한 소비는 지키고,\n나머지를 조율하는 금융 라이프 에이전트")
-                .font(.system(size: 15))
+                .font(.kb(15))
                 .foregroundStyle(KB.muted)
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
@@ -50,7 +48,7 @@ struct SplashView: View {
             .padding(.horizontal, 24)
 
             Text("데모 데이터로 바로 체험할 수 있어요")
-                .font(.system(size: 12))
+                .font(.kb(12))
                 .foregroundStyle(KB.muted)
                 .padding(.top, 12)
                 .padding(.bottom, 20)

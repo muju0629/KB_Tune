@@ -1,15 +1,15 @@
 """AI 기능 ② — 캡처 이미지 → 거래 추출.
 
-두 경로:
-  A) text  : iOS Vision(온디바이스 OCR, 무료·오프라인)이 뽑은 텍스트 → 규칙 파서로 구조화
-  B) image : Claude 비전이 이미지에서 직접 구조화 (키 필요)
-어느 쪽이든 **카테고리는 엔진의 분류기**가 붙이고, 금액은 정수로 검증한다.
+허용 경로:
+  text: iOS Vision(온디바이스 OCR, 무료·오프라인)이 뽑은 텍스트 → 규칙 파서로 구조화
+
+원본 금융 캡처에는 실명·계좌·잔액이 섞일 수 있어 image_base64 경로는 외부로
+전송하지 않는다. 카테고리는 엔진의 분류기가 붙이고, 금액은 정수로 검증한다.
 """
 from __future__ import annotations
 
 import re
 
-from .. import config
 from ..engine.categorize import categorize_rule
 from ..models import ExtractedTransaction, ExtractResult
 
@@ -57,49 +57,12 @@ def extract_from_text(text: str) -> ExtractResult:
 
 
 def extract_from_image(image_base64: str, media_type: str = "image/jpeg") -> ExtractResult:
-    """Claude 비전으로 이미지에서 직접 구조화. 키 없거나 실패하면 빈 결과 + 안내."""
-    if config.llm_backend() != "claude":
-        return ExtractResult(
-            transactions=[], total=0, method="llm-vision",
-            warnings=["이미지 직접 분석은 Claude 키가 필요해요. 기기 OCR 텍스트를 보내면 키 없이도 추출됩니다."],
-        )
-    try:
-        import json
+    """원본 금융 캡처는 외부 모델로 보내지 않는다.
 
-        import anthropic
-        client = anthropic.Anthropic()
-        prompt = (
-            "이 금융 앱 캡처에서 개별 거래만 뽑아줘. 잔액·합계·포인트는 제외.\n"
-            'JSON 배열만 출력: [{"merchant":"가맹점","amount":정수원}]'
-        )
-        r = client.messages.create(
-            model=config.CLAUDE_MODEL, max_tokens=1024,
-            messages=[{"role": "user", "content": [
-                {"type": "image", "source": {"type": "base64",
-                                             "media_type": media_type, "data": image_base64}},
-                {"type": "text", "text": prompt},
-            ]}],
-        )
-        text = "".join(b.text for b in r.content if b.type == "text")
-        s, e = text.find("["), text.rfind("]")
-        rows = json.loads(text[s:e + 1]) if s >= 0 else []
-    except Exception:
-        return ExtractResult(transactions=[], total=0, method="llm-vision",
-                             warnings=["이미지 분석에 실패했어요. 다시 시도해 주세요."])
-
-    txns: list[ExtractedTransaction] = []
-    for row in rows:
-        try:
-            amount = int(row["amount"])
-            merchant = str(row["merchant"])[:30]
-        except Exception:
-            continue
-        if not (500 <= amount <= 3_000_000):
-            continue
-        cat, conf = categorize_rule(merchant)   # 카테고리는 엔진이 판정
-        txns.append(ExtractedTransaction(merchant=merchant, amount=amount,
-                                         category=cat or "기타",
-                                         confidence=conf if cat else 0.4))
-
-    return ExtractResult(transactions=txns, total=sum(t.amount for t in txns),
-                         method="llm-vision", warnings=[])
+    이미지에는 실명·계좌·잔액이 함께 찍힐 수 있어 서버에서 완전 비식별화할 수 없다.
+    따라서 앱의 Apple Vision으로 OCR한 텍스트만 받아 결정론 파서로 처리한다.
+    """
+    return ExtractResult(
+        transactions=[], total=0, method="on-device-required",
+        warnings=["개인정보 보호를 위해 원본 이미지는 외부 AI로 보내지 않아요. 기기에서 OCR한 텍스트를 보내 주세요."],
+    )

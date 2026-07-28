@@ -3,8 +3,8 @@
 //  KB_Tune
 //
 //  데이터 모델 + 앱 상태.
-//  데모 페르소나: 김민지(22) · 대학 3학년 · 카페 알바(월 80만원) · 동아리 활동
-//  기준일 2026-07-21(화) · 분석기간 2026.04~06
+//  캘린더 기반 페르소나: 성제 · 대학생 · 인포스탁 인턴 · AI 연구 병행
+//  기준일은 앱을 켤 때 실제 날짜에서 읽는다(DemoClock) · 일정기간 2026년 7월
 //
 
 import SwiftUI
@@ -12,7 +12,7 @@ import Combine
 
 // MARK: - 소비 방향
 
-enum SpendDirection: String, CaseIterable, Identifiable {
+enum SpendDirection: String, CaseIterable, Identifiable, Codable {
     case reduce, maintain, increase
     var id: String { rawValue }
 
@@ -26,48 +26,77 @@ enum SpendDirection: String, CaseIterable, Identifiable {
 
     /// 이번 주 사용 가능액
     var budget: Int {
-        switch self {
-        case .reduce: 38_000
-        case .maintain: 52_000
-        case .increase: 70_000
-        }
+        BudgetEngine.weeklyAvailable(self)
     }
 
     /// 적금 목표 달성 확률(%)
     var probability: Int {
-        switch self {
-        case .reduce: 86
-        case .maintain: 78
-        case .increase: 69
-        }
+        BudgetEngine.probability(self)
     }
 
     /// 에이전트 조언 문구
     var note: String {
         switch self {
-        case .reduce: "약속은 지키고, 이번 주 변동지출을 조금 가볍게 잡았어요."
-        case .maintain: "동아리 모임은 그대로 가세요. 금요일 2차만 조정하면 돼요."
-        case .increase: "이번 달 여유를 늘렸어요. 적금 목표 확률은 조금 낮아져요."
+        case .reduce: "더 필요한 소비는 그대로 두고, 추가 약속만 가볍게 잡아요."
+        case .maintain: "출근비와 확정 일정을 반영한 현재 계획이에요."
+        case .increase: "추가 약속 여유를 늘리는 대신 저축 목표 확률은 낮아져요."
+        }
+    }
+}
+
+// MARK: - 금액 상태 (기획 보고서 7.2 — 확정 지출 / 예약 예산 / 패턴 예상)
+
+/// 확정 지출: 이미 결제했거나 반드시 납부(가용금액에서 전액 차감)
+/// 예약 예산: 캘린더 일정에 배정했지만 아직 결제 전인 가상 예약(전액 예약, 실제 출금 없음)
+/// 패턴 예상: 캘린더엔 없지만 반복될 가능성이 있는 지출(범위로만 표시, upcomingSpends 목록)
+enum SpendState: String, Codable {
+    case confirmed, reserved, pattern
+
+    var label: String {
+        switch self {
+        case .confirmed: "확정"
+        case .reserved: "예약"
+        case .pattern: "예상"
         }
     }
 }
 
 // MARK: - 하루 일정(타임테이블)
 
-struct DayEvent: Identifiable {
-    let id = UUID()
+struct DayEvent: Identifiable, Codable {
+    // var 인 이유: Swift 는 기본값이 있는 let 속성을 인코딩만 하고 디코딩에서는 건너뛴다.
+    // let 으로 두면 복원할 때마다 id 가 새로 생겨, id 로 찾아 고치고 지우는 코드가
+    // 같은 일정을 못 알아본다.
+    var id = UUID()
     var title: String
     var symbol: String
     var startHour: Double     // 19.0 = 19:00, 17.5 = 17:30
     var duration: Double      // 시간 단위
     var amount: Int           // 0 = 무지출 일정(수업·알바 등)
+    var estimateLow: Int? = nil
+    var estimateHigh: Int? = nil
+    var estimateBasis: String? = nil
+    var isPredicted: Bool = false   // AI가 과거 이력으로 금액을 채운 일정
     var isProtected: Bool = false
     var riskNote: String? = nil     // 위험 일정 한 줄 요약
     var riskDetail: String? = nil   // 상세 설명 + 추천
+    var category: String = "기타"    // 결제 업종(무엇에 썼는지) — 식사·카페·쇼핑·교통 등
+    var purpose: String? = nil      // 생활 목적(왜 썼는지) — 데이트·가족·모임·업무·공부 등
+    var state: SpendState = .confirmed
+    /// 기기 캘린더에 쓴 이벤트의 식별자. 앱이 직접 쓴 일정만 값이 있고,
+    /// 지울 때 이 값이 있는 경우에만 기기 캘린더에서도 지운다 —
+    /// 사용자가 캘린더 앱에서 만든 일정을 앱이 함부로 지우면 안 되기 때문이다.
+    var calendarEventID: String? = nil
+
+    var amountLow: Int { estimateLow ?? amount }
+    var amountHigh: Int { estimateHigh ?? amount }
+    /// 확인된 금액에는 '예상'을 붙이지 않는다 — 예측이거나 범위가 있을 때만.
+    var isEstimated: Bool { isPredicted || amountLow != amountHigh }
 }
 
-struct PlanDay: Identifiable {
-    let id = UUID()
+struct PlanDay: Identifiable, Codable {
+    var id = UUID()          // DayEvent.id 와 같은 이유로 var
+
     var weekday: String       // "월"
     var dateLabel: String     // "7/20"
     var dayNumber: Int        // 20
@@ -75,8 +104,73 @@ struct PlanDay: Identifiable {
     var events: [DayEvent] = []
 
     var spendTotal: Int { events.reduce(0) { $0 + $1.amount } }
+    var spendLow: Int { events.reduce(0) { $0 + $1.amountLow } }
+    var spendHigh: Int { events.reduce(0) { $0 + $1.amountHigh } }
     var hasSpend: Bool { events.contains { $0.amount > 0 } }
+    /// 하루 합계에 예측이 섞여 있으면 '예상'으로 표기한다.
+    var hasEstimate: Bool { events.contains { $0.amount > 0 && $0.isEstimated } }
     var hasRisk: Bool { events.contains { $0.riskNote != nil } }
+}
+
+// 저장 형식에 새 필드가 생겨도 예전 state.json을 통째로 버리지 않도록 기본값으로 복원한다.
+// 구현을 extension에 두면 화면에서 쓰는 기존 memberwise initializer는 그대로 유지된다.
+extension DayEvent {
+    private enum CodingKeys: String, CodingKey {
+        case id, title, symbol, startHour, duration, amount, estimateLow, estimateHigh,
+             estimateBasis, isPredicted, isProtected, riskNote, riskDetail, category,
+             purpose, state, calendarEventID
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        title = try c.decodeIfPresent(String.self, forKey: .title) ?? "복원된 일정"
+        symbol = try c.decodeIfPresent(String.self, forKey: .symbol) ?? "calendar"
+        startHour = try c.decodeIfPresent(Double.self, forKey: .startHour) ?? 19
+        duration = try c.decodeIfPresent(Double.self, forKey: .duration) ?? 2
+        amount = try c.decodeIfPresent(Int.self, forKey: .amount) ?? 0
+        estimateLow = try c.decodeIfPresent(Int.self, forKey: .estimateLow)
+        estimateHigh = try c.decodeIfPresent(Int.self, forKey: .estimateHigh)
+        estimateBasis = try c.decodeIfPresent(String.self, forKey: .estimateBasis)
+        isPredicted = try c.decodeIfPresent(Bool.self, forKey: .isPredicted) ?? false
+        isProtected = try c.decodeIfPresent(Bool.self, forKey: .isProtected) ?? false
+        riskNote = try c.decodeIfPresent(String.self, forKey: .riskNote)
+        riskDetail = try c.decodeIfPresent(String.self, forKey: .riskDetail)
+        category = try c.decodeIfPresent(String.self, forKey: .category) ?? "기타"
+        purpose = try c.decodeIfPresent(String.self, forKey: .purpose)
+        state = try c.decodeIfPresent(SpendState.self, forKey: .state) ?? .confirmed
+        calendarEventID = try c.decodeIfPresent(String.self, forKey: .calendarEventID)
+    }
+}
+
+extension PlanDay {
+    private enum CodingKeys: String, CodingKey {
+        case id, weekday, dateLabel, dayNumber, isToday, events
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        weekday = try c.decodeIfPresent(String.self, forKey: .weekday) ?? ""
+        dateLabel = try c.decodeIfPresent(String.self, forKey: .dateLabel) ?? ""
+        dayNumber = try c.decodeIfPresent(Int.self, forKey: .dayNumber) ?? 0
+        isToday = try c.decodeIfPresent(Bool.self, forKey: .isToday) ?? false
+        events = try c.decodeIfPresent([DayEvent].self, forKey: .events) ?? []
+    }
+}
+
+/// 이번 주 부담을 줄이는 조정안. 옮길 수 있으면 옮기고, 아니면 금액을 줄인다.
+enum BudgetAdjustment {
+    case move(day: Int, event: DayEvent)
+    case reduce(day: Int, event: DayEvent, to: Int)
+
+    /// 이 조정안을 받아들이면 이번 주에 생기는 여유.
+    var gain: Int {
+        switch self {
+        case .move(_, let event): event.amount
+        case .reduce(_, let event, let to): event.amount - to
+        }
+    }
 }
 
 /// 주간 지출 카드용 파생 아이템
@@ -87,8 +181,13 @@ struct WeekSpendItem: Identifiable {
     var dayLabel: String      // "금 7/24"
     var dayNumber: Int
     var amount: Int
+    var amountLow: Int
+    var amountHigh: Int
+    var isEstimated: Bool
     var isProtected: Bool
     var isRisky: Bool
+    var purpose: String?
+    var state: SpendState
 }
 
 // MARK: - 기기 캘린더 행(EventKit 연동용)
@@ -101,41 +200,52 @@ struct PlanEvent: Identifiable {
     var dayLabel: String
     var featured: Bool = false
     var fromDeviceCalendar: Bool = false
-    var dayOfMonth: Int = 0     // 기기 캘린더에서 가져온 일정의 '일'
+    var dayOfMonth: Int = 0     // 기기 캘린더 날짜를 7/1=1로 바꾼 통산일
+    var startHour: Double = 19
 }
 
-// MARK: - 조정안 · 소비 카테고리
-
-struct AdjustmentOption: Identifiable {
-    let id: String
-    var title: String
-    var detail: String
-    var budget: Int
-}
+// MARK: - 소비 카테고리
 
 struct SpendCategory: Identifiable {
     let id = UUID()
     let name: String
     let symbol: String
-    let total3m: Int          // 최근 3개월 합계
-    var monthly: Int { total3m / 3 }
+    let monthly: Int          // 캘린더 기반 7월 월간 추정
 }
 
 // MARK: - 앱 상태
 
+/// 하단 내비게이션 탭 — 화면 간 프로그래밍 방식 이동에 쓴다.
+enum MainTab: Hashable { case weekly, analysis, chat, products }
+
 final class AppModel: ObservableObject {
     // 페르소나
-    let userName = "민지"
-    let userAge = 22          // 상품 추천 연령 하드필터용
+    let userName = "성제"
+    let userAge: Int? = nil   // 캘린더만으로 나이는 확정하지 않음
+    let userRole = "대학생 · 인포스탁 인턴"
 
     @Published var hasOnboarded = false
+    /// 손상되거나 더 최신인 저장본은 덮어쓰지 않고 그대로 보존한다.
+    var storageRecoveryNeeded: Bool { LocalStore.hasUnreadableState }
+    @Published var selectedTab: MainTab = .weekly
+    /// 이미 선택된 주간 탭을 다시 누르면 계획 화면을 처음 상태(주간 메인)로 되돌리는 신호.
+    @Published private(set) var planResetToken = 0
+    func resetPlanView() { planResetToken += 1 }
 
     // 온보딩 입력값 (페르소나 기본값)
     @Published var usesDemoData = true
-    @Published var monthlyIncome = 800_000    // 카페 알바
-    @Published var savingsGoal = 200_000
-    @Published var protectedTags: Set<String> = ["모임"]
-    @Published var hobbies: Set<String> = []  // 좋아하고 지키고 싶은 것들(통합 서베이)
+    @Published var monthlyIncome = 2_200_000  // 풀타임 인턴 근무 기준 추정값
+    @Published var savingsGoal = 800_000
+    // '나한테 더 필요한 소비' — 관계·행사성 취향은 예산을 조정할 때 줄이지 않는다.
+    // hobbies 에서 파생하므로 설정에서 취향을 바꾸면 즉시 따라온다.
+    static let protectableTags: Set<String> = ["데이트", "가족", "모임"]
+    var protectedTags: Set<String> {
+        let p = hobbies.intersection(Self.protectableTags)
+        return p.isEmpty ? ["데이트", "가족"] : p
+    }
+    /// "가족·데이트" 처럼 문장에 끼워 쓰는 목록 문자열
+    var protectedList: String { protectedTags.sorted().joined(separator: "·") }
+    @Published var hobbies: Set<String> = ["영화", "전시", "가족", "데이트"]
 
     /// 취향 → 상품 매칭 태그 변환 (Products.matchTags와 맞춤)
     var interestTags: Set<String> {
@@ -143,7 +253,7 @@ final class AppModel: ObservableObject {
         for h in hobbies {
             switch h {
             case "음식", "카페": tags.insert("외식")
-            case "술", "모임": tags.insert("모임")
+            case "술", "모임", "데이트": tags.insert("모임")
             case "가족": tags.insert("가족")
             default: tags.insert("취미")
             }
@@ -151,105 +261,758 @@ final class AppModel: ObservableObject {
         return tags
     }
 
-    // 계획 상태 (방향은 월초에 한 번 결정)
+    // 계획 상태. 방향은 온보딩에서 묻지 않고 앱이 정한다 — 목표 확률만 보면 알 수 있는 걸
+    // 사용자에게 되묻지 않기 위해서다. 정한 뒤엔 설정에서 언제든 바꿀 수 있다.
     @Published var direction: SpendDirection = .maintain
 
-    var weeklyBudget: Int { direction.budget }
-    var probability: Int { direction.probability }
-    var protectedSummary: String { "모임은 포기하지 않기" }
+    /// 저축 목표가 위태로우면 '줄이기'로 시작한다.
+    /// '늘리기'는 앱이 먼저 권하지 않는다 — 더 쓰라고 떠미는 금융 조언은 하지 않는다.
+    static let atRiskProbability = 60
 
-    let referenceDateLabel = "2026년 7월 21일 화요일"
-    let analysisPeriod = "2026.04~06"
+    func decideDirection() {
+        direction = probability(for: .maintain) < Self.atRiskProbability ? .reduce : .maintain
+    }
 
-    // MARK: 이번 주 일정 (민지의 한 주)
-
-    let week: [PlanDay] = [
-        PlanDay(weekday: "월", dateLabel: "7/20", dayNumber: 20, events: [
-            DayEvent(title: "전공 수업", symbol: "book", startHour: 10, duration: 3, amount: 0),
-        ]),
-        PlanDay(weekday: "화", dateLabel: "7/21", dayNumber: 21, isToday: true, events: [
-            DayEvent(title: "전공 수업", symbol: "book", startHour: 10, duration: 2, amount: 0),
-            DayEvent(title: "카페 알바", symbol: "cup.and.saucer", startHour: 17, duration: 5, amount: 0),
-        ]),
-        PlanDay(weekday: "수", dateLabel: "7/22", dayNumber: 22, events: [
-            DayEvent(title: "팀플 스터디", symbol: "person.3", startHour: 14, duration: 2, amount: 8_000),
-        ]),
-        PlanDay(weekday: "목", dateLabel: "7/23", dayNumber: 23, events: [
-            DayEvent(title: "동아리 정기모임", symbol: "person.2", startHour: 18, duration: 3, amount: 25_000, isProtected: true),
-        ]),
-        PlanDay(weekday: "금", dateLabel: "7/24", dayNumber: 24, events: [
-            DayEvent(title: "카페 알바", symbol: "cup.and.saucer", startHour: 12, duration: 4, amount: 0),
-            DayEvent(title: "생일파티 2차", symbol: "party.popper", startHour: 19, duration: 3, amount: 40_000,
-                     riskNote: "이번 주 예산을 36,000원 넘겨요",
-                     riskDetail: "그대로 가면 적금 목표 확률이 78% → 61%로 떨어져요. 1차까지만 하거나 다음 주로 옮기는 걸 추천해요."),
-        ]),
-        PlanDay(weekday: "토", dateLabel: "7/25", dayNumber: 25, events: [
-            DayEvent(title: "영화 관람", symbol: "film", startHour: 15, duration: 2.5, amount: 15_000),
-        ]),
-        PlanDay(weekday: "일", dateLabel: "7/26", dayNumber: 26),
-    ]
-
-    var weekSpendItems: [WeekSpendItem] {
-        week.flatMap { day in
-            day.events
-                .filter { $0.amount > 0 }
-                .map { ev in
-                    WeekSpendItem(title: ev.title, symbol: ev.symbol,
-                                  dayLabel: "\(day.weekday) \(day.dateLabel)",
-                                  dayNumber: day.dayNumber,
-                                  amount: ev.amount,
-                                  isProtected: ev.isProtected,
-                                  isRisky: ev.riskNote != nil)
-                }
+    /// 방향을 왜 그렇게 잡았는지 한 줄로 설명한다.
+    var directionReason: String {
+        let p = probability
+        switch direction {
+        case .reduce:
+            return "저축 목표 달성 확률이 \(p)%라 '줄이기'로 시작할게요. 설정에서 바꿀 수 있어요."
+        case .maintain:
+            return "저축 목표 달성 확률이 \(p)%라 '유지'로 시작할게요. 설정에서 바꿀 수 있어요."
+        case .increase:
+            return "'늘리기'로 계획했어요. 목표 확률은 \(p)%예요."
         }
     }
 
+    // 예산 계산의 입력은 전부 지금 화면의 캘린더에서 나온다.
+    // 그래야 일정을 추가하든 지우든 시간을 바꾸든 금액이 곧바로 따라 움직인다.
+    var spentToDate: Int { BudgetEngine.spentToDate(in: calendarDays, asOfDay: todayDayNumber) }
+    var committedThisWeek: Int { BudgetEngine.committedThisWeek(in: calendarDays, asOfDay: todayDayNumber) }
+    var committedFuture: Int { BudgetEngine.committedFuture(in: calendarDays, asOfDay: todayDayNumber) }
+
+    var weeklyBudget: Int { weeklyBudget(for: direction) }
+    var probability: Int { probability(for: direction) }
+
+    /// 이번 주에 더 쓸 수 있는 금액 — 주차 장부에서 읽는다.
+    /// 소비 방향은 그 위에 성향 계수로 얹는다(줄이기면 보수적으로 잡아준다).
+    /// - extraCommitted: 아직 캘린더에 넣지 않은 후보 일정(추가 화면의 영향 미리보기용).
+    func weeklyBudget(for direction: SpendDirection, extraCommitted: Int = 0,
+                      on targetDay: Int? = nil) -> Int {
+        let day = targetDay ?? todayDayNumber
+        guard (1...DemoClock.lastDay).contains(day),
+              let week = weekBudgets(of: DemoClock.month(of: day))
+                .first(where: { $0.days.contains(day) }) else { return 0 }
+        // 배분이 음수면(지난주에 넘겨 씀) 이번 주에 나눠 쓸 몫 자체가 없다.
+        // 음수에 성향 계수를 곱하면 '줄이기'가 더 큰 금액이 되는 뒤집힘이 생기므로 먼저 자른다.
+        let base = max(0, week.allowance)
+        let scaled = Int((Double(base) * BudgetEngine.weeklyFactor(direction)).rounded())
+        return max(0, scaled - week.plannedSpend - extraCommitted)
+    }
+    func probability(for direction: SpendDirection, extraCommitted: Int = 0,
+                     on targetDay: Int? = nil) -> Int {
+        let day = targetDay ?? todayDayNumber
+        let targetMonth = DemoClock.month(of: day)
+        let currentMonth = DemoClock.month(of: todayDayNumber)
+        let asOf = targetMonth == currentMonth
+            ? todayDayNumber
+            : DemoClock.range(of: targetMonth).lowerBound
+        let spent = targetMonth == currentMonth ? spentToDate : 0
+        let committed = calendarDays
+            .filter { DemoClock.range(of: targetMonth).contains($0.dayNumber) && $0.dayNumber >= asOf }
+            .reduce(0) { $0 + $1.spendTotal }
+        return BudgetEngine.probability(direction,
+                                        spentToDate: spent,
+                                        committedFuture: committed,
+                                        extraCommitted: extraCommitted,
+                                        income: monthlyIncome,
+                                        savingsGoal: savingsGoal,
+                                        asOfDay: asOf)
+    }
+
+    var remainingBudget: Int {
+        BudgetEngine.remainingBudget(income: monthlyIncome, savingsGoal: savingsGoal,
+                                     spentToDate: spentToDate)
+    }
+
+    // MARK: 주차별 예산 장부 (이월)
+
+    /// 이 달에 쓸 수 있는 돈 — 고정비·적금·다음 달로 넘어갈 할부를 뺀 나머지.
+    /// 할부를 여기서 빼두면 주차 배분이 그만큼 줄어, 다음 달 카드값이 미리 반영된다.
+    var monthlyDisposable: Int {
+        monthlyIncome - BudgetEngine.fixed - savingsGoal - BudgetEngine.installmentCarryover
+    }
+
+    /// 데모 첫 달(7월) 이전에서 넘어온 금액. 8월 장부의 시작값은 여기가 아니라
+    /// 7월 마지막 주 잔액에서 온다 — 아낀 만큼이 다음 달로 넘어가는 게 이 앱의 약속이다.
+    @Published var openingRollover = 0
+
+    func weekBudgets(of month: Int) -> [WeekBudget] {
+        var spendByWeek: [Int: Int] = [:]
+        for (i, range) in WeekLedger.weekRanges(month: month).enumerated() {
+            spendByWeek[i] = calendarDays
+                .filter { range.contains($0.dayNumber) }
+                .reduce(0) { $0 + $1.spendTotal }
+        }
+        let carriedIn = month == DemoClock.firstMonth
+            ? openingRollover
+            : WeekLedger.closingRollover(weekBudgets(of: month - 1))
+        return WeekLedger.build(disposable: monthlyDisposable,
+                                spendByWeek: spendByWeek,
+                                openingRollover: carriedIn,
+                                month: month)
+    }
+
+    /// 오늘이 든 달의 장부
+    var weekBudgets: [WeekBudget] { weekBudgets(of: DemoClock.month(of: todayDayNumber)) }
+
+    var thisWeekBudget: WeekBudget? {
+        weekBudgets.first { $0.days.contains(todayDayNumber) }
+    }
+
+    /// 이번 달이 끝나면 다음 달로 넘어갈 금액.
+    var closingRollover: Int { WeekLedger.closingRollover(weekBudgets) }
+
+    /// 다음 달 첫 주가 어떻게 시작되는지.
+    /// 고정비·적금은 그대로 두고, 이번 달에 남긴 금액만 얹어서 보여준다.
+    var nextMonthFirstWeek: WeekBudget {
+        let next = DemoClock.month(of: todayDayNumber) + 1
+        if DemoClock.months.contains(next), let first = weekBudgets(of: next).first {
+            return first
+        }
+        return WeekLedger.nextMonthOpening(
+            disposable: monthlyDisposable,
+            carriedIn: closingRollover,
+            month: next)
+    }
+
+    var nextMonthLabel: String { "\(DemoClock.month(of: todayDayNumber) + 1)월" }
+
+    /// 지금 여력으로 매달 넣을 수 있는 적금액. 다음 달 할부는 remainingBudget에서
+    /// 이미 한 번 차감됐으므로 여기서 다시 빼지 않는다.
+    /// 만원 단위로 내림한다 — 딱 맞게 잡으면 한 번만 흔들려도 못 넣게 된다.
+    var suggestedSavingsAmount: Int {
+        let room = remainingBudget
+        return max(0, (room / 2 / 10_000) * 10_000)
+    }
+
+    /// KB Pay 이용내역 연결 여부(온보딩에서 동의). 데모라 실제 계정에 접속하지는 않는다.
+    @Published var kbPayLinked = false
+
+    // MARK: 신용카드 청구 (기획 보고서 7.3 '카드 결제예정액')
+
+    /// 이번 이용기간 요약 — 얼마 썼고, 다음 결제일에 얼마가 빠지고, 얼마가 다음 달로 밀리는지.
+    var billing: BillingSummary { BillingCycle.summary(today: todayDayNumber) }
+
+    /// 이용기간 마감일에 쓴 돈은 다음 결제일에, 하루만 넘겨 쓰면 그 다음 결제일에 청구된다.
+    var isBillingCloseDay: Bool { DemoClock.dayOfMonth(of: todayDayNumber) == BillingCycle.closingDay }
+
+    /// 챗봇에서 적금을 물어보고 상품 화면으로 넘어왔는지. 넘어간 화면이 소비하고 되돌린다.
+    @Published var wantsSavings = false
+
+    var referenceDateLabel: String { DemoClock.fullLabel(of: todayDayNumber) }
+    let analysisPeriod = "2026년 7월 캘린더"
+
+    // MARK: 7월 캘린더 일정
+
+    @Published var calendarDays: [PlanDay] = AppModel.makeCalendar()
+    var currentWeekRange: ClosedRange<Int> { DemoClock.weekRange(containing: todayDayNumber) }
+    var week: [PlanDay] { calendarDays.filter { currentWeekRange.contains($0.dayNumber) } }
+
+    /// 월요일 시작, 그 달과 겹치는 주 단위 날짜 창. 각 주는 7칸(월~일)이고 달 밖은 nil.
+    /// 주간 날짜 스트립을 가로로 넘겨(3주차·4주차…) 보기 위한 창.
+    func monthWeeks(of month: Int) -> [[Int?]] {
+        let bounds = DemoClock.range(of: month)
+        var slots: [Int?] = Array(repeating: nil, count: DemoClock.firstWeekdayOffset(of: month))
+        slots += bounds.map { Optional($0) }
+        while slots.count % 7 != 0 { slots.append(nil) }
+        return stride(from: 0, to: slots.count, by: 7).map { Array(slots[$0..<$0 + 7]) }
+    }
+
+    /// 오늘이 든 달의 주 격자
+    var julyWeeks: [[Int?]] { monthWeeks(of: DemoClock.month(of: todayDayNumber)) }
+
+    /// 데모 기간(7~8월) 전체를 한 줄로 이은 주 격자.
+    ///
+    /// 달별로 만든 격자를 이어 붙이면 달 경계에 걸친 주(7/27~8/2)가 두 줄로 쪼개져
+    /// 스와이프가 거기서 끊긴다. 그래서 통산일 전체를 한 번에 7칸씩 자른다.
+    var allWeeks: [[Int?]] {
+        var slots: [Int?] = Array(repeating: nil,
+                                  count: DemoClock.firstWeekdayOffset(of: DemoClock.firstMonth))
+        slots += (1...DemoClock.lastDay).map { Optional($0) }
+        while slots.count % 7 != 0 { slots.append(nil) }
+        return stride(from: 0, to: slots.count, by: 7).map { Array(slots[$0..<$0 + 7]) }
+    }
+
+    /// 오늘이 포함된 주의 인덱스 (0-based) — 가로 스트립 기준.
+    var currentWeekIndex: Int {
+        allWeeks.firstIndex { $0.contains(todayDayNumber) } ?? 0
+    }
+
+    /// 스트립의 주 이름. 그 주의 첫 날이 속한 달을 기준으로 "8월 2주차"처럼 만든다.
+    func weekLabel(at index: Int) -> String {
+        guard index >= 0, index < allWeeks.count,
+              let first = allWeeks[index].compactMap({ $0 }).first else { return "" }
+        let month = DemoClock.month(of: first)
+        let nth = (monthWeeks(of: month).firstIndex { $0.contains(first) } ?? 0) + 1
+        return "\(month)월 \(nth)주차"
+    }
+
+    var weekSpendItems: [WeekSpendItem] {
+        var items: [WeekSpendItem] = []
+
+        for day in week {
+            for event in day.events where event.amount > 0 {
+                items.append(
+                    WeekSpendItem(title: event.title, symbol: event.symbol,
+                                  dayLabel: "\(day.weekday) \(day.dateLabel)",
+                                  dayNumber: day.dayNumber,
+                                  amount: event.amount,
+                                  amountLow: event.amountLow,
+                                  amountHigh: event.amountHigh,
+                                  isEstimated: event.isEstimated,
+                                  isProtected: event.isProtected,
+                                  isRisky: event.riskNote != nil,
+                                  purpose: event.purpose,
+                                  state: event.state)
+                )
+            }
+        }
+        return items
+    }
+
+    /// 오늘 이후 남은 이번 주 지출 — 주간 합계(지나간 날 포함)와 구분해 쓴다.
+    var remainingThisWeek: Int {
+        week.filter { $0.dayNumber >= todayDayNumber }.reduce(0) { $0 + $1.spendTotal }
+    }
+
+    // MARK: 과거 이력 기반 예상 소비
+
+    /// 사용자가 하루 마감에서 실제 결제로 확인한 개인 표본.
+    /// 일정 제목·금액은 외부 AI가 아니라 보호된 기기 저장소에만 남는다.
+    @Published private(set) var learnedSpendRecords: [SpendRecord] = []
+
+    /// 이번 주 남은 기간에 주기가 돌아오는, 캘린더에 아직 없는 지출.
+    /// 확정이 아니므로 예산 계산에는 넣지 않고 "반영하기"를 눌러야 일정이 된다.
+    var upcomingSpends: [UpcomingSpend] {
+        let titles = Set(week.flatMap(\.events).map(\.title))
+        return SpendHistory.upcoming(from: todayDayNumber,
+                                     to: currentWeekRange.upperBound,
+                                     excludingTitles: titles)
+            .filter { !dismissedPredictions.contains(Self.predictionOccurrenceKey($0)) }
+    }
+
+    /// 예상 소비를 다 더하면 이번 주 사용 가능액이 얼마나 남는지 — 미리보기용.
+    var weeklyBudgetAfterPredictions: Int {
+        max(0, weeklyBudget - upcomingSpends.reduce(0) { $0 + $1.amount })
+    }
+
+    /// 예상 소비가 예산을 넘는 금액(넘지 않으면 0)
+    var predictedShortfall: Int {
+        max(0, upcomingSpends.reduce(0) { $0 + $1.amount } - weeklyBudget)
+    }
+
+    @Published private(set) var dismissedPredictions: Set<String> = []
+
+    /// 예상 소비를 실제 일정으로 확정한다.
+    func acceptPrediction(_ spend: UpcomingSpend) {
+        addEvent(title: spend.pattern.key, day: spend.expectedDay, amount: spend.amount,
+                 category: spend.pattern.category, basis: spend.reason, predicted: true)
+        dismissedPredictions.insert(Self.predictionOccurrenceKey(spend))
+    }
+
+    /// 이번엔 안 쓸 것 같다고 표시 — 목록에서만 내린다.
+    func dismissPrediction(_ spend: UpcomingSpend) {
+        dismissedPredictions.insert(Self.predictionOccurrenceKey(spend))
+    }
+
+    /// 같은 패턴도 다음 발생일에는 다시 제안해야 한다. 제목만 저장하면 한 번 거절한
+    /// 장보기가 이후 모든 주에서 영구히 사라지므로, 이번 발생 건의 날짜까지 묶는다.
+    static func predictionOccurrenceKey(_ spend: UpcomingSpend) -> String {
+        "\(spend.pattern.key)#\(spend.expectedDay)"
+    }
+
     var plannedSpendTotal: Int { weekSpendItems.reduce(0) { $0 + $1.amount } }
+    var plannedSpendLow: Int { weekSpendItems.reduce(0) { $0 + $1.amountLow } }
+    var plannedSpendHigh: Int { weekSpendItems.reduce(0) { $0 + $1.amountHigh } }
+
+    // MARK: 하루 마감 (기획 보고서 8.2)
+    //
+    // 실서비스에선 KB Pay 결제 기록으로 예약 지출의 실제 결제 여부를 자동으로 안다.
+    // 카드 기록이 붙은 지출은 물어볼 필요 없이 확정되고,
+    // '예정돼 있었는데 카드 기록이 없는' 지출만 남아 "현금으로 결제하셨나요?"라고 되묻는다.
+
+    @Published private(set) var dailyCloseDismissed = false
+
+    /// 카드 기록 없이 예정만 잡혀 있는 오늘 지출 — 현금 결제 여부를 되물어야 하는 항목.
+    var todayCloseItems: [DayEvent] {
+        guard let today = day(number: todayDayNumber) else { return [] }
+        return today.events.filter { $0.amount > 0 && $0.state == .reserved }
+    }
+
+    /// 확인할 게 있는 날에만 카드를 띄운다 — 무조건 알림 금지.
+    var shouldShowDailyClose: Bool { !dailyCloseDismissed && !todayCloseItems.isEmpty }
+
+    /// paidCash=true: 현금으로 결제했다고 확인 → 예약을 확정 지출로 학습한다.
+    /// paidCash=false: 아직 안 썼으니 예약 상태 그대로 두고 카드만 닫는다.
+    func resolveDailyClose(paidCash: Bool) {
+        if paidCash, let i = calendarDays.firstIndex(where: { $0.dayNumber == todayDayNumber }) {
+            for j in calendarDays[i].events.indices where calendarDays[i].events[j].state == .reserved {
+                let event = calendarDays[i].events[j]
+                calendarDays[i].events[j].state = .confirmed
+                guard event.amount > 0,
+                      !learnedSpendRecords.contains(where: { $0.sourceEventID == event.id }) else { continue }
+                learnedSpendRecords.append(SpendRecord(
+                    title: event.title,
+                    category: event.category,
+                    month: DemoClock.month(of: todayDayNumber),
+                    day: DemoClock.dayOfMonth(of: todayDayNumber),
+                    amount: event.amount,
+                    onCalendar: true,
+                    sourceEventID: event.id
+                ))
+            }
+            // EventEstimator·EventPhrase·반복 예측이 다음 호출부터 즉시 같은 표본을 사용한다.
+            SpendHistory.replaceLearnedRecords(learnedSpendRecords)
+        }
+        dailyCloseDismissed = true
+    }
 
     /// 이번 주 위험 일정 (예산 초과)
     var riskyDay: PlanDay? { week.first { $0.hasRisk } }
     var riskyEvent: DayEvent? { riskyDay?.events.first { $0.riskNote != nil } }
 
-    func day(number: Int) -> PlanDay? { week.first { $0.dayNumber == number } }
+    func day(number: Int) -> PlanDay? { calendarDays.first { $0.dayNumber == number } }
 
-    // MARK: 월간 (2026년 7월)
+    // MARK: 일정 추가·조정 (AddEventView·위험카드에서 호출)
 
-    let monthLabel = "2026년 7월"
-    let daysInMonth = 31
-    let firstWeekdayOffset = 2        // 7/1 = 수요일 (월요일 시작 기준 빈칸 2)
-    let todayDayNumber = 21
-    var weekDayNumbers: ClosedRange<Int> { 20...26 }
-    let monthRemaining = 208_000      // 이번 달 남은 사용 가능액(데모)
+    /// 새 일정을 캘린더와 예산 계산에 함께 반영한다.
+    /// 새로 추가하는 일정은 아직 결제 전이므로 기본 상태는 '예약 예산'이다(실제 출금 없음, 가용금액에서만 제외).
+    func addEvent(title: String, day: Int, amount: Int, category: String,
+                  basis: String?, predicted: Bool = false, startHour: Double? = nil,
+                  riskNote: String? = nil, riskDetail: String? = nil,
+                  purpose: String? = nil, state: SpendState = .reserved,
+                  calendarEventID: String? = nil) {
+        guard let i = calendarDays.firstIndex(where: { $0.dayNumber == day }) else { return }
+        // 사용자가 시간을 골랐으면 그 시각에, 아니면 겹치지 않는 빈 시간에 넣는다.
+        let start = startHour ?? Self.freeSlot(after: calendarDays[i].events)
+        let event = DayEvent(title: title, symbol: Self.symbol(for: category),
+                             startHour: start, duration: 2, amount: amount,
+                             estimateLow: amount, estimateHigh: amount,
+                             estimateBasis: basis, isPredicted: predicted,
+                             riskNote: riskNote, riskDetail: riskDetail,
+                             category: category, purpose: purpose, state: state,
+                             calendarEventID: calendarEventID)
+        calendarDays[i].events.append(event)
+        calendarDays[i].events.sort { $0.startHour < $1.startHour }
+        // 예산 계산은 calendarDays 에서 파생되므로 따로 합산해 둘 필요가 없다.
+    }
 
-    // MARK: 조정안
+    /// 일정을 지운다. 예산 계산은 캘린더에서 파생되므로 금액은 곧바로 따라 바뀐다.
+    /// - Returns: 기기 캘린더에서도 지워야 할 이벤트 식별자(앱이 쓴 일정일 때만).
+    @discardableResult
+    func deleteEvent(_ event: DayEvent, on dayNumber: Int) -> String? {
+        guard let i = calendarDays.firstIndex(where: { $0.dayNumber == dayNumber }),
+              let j = calendarDays[i].events.firstIndex(where: { $0.id == event.id }) else { return nil }
+        let removed = calendarDays[i].events.remove(at: j)
+        return removed.calendarEventID
+    }
 
-    let adjustments: [AdjustmentOption] = [
-        AdjustmentOption(id: "skip2cha", title: "금요일 2차를 다음 주로", detail: "모임은 지키고 적금 확률 78% 유지", budget: 52_000),
-        AdjustmentOption(id: "first-only", title: "2차 대신 1차까지만", detail: "예상 지출 40,000 → 15,000원", budget: 27_000),
-        AdjustmentOption(id: "movie", title: "영화를 다음 주로 옮기기", detail: "적금 확률 74%", budget: 37_000),
-    ]
+    /// 시작 시각을 옮긴다. 하루 안에서만 움직이므로 금액 합계는 그대로지만,
+    /// 다른 일정과의 순서·겹침이 바뀌므로 정렬은 다시 한다.
+    func updateEventTime(_ event: DayEvent, on dayNumber: Int, startHour: Double) {
+        guard let i = calendarDays.firstIndex(where: { $0.dayNumber == dayNumber }),
+              let j = calendarDays[i].events.firstIndex(where: { $0.id == event.id }) else { return }
+        calendarDays[i].events[j].startHour = max(0, min(startHour, 23.5))
+        calendarDays[i].events.sort { $0.startHour < $1.startHour }
+    }
 
-    // MARK: 최근 3개월 소비 프로파일 (대학생 스케일)
+    /// 금액을 고친다 — 예상액을 실제에 맞출 때.
+    func updateEventAmount(_ event: DayEvent, on dayNumber: Int, amount: Int) {
+        guard let i = calendarDays.firstIndex(where: { $0.dayNumber == dayNumber }),
+              let j = calendarDays[i].events.firstIndex(where: { $0.id == event.id }) else { return }
+        calendarDays[i].events[j].amount = max(0, amount)
+        calendarDays[i].events[j].estimateLow = max(0, amount)
+        calendarDays[i].events[j].estimateHigh = max(0, amount)
+    }
 
+    /// 기기 캘린더에 쓴 뒤 돌려받은 식별자를 일정에 붙여둔다 — 나중에 지울 때 필요하다.
+    func attachCalendarID(_ id: String, to event: DayEvent, on dayNumber: Int) {
+        guard let i = calendarDays.firstIndex(where: { $0.dayNumber == dayNumber }),
+              let j = calendarDays[i].events.firstIndex(where: { $0.id == event.id }) else { return }
+        calendarDays[i].events[j].calendarEventID = id
+    }
+
+    /// 다음 주로 옮겨서 이번 주 부담을 줄일 수 있는 첫 일정.
+    ///
+    /// 주간 화면의 조정안과 챗봇의 미루기 제안이 같은 일정을 가리켜야 한다.
+    /// 두 곳에서 따로 고르면 "옮기면 이번 주가 넉넉해져요"라고 말해놓고
+    /// 다음 주 일정을 옮기는 일이 생긴다. 그래서 이번 주 안에서만 고른다.
+    /// 지켜두기로 한 소비와, 옮기면 이번 달을 넘어가는 일정은 제외한다.
+    var movableEventThisWeek: (day: Int, event: DayEvent)? {
+        for day in week.sorted(by: { $0.dayNumber < $1.dayNumber })
+            where day.dayNumber >= todayDayNumber && day.dayNumber + 7 <= DemoClock.lastDay {
+            if let event = day.events.first(where: { $0.amount > 0 && !$0.isProtected }) {
+                return (day.dayNumber, event)
+            }
+        }
+        return nil
+    }
+
+    /// 금액을 줄여볼 만한 이번 주 일정 — 오늘 이후, 지켜두기로 한 소비는 빼고, 가장 큰 것부터.
+    var reducibleEventThisWeek: (day: Int, event: DayEvent)? {
+        let candidates = week
+            .filter { $0.dayNumber >= todayDayNumber }
+            .flatMap { day in
+                day.events.filter { $0.amount > 0 && !$0.isProtected }
+                    .map { (day: day.dayNumber, event: $0) }
+            }
+        return candidates.max { $0.event.amount < $1.event.amount }
+    }
+
+    /// 이번 주 부담을 줄이는 방법 하나.
+    ///
+    /// 달의 마지막 주에는 다음 주가 다음 달이라 이 달 캘린더 안에 옮길 곳이 없다.
+    /// 이동만 제안하면 그 주 내내 조정안이 비어 버리므로, 그때는 금액을 줄이는 쪽으로 넘어간다.
+    var suggestedAdjustment: BudgetAdjustment? {
+        if let movable = movableEventThisWeek {
+            return .move(day: movable.day, event: movable.event)
+        }
+        guard let biggest = reducibleEventThisWeek else { return nil }
+        // 만원 단위로 내려 잡는다 — 26,300원 같은 금액은 지키기 어렵다.
+        let halved = (biggest.event.amount / 2 / 10_000) * 10_000
+        guard halved > 0, halved < biggest.event.amount else { return nil }
+        return .reduce(day: biggest.day, event: biggest.event, to: halved)
+    }
+
+    /// 위험 일정을 7일 뒤로 옮기고 경고를 지운다. 이번 주 부담에서 빠져 사용 가능액이 회복된다.
+    @discardableResult
+    func moveEventToNextWeek(_ event: DayEvent, from dayNumber: Int) -> Int? {
+        guard let i = calendarDays.firstIndex(where: { $0.dayNumber == dayNumber }),
+              let j = calendarDays[i].events.firstIndex(where: { $0.id == event.id }) else { return nil }
+        let target = dayNumber + 7
+        guard target <= DemoClock.lastDay,
+              let k = calendarDays.firstIndex(where: { $0.dayNumber == target }) else { return nil }
+
+        var moved = calendarDays[i].events.remove(at: j)
+        moved.riskNote = nil
+        moved.riskDetail = nil
+
+        calendarDays[k].events.append(moved)
+        calendarDays[k].events.sort { $0.startHour < $1.startHour }
+        return target
+    }
+
+    /// 위험을 감수하고 일정을 유지 — 경고 표시만 지운다(예산 부담은 그대로).
+    func acceptRisk(of event: DayEvent, on dayNumber: Int) {
+        guard let i = calendarDays.firstIndex(where: { $0.dayNumber == dayNumber }),
+              let j = calendarDays[i].events.firstIndex(where: { $0.id == event.id }) else { return }
+        calendarDays[i].events[j].riskNote = nil
+        calendarDays[i].events[j].riskDetail = nil
+    }
+
+    /// 기존 일정과 겹치지 않는 2시간 슬롯. 저녁이 차 있으면 같은 날의 이른 빈칸을 찾는다.
+    static func freeSlot(after events: [DayEvent], preferred: Double = 19) -> Double {
+        let overlaps = { (h: Double) in
+            events.contains { h < $0.startHour + $0.duration && $0.startHour < h + 2 }
+        }
+        let candidates = Array(stride(from: preferred, through: 22.0, by: 0.5))
+            + Array(stride(from: 6.0, to: preferred, by: 0.5))
+        return candidates.first(where: { !overlaps($0) }) ?? preferred
+    }
+
+    /// 추정 카테고리 → 일정 아이콘
+    static func symbol(for category: String) -> String {
+        switch category {
+        case "출근": "briefcase"
+        case "경조사": "gift"
+        case "데이트": "heart"
+        case "가족": "house"
+        case "자기관리": "cross.case"
+        case "여가", "문화": "film"
+        case "모임", "술·모임": "person.2"
+        case "업무·학업": "laptopcomputer"
+        case "카페": "cup.and.saucer"
+        case "외식": "fork.knife"
+        case "쇼핑": "handbag"
+        case "교통": "bus"
+        // 카드내역 분류(LocalExtractor)에만 있는 카테고리 — 일정에는 없지만 이용내역 목록에 뜬다.
+        case "배달": "takeoutbag.and.cup.and.straw"
+        case "구독": "arrow.triangle.2.circlepath"
+        case "건강": "cross.case"
+        case "생활": "cart"
+        default: "calendar"
+        }
+    }
+
+    // MARK: 월간
+
+    /// 월간 화면에서 보고 있는 달. 기본은 오늘이 든 달.
+    @Published var viewingMonth = DemoClock.month(of: DemoClock.today)
+
+    var monthLabel: String { DemoClock.monthLabel(of: viewingMonth) }
+    var viewingMonthRange: ClosedRange<Int> { DemoClock.range(of: viewingMonth) }
+    var firstWeekdayOffset: Int { DemoClock.firstWeekdayOffset(of: viewingMonth) }
+    /// 앱을 켤 때 실제 날짜에서 읽는다. 세션 중엔 고정(달이 넘어가도 화면이 흔들리지 않게).
+    let todayDayNumber = DemoClock.today
+
+    /// 그 달의 일정만 — 합계는 달마다 따로 세야 한다.
+    func days(of month: Int) -> [PlanDay] {
+        let bounds = DemoClock.range(of: month)
+        return calendarDays.filter { bounds.contains($0.dayNumber) }
+    }
+    var julyEstimateLow: Int { days(of: DemoClock.firstMonth).reduce(0) { $0 + $1.spendLow } }
+    var julyEstimateHigh: Int { days(of: DemoClock.firstMonth).reduce(0) { $0 + $1.spendHigh } }
+    var viewingMonthEstimateLow: Int { days(of: viewingMonth).reduce(0) { $0 + $1.spendLow } }
+    var viewingMonthEstimateHigh: Int { days(of: viewingMonth).reduce(0) { $0 + $1.spendHigh } }
+    var monthEndRemainingLow: Int {
+        max(0, monthlyIncome - BudgetEngine.fixed - savingsGoal - julyEstimateHigh)
+    }
+    var monthEndRemainingHigh: Int {
+        max(0, monthlyIncome - BudgetEngine.fixed - savingsGoal - julyEstimateLow)
+    }
+
+    // MARK: 7월 일정비 프로파일 (중간 추정값)
+
+    // 합계 801,000 = julyEstimate (캘린더 합계와 일치해야 함 — 출근은 무지출이라 카테고리 없음)
     let spendProfile: [SpendCategory] = [
-        SpendCategory(name: "외식", symbol: "fork.knife", total3m: 210_000),
-        SpendCategory(name: "술·모임", symbol: "wineglass", total3m: 180_000),
-        SpendCategory(name: "쇼핑", symbol: "handbag", total3m: 120_000),
-        SpendCategory(name: "카페", symbol: "cup.and.saucer", total3m: 96_000),
-        SpendCategory(name: "교통", symbol: "bus", total3m: 90_000),
-        SpendCategory(name: "배달", symbol: "bag", total3m: 60_000),
-        SpendCategory(name: "구독", symbol: "play.rectangle", total3m: 45_000),
+        SpendCategory(name: "경조사·쇼핑", symbol: "gift", monthly: 220_000),
+        SpendCategory(name: "모임·식사", symbol: "person.2", monthly: 210_000),
+        SpendCategory(name: "데이트·가족", symbol: "heart", monthly: 150_000),
+        SpendCategory(name: "문화", symbol: "film", monthly: 78_000),
+        SpendCategory(name: "학업·연구", symbol: "laptopcomputer", monthly: 73_000),
+        SpendCategory(name: "건강·관리", symbol: "cross.case", monthly: 70_000),
     ]
-    private let diningLikeNames: Set<String> = ["외식", "배달", "카페"]
-    var diningLike3m: Int { spendProfile.filter { diningLikeNames.contains($0.name) }.reduce(0) { $0 + $1.total3m } }
-    var diningLikeMonthly: Int { diningLike3m / 3 }
-    var spendTotal3m: Int { spendProfile.reduce(0) { $0 + $1.total3m } }
-    var spendMonthly: Int { spendTotal3m / 3 }
+    var spendMonthly: Int { spendProfile.reduce(0) { $0 + $1.monthly } }
+
+    // MARK: 기기 저장 — 껐다 켜도 이어서
+
+    private var saveBag: AnyCancellable?
+
+    init() {
+        // 뷰의 기존 정적 추정 API도 이 AppModel의 보호 저장 이력을 보도록 맞춘다.
+        SpendHistory.replaceLearnedRecords([])
+        if let saved = LocalStore.load() {
+            apply(saved)
+        } else {
+            SpendHistory.replaceLearnedRecords(learnedSpendRecords)
+        }
+
+        // 어느 값이 바뀌든 한곳에서 저장한다. 바뀔 때마다 쓰면 타이핑 한 글자에도
+        // 파일을 건드리므로, 잠깐 모았다가 한 번 쓴다.
+        saveBag = objectWillChange
+            .debounce(for: .seconds(0.5), scheduler: RunLoop.main)
+            .sink { [weak self] in self?.persist() }
+
+        // 홈 버튼으로 나가는 순간처럼 debounce 가 끝나기 전에 앱이 물러날 수 있다.
+        // 그때 마지막 변경이 날아가지 않게 한 번 더 저장한다.
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.willResignActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.persist() }
+        }
+    }
+
+    private func persist() {
+        LocalStore.save(PersistedState(
+            hasOnboarded: hasOnboarded,
+            usesDemoData: usesDemoData,
+            kbPayLinked: kbPayLinked,
+            monthlyIncome: monthlyIncome,
+            savingsGoal: savingsGoal,
+            direction: direction,
+            hobbies: Array(hobbies),
+            calendarDays: calendarDays,
+            learnedSpendRecords: learnedSpendRecords,
+            dismissedPredictions: Array(dismissedPredictions),
+            dailyCloseDismissed: dailyCloseDismissed
+        ))
+    }
+
+    static func markingToday(_ days: [PlanDay], today: Int) -> [PlanDay] {
+        days.map { day in
+            var refreshed = day
+            refreshed.isToday = day.dayNumber == today
+            return refreshed
+        }
+    }
+
+    private func apply(_ s: PersistedState) {
+        hasOnboarded = s.hasOnboarded
+        usesDemoData = s.usesDemoData
+        kbPayLinked = s.kbPayLinked
+        monthlyIncome = s.monthlyIncome
+        savingsGoal = s.savingsGoal
+        direction = s.direction
+        hobbies = Set(s.hobbies)
+        // isToday는 저장할 상태가 아니라 현재 시각에서 파생되는 표시다.
+        // 전날 저장본을 그대로 복원하면 어제가 계속 오늘로 남는다.
+        calendarDays = Self.markingToday(s.calendarDays, today: todayDayNumber)
+        SpendHistory.replaceLearnedRecords(s.learnedSpendRecords)
+        learnedSpendRecords = SpendHistory.learnedRecords
+        dismissedPredictions = Set(s.dismissedPredictions)
+        dailyCloseDismissed = s.dailyCloseDismissed
+    }
+
+    /// 시연을 처음부터 다시 할 때. 저장본을 지우고 시드 데이터로 되돌린다.
+    func resetToDemo() {
+        LocalStore.clear()
+        hasOnboarded = false
+        usesDemoData = true
+        kbPayLinked = false
+        monthlyIncome = 2_200_000
+        savingsGoal = 800_000
+        direction = .maintain
+        hobbies = ["영화", "전시", "가족", "데이트"]
+        calendarDays = Self.makeCalendar()
+        learnedSpendRecords = []
+        SpendHistory.replaceLearnedRecords([])
+        dismissedPredictions = []
+        dailyCloseDismissed = false
+    }
+
+    // MARK: 캘린더 원본을 앱 데모 데이터로 변환
+
+    static func makeCalendar() -> [PlanDay] {
+        var events: [Int: [DayEvent]] = [:]
+
+        func add(_ day: Int, _ title: String, symbol: String,
+                 start: Double, duration: Double,
+                 amount: Int = 0, low: Int? = nil, high: Int? = nil,
+                 basis: String? = nil, protected: Bool = false,
+                 category: String = "기타", purpose: String? = nil,
+                 state: SpendState = .confirmed) {
+            events[day, default: []].append(
+                DayEvent(title: title, symbol: symbol,
+                         startHour: start, duration: duration,
+                         amount: amount,
+                         estimateLow: low, estimateHigh: high,
+                         estimateBasis: basis,
+                         isProtected: protected,
+                         category: category, purpose: purpose, state: state)
+            )
+        }
+
+        let workDays: Set<Int> = [1, 2, 3, 6, 7, 8, 9, 10, 13, 14, 15, 16,
+                                  20, 21, 22, 23, 24, 27, 28, 29, 30, 31]
+        for day in workDays {
+            // 점심은 비용이 들지 않고, 교통·유류비는 월 고정비에 있어 출근은 무지출 일정이다.
+            add(day, "인포스탁 인턴", symbol: "building.2", start: 8.5, duration: 9)
+        }
+
+        add(1, "저녁", symbol: "fork.knife", start: 18, duration: 2,
+            amount: 8_000, low: 8_000, high: 8_000, basis: "간단한 식사 기준",
+            category: "외식", purpose: "개인 일정")
+        add(2, "SensCoreAI 연구", symbol: "laptopcomputer", start: 19.5, duration: 1)
+        add(2, "저녁", symbol: "fork.knife", start: 18.5, duration: 3,
+            amount: 20_000, low: 20_000, high: 20_000, basis: "저녁·카페 1회 기준",
+            category: "외식", purpose: "모임")
+        add(3, "월급일", symbol: "banknote", start: 8, duration: 0.5)
+        add(3, "해커톤 뒤풀이", symbol: "person.3", start: 19, duration: 3,
+            amount: 40_000, low: 40_000, high: 40_000, basis: "저녁 모임 1회 기준",
+            category: "술·모임", purpose: "모임")
+        add(4, "정장 구매", symbol: "tshirt", start: 9, duration: 3,
+            amount: 150_000, low: 150_000, high: 150_000, basis: "확인된 구매 금액",
+            category: "쇼핑", purpose: "개인 일정")
+        add(4, "교수님 결혼식", symbol: "rosette", start: 16.5, duration: 3.25,
+            amount: 70_000, low: 70_000, high: 70_000, basis: "확인된 축의금·교통비",
+            category: "경조사", purpose: "경조사")
+        add(5, "자습", symbol: "book.closed", start: 17.5, duration: 3.5,
+            amount: 8_000, low: 8_000, high: 8_000, basis: "식음료 1회 기준",
+            category: "카페", purpose: "공부")
+        add(6, "저녁·카공", symbol: "cup.and.saucer", start: 18, duration: 4,
+            amount: 20_000, low: 20_000, high: 20_000, basis: "저녁 + 카페 기준",
+            category: "카페", purpose: "공부")
+        add(7, "SensCoreAI 연구", symbol: "laptopcomputer", start: 21.75, duration: 1,
+            amount: 5_000, low: 5_000, high: 5_000, basis: "음료 1회 기준",
+            category: "카페", purpose: "공부")
+        add(8, "선우", symbol: "person.2", start: 18.5, duration: 2.5,
+            amount: 25_000, low: 25_000, high: 25_000, basis: "저녁 약속 1회 기준",
+            category: "외식", purpose: "모임")
+        add(10, "데이트", symbol: "heart", start: 18, duration: 4,
+            amount: 100_000, low: 100_000, high: 100_000, basis: "확인된 금액", protected: true,
+            category: "데이트", purpose: "데이트")
+        add(11, "마인드온", symbol: "person.crop.square", start: 11, duration: 1)
+        add(11, "SOL TA", symbol: "person.2", start: 12, duration: 5,
+            amount: 15_000, low: 15_000, high: 15_000, basis: "교통 + 식사 기준",
+            category: "교통", purpose: "업무")
+        add(12, "가족 식사", symbol: "house", start: 13, duration: 2,
+            amount: 20_000, low: 20_000, high: 20_000, basis: "본인 몫 기준", protected: true,
+            category: "외식", purpose: "가족")
+        add(12, "데이트", symbol: "heart", start: 15, duration: 2.2,
+            amount: 30_000, low: 30_000, high: 30_000, basis: "카페·데이트 기준", protected: true,
+            category: "카페", purpose: "데이트")
+        add(13, "규호 입대 전 저녁", symbol: "person.2", start: 18, duration: 3,
+            amount: 30_000, low: 30_000, high: 30_000, basis: "저녁 모임 1회 기준",
+            category: "외식", purpose: "모임")
+        add(14, "국민카드 결제일", symbol: "creditcard", start: 8, duration: 0.5)
+        add(14, "오디움 예약", symbol: "ticket", start: 14, duration: 1)
+        add(15, "종현·한결", symbol: "person.2", start: 18, duration: 1.5,
+            amount: 25_000, low: 25_000, high: 25_000, basis: "저녁 약속 1회 기준",
+            category: "외식", purpose: "모임")
+        add(16, "인포스탁 전사 회식", symbol: "person.3", start: 18, duration: 2.5,
+            amount: 5_000, low: 5_000, high: 5_000, basis: "개인 교통비 기준",
+            category: "교통", purpose: "업무")
+        add(17, "제헌절 공부", symbol: "book.closed", start: 8.5, duration: 4.5)
+        add(17, "한의원", symbol: "cross.case", start: 10, duration: 1,
+            amount: 20_000, low: 20_000, high: 20_000, basis: "진료비 예상",
+            category: "건강", purpose: "병원")
+        add(17, "오디움·안성", symbol: "tram.fill", start: 13, duration: 4.75,
+            amount: 40_000, low: 40_000, high: 40_000, basis: "왕복 교통 + 식사 기준",
+            category: "교통", purpose: "여행")
+        add(18, "공부", symbol: "book.closed", start: 11.5, duration: 6.5)
+        add(18, "성창이와 저녁", symbol: "person.2", start: 18, duration: 2,
+            amount: 25_000, low: 25_000, high: 25_000, basis: "저녁 약속 1회 기준",
+            category: "외식", purpose: "모임")
+        add(19, "호프 영화", symbol: "film", start: 10.25, duration: 2.75,
+            amount: 18_000, low: 18_000, high: 18_000, basis: "영화 관람 1회 기준",
+            category: "문화", purpose: "문화")
+        add(19, "호프 무대인사", symbol: "theatermasks", start: 12.9, duration: 0.3)
+        add(19, "밥", symbol: "fork.knife", start: 13.5, duration: 1,
+            amount: 12_000, low: 12_000, high: 12_000, basis: "식사 1회 기준",
+            category: "외식", purpose: "개인 일정")
+        add(19, "아모레퍼시픽 미술관", symbol: "paintpalette", start: 15, duration: 2,
+            amount: 20_000, low: 20_000, high: 20_000, basis: "관람 + 교통 기준",
+            category: "문화", purpose: "문화")
+        add(20, "레이저 제모 7회차", symbol: "face.smiling", start: 18, duration: 1,
+            amount: 50_000, low: 50_000, high: 50_000, basis: "당일 결제 확인",
+            category: "자기관리", purpose: "개인 일정")
+        add(20, "SensCoreAI 연구", symbol: "laptopcomputer", start: 20, duration: 1,
+            amount: 5_000, low: 5_000, high: 5_000, basis: "음료 1회 기준",
+            category: "카페", purpose: "공부")
+        add(21, "회의", symbol: "bubble.left.and.bubble.right", start: 21, duration: 1,
+            basis: "별도 결제 없음")
+        // 7/22 저녁 일정(미용실) — 아직 결제 전이라 '예약 예산' 상태로 둔다. 하루 마감에서 확인하면 확정으로 바뀐다.
+        add(22, "와드", symbol: "scissors", start: 19, duration: 1,
+            amount: 40_000, low: 40_000, high: 40_000, basis: "사용자가 확인한 금액",
+            category: "자기관리", purpose: "개인 일정", state: .reserved)
+        add(24, "인포스탁 월급날", symbol: "banknote", start: 8, duration: 0.5)
+        // 데모 시나리오 — 이번 주에 새로 잡은 저녁 약속 2건.
+        add(30, "윤혁이랑 피자 (이태원)", symbol: "fork.knife", start: 19, duration: 2,
+            amount: 52_000, low: 52_000, high: 52_000, basis: "사용자가 확인한 금액",
+            category: "외식", purpose: "모임", state: .reserved)
+        add(31, "크리에이터 킥오프 저녁 (강남)", symbol: "person.3", start: 19, duration: 2,
+            amount: 28_000, low: 28_000, high: 28_000, basis: "사용자가 확인한 금액",
+            category: "외식", purpose: "모임", state: .reserved)
+
+        // 8월은 비워 둔 채로 만든다 — 없는 일정을 지어내지 않는다.
+        // 일정을 옮기거나 새로 넣으면 그때 채워지고, 주차 예산은 7월 잔액을 이월받는다.
+        let today = DemoClock.today
+        return (1...DemoClock.lastDay).map { day in
+            PlanDay(weekday: DemoClock.weekday(of: day),
+                    dateLabel: DemoClock.shortLabel(of: day), dayNumber: day,
+                    isToday: day == today,
+                    events: events[day, default: []].sorted { $0.startHour < $1.startHour })
+        }
+    }
 }
 
-// 온보딩 통합 서베이 후보 (좋아하는 것 + 지키고 싶은 것)
+// 온보딩 통합 서베이 후보 (좋아하는 것 = 나한테 더 필요한 소비 후보)
 let keepCandidates: [(tag: String, label: String, symbol: String)] = [
+    ("데이트", "데이트", "heart"),
     ("모임", "모임·친구", "person.2"),
+    ("연구", "연구·공부", "laptopcomputer"),
     ("영화", "영화", "film"),
     ("카페", "카페", "cup.and.saucer"),
     ("음식", "맛집·음식", "fork.knife"),
@@ -258,5 +1021,4 @@ let keepCandidates: [(tag: String, label: String, symbol: String)] = [
     ("전시", "전시·공연", "paintpalette"),
     ("게임", "게임", "gamecontroller"),
     ("가족", "가족", "house"),
-    ("경조사", "경조사", "gift"),
 ]

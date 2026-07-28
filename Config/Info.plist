@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- 서버 주소와 인증 키는 소스에 박지 않고 빌드 설정에서 주입한다.
+	     값을 안 주면 빈 문자열이 되고, 앱은 로컬 개발 서버(http://localhost:8000)로 떨어진다.
+	     주입 방법: xcodebuild ... KB_TUNE_API_BASE_URL=https://... KB_TUNE_API_KEY=...
+	     또는 저장소에 안 올리는 xcconfig 파일에 두 값을 적는다. -->
+	<key>KBTuneAPIBaseURL</key>
+	<string>$(KB_TUNE_API_BASE_URL)</string>
+	<key>KBTuneAPIKey</key>
+	<string>$(KB_TUNE_API_KEY)</string>
+
+	<!-- iOS 는 평문 HTTP 연결을 기본으로 막는다(ATS). 로컬 개발 서버(http://localhost:8000)에
+	     붙으려면 예외가 필요하다. 로컬 네트워크만 열고 임의의 외부 HTTP 는 계속 막는다 —
+	     배포 주소는 코드가 https 만 받으므로 이 예외로 외부가 열리지는 않는다. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+
+	<!-- 챗봇 음성 입력. 온디바이스 받아쓰기만 사용하고, 지원 모델이 없으면
+	     음성 입력을 비활성화한다. Apple 음성 인식 서버로 폴백하지 않는다. -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>말로 일정을 넣거나 질문하기 위해 마이크를 씁니다. 녹음을 저장하지 않습니다.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>말한 내용을 기기 안에서 글자로 바꿔 입력창에 넣습니다. 온디바이스 인식을 지원하지 않으면 음성 입력을 사용하지 않으며, 녹음을 저장하지 않습니다.</string>
+
+	<!-- KB금융그룹 서체. 번들에 넣은 파일 이름을 여기 적어야 앱이 쓸 수 있다. -->
+	<key>UIAppFonts</key>
+	<array>
+		<string>KBFGText-Light.otf</string>
+		<string>KBFGText-Medium.otf</string>
+	</array>
+</dict>
+</plist>
