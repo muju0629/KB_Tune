@@ -15,7 +15,7 @@
 <img src="https://img.shields.io/badge/iOS-26.5-FFCC00?style=flat-square&labelColor=25241F&logo=apple&logoColor=white" alt="iOS 26.5" />
 <img src="https://img.shields.io/badge/Swift-SwiftUI-FFCC00?style=flat-square&labelColor=25241F&logo=swift&logoColor=white" alt="Swift SwiftUI" />
 <img src="https://img.shields.io/badge/FastAPI-Python-FFCC00?style=flat-square&labelColor=25241F&logo=fastapi&logoColor=white" alt="FastAPI Python" />
-<img src="https://img.shields.io/badge/LLM-Claude-FFCC00?style=flat-square&labelColor=25241F&logo=anthropic&logoColor=white" alt="Claude" />
+<img src="https://img.shields.io/badge/LLM-Claude-FFCC00?style=flat-square&labelColor=25241F&logo=anthropic&logoColor=white" alt="OPENAI" />
 
 <br/><br/>
 
