@@ -46,6 +46,8 @@ struct ChatMessage: Identifiable {
 private struct SearchPrompt: Identifiable {
     let id = UUID()
     let query: String
+    /// true면 이 질문 하나를 검색하는 게 아니라 입력줄의 검색 스위치를 켜는 자리다.
+    var turnsOnMode = false
 }
 
 /// 모델이 보내온 자유 문장을 읽기 좋게 그린다.
@@ -180,6 +182,9 @@ struct ChatbotView: View {
     @State private var pendingSearchQuery: SearchPrompt?
     /// 지금 이 순간 질문 원문이 검색으로 나가는 중인지. 배지가 이걸 보고 바뀐다.
     @State private var searchingNow = false
+    /// 입력줄의 검색 스위치. 켜 두면 보내는 말이 예산 계산이 아니라 웹 검색으로 간다.
+    /// 언제 원문이 나가는지를 앱이 눈치로 정하지 않고 사용자가 직접 정하게 하는 자리다.
+    @State private var searchMode = false
     @FocusState private var inputFocused: Bool
 
     // 데모 흐름 순서대로 — 소비 질문 → 절감 지점 → 패턴 → 다음 달 방향 → 적금
@@ -259,40 +264,51 @@ struct ChatbotView: View {
             showConsent = agent.requiresOffDeviceConsent && !CloudAIConsent.asked
         }
         .sheet(isPresented: $showConsent) { consentSheet }
-        .sheet(item: $pendingSearchQuery) { searchConsentSheet($0.query) }
+        .sheet(item: $pendingSearchQuery) { searchConsentSheet($0) }
     }
 
     // MARK: 검색 동의
 
     /// 검색이 필요한 질문이 나온 그 순간에만 묻는다. 앱을 처음 켤 때 미리 받아두지 않는다 —
     /// 무엇이 나가는지 사용자가 눈앞의 질문으로 확인할 수 있을 때 물어야 판단이 된다.
-    private func searchConsentSheet(_ query: String) -> some View {
-        SheetContainer(title: "검색해서 알아볼까요?") {
+    private func searchConsentSheet(_ prompt: SearchPrompt) -> some View {
+        let query = prompt.query.trimmingCharacters(in: .whitespaces)
+        return SheetContainer(title: prompt.turnsOnMode ? "웹 검색을 켤까요?" : "검색해서 알아볼까요?") {
             VStack(alignment: .leading, spacing: 16) {
-                Text("이 질문 한 줄이 그대로 검색에 나가요.")
+                Text(prompt.turnsOnMode
+                     ? "켜 두는 동안 보내는 말이 그대로 검색에 나가요. 예산 계산은 하지 않아요."
+                     : "이 질문 한 줄이 그대로 검색에 나가요.")
                     .font(.kb(14)).foregroundStyle(KB.ink)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                Text("“\(query)”")
-                    .font(.kb(14, .semibold)).foregroundStyle(KB.ink)
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(KB.canvas, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(KB.line, lineWidth: 1))
+                if !query.isEmpty {
+                    Text("“\(query)”")
+                        .font(.kb(14, .semibold)).foregroundStyle(KB.ink)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(KB.canvas, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(KB.line, lineWidth: 1))
+                }
 
                 consentRow(icon: "magnifyingglass", tint: KB.caution, title: "나가는 것",
-                           detail: "위 질문 문장 하나예요.")
+                           detail: prompt.turnsOnMode ? "검색이 켜져 있을 때 보내는 문장이에요."
+                                                      : "위 질문 문장 하나예요.")
                 consentRow(icon: "lock", tint: KB.green, title: "나가지 않는 것",
                            detail: "일정 제목, 금액, 예산, 카드 내역, 이름은 검색으로 보내지 않아요.")
 
-                Text("검색을 쓰는 동안에는 위쪽 배지가 ‘검색 사용 중’으로 바뀌어요. 설정에서 언제든 끌 수 있어요.")
+                Text("검색을 쓰는 동안에는 위쪽 배지가 ‘검색 사용 중’으로 바뀌어요. 입력줄의 돋보기를 다시 누르면 꺼지고, 설정에서도 끌 수 있어요.")
                     .font(.kb(11.5)).foregroundStyle(KB.muted)
                     .fixedSize(horizontal: false, vertical: true)
 
                 VStack(spacing: 9) {
-                    consentButton("검색할게요", filled: true) {
+                    consentButton(prompt.turnsOnMode ? "켤게요" : "검색할게요", filled: true) {
                         WebSearchConsent.set(true)
                         pendingSearchQuery = nil
-                        Task { await runSearch(query) }
+                        if prompt.turnsOnMode {
+                            searchMode = true
+                        } else {
+                            Task { await runSearch(query) }
+                        }
                     }
                     consentButton("안 할래요", filled: false) {
                         WebSearchConsent.set(false)
@@ -433,7 +449,7 @@ struct ChatbotView: View {
     /// 지금 이 대화에서 무엇이 기기 밖으로 나가는지 한 줄로 알린다.
     /// 검색은 질문 원문이 그대로 나가므로 가장 강한 표기가 되어야 한다.
     private var privacyBadgeLabel: String {
-        if searchingNow { return "검색 사용 중" }
+        if searchingNow || searchMode { return "검색 사용 중" }
         guard CloudAIConsent.granted else { return "기기 안에서만" }
         return "직접식별자·원문 비공개"
     }
@@ -763,11 +779,14 @@ struct ChatbotView: View {
 
     private var inputRow: some View {
         HStack(spacing: 10) {
-            TextField("편하게 말해 주세요", text: $input)
+            searchToggle
+
+            TextField(searchMode ? "웹에서 찾아볼 내용을 적어 주세요" : "편하게 말해 주세요", text: $input)
                 .font(.kb(14))
                 .padding(.horizontal, 16).padding(.vertical, 12)
                 .background(KB.surface, in: Capsule())
-                .overlay(Capsule().stroke(KB.line, lineWidth: 1))
+                .overlay(Capsule().stroke(searchMode ? KB.caution : KB.line,
+                                          lineWidth: searchMode ? 1.5 : 1))
                 .submitLabel(.send)
                 .onSubmit { send(input) }
                 .focused($inputFocused)
@@ -799,6 +818,30 @@ struct ChatbotView: View {
             .opacity(input.trimmingCharacters(in: .whitespaces).isEmpty ? 0.5 : 1)
             .accessibilityLabel("질문 보내기")
         }
+    }
+
+    /// 검색 스위치. 켜는 순간이 곧 동의를 묻는 자리다 — 무엇이 나가는지
+    /// 눈앞의 질문으로 확인할 수 있을 때 물어야 판단이 된다.
+    private var searchToggle: some View {
+        Button {
+            if searchMode {
+                searchMode = false
+            } else if WebSearchConsent.granted {
+                searchMode = true
+            } else {
+                pendingSearchQuery = SearchPrompt(query: input, turnsOnMode: true)
+            }
+        } label: {
+            Image(systemName: "magnifyingglass")
+                .font(.kb(16, .bold))
+                .foregroundStyle(searchMode ? KB.onYellow : KB.muted)
+                .frame(width: 44, height: 44)
+                .background(searchMode ? KB.yellow : KB.surface, in: Circle())
+                .overlay(Circle().stroke(searchMode ? .clear : KB.line, lineWidth: 1))
+        }
+        .disabled(isThinking)
+        .accessibilityLabel(searchMode ? "웹 검색 켜짐. 누르면 끕니다" : "웹 검색 켜기")
+        .accessibilityAddTraits(searchMode ? .isSelected : [])
     }
 
     /// 녹음 시작/정지. 멈출 때 알아들은 문장을 입력창으로 옮긴다.
@@ -838,6 +881,14 @@ struct ChatbotView: View {
         input = ""
         inputFocused = false
         thinkingStep = 0
+
+        // 검색 스위치가 켜져 있으면 예산 규칙도 LLM도 거치지 않고 곧장 검색으로 간다.
+        // 사용자가 켜 둔 동안에는 무엇이 나가는지가 화면 위 배지로 계속 보인다.
+        if searchMode {
+            Task { await runSearch(trimmed) }
+            return
+        }
+
         withAnimation(.easeOut(duration: 0.25)) { isThinking = true }
 
         Task {
