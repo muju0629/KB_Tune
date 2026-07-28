@@ -16,15 +16,25 @@
 <img src="https://img.shields.io/badge/Swift-SwiftUI-FFCC00?style=flat-square&labelColor=25241F&logo=swift&logoColor=white" alt="Swift SwiftUI" />
 <img src="https://img.shields.io/badge/FastAPI-Python-FFCC00?style=flat-square&labelColor=25241F&logo=fastapi&logoColor=white" alt="FastAPI Python" />
 <img src="https://img.shields.io/badge/LLM-Claude-FFCC00?style=flat-square&labelColor=25241F&logo=anthropic&logoColor=white" alt="Claude" />
+<img src="https://img.shields.io/badge/LLM-OpenAI-FFCC00?style=flat-square&labelColor=25241F&logo=openai&logoColor=white" alt="OpenAI" />
 
 <br/><br/>
 
-<img src="docs/screens/01-weekly.png" width="200" alt="주간 계획" />
-<img src="docs/screens/07-chat-event-proposal.png" width="200" alt="대화" />
-<img src="docs/screens/08-analysis.png" width="200" alt="소비 분석" />
-<img src="docs/screens/09-products-card.png" width="200" alt="카드·적금" />
+<img src="docs/appstore/01-intro.png" width="190" alt="가계부, 캘린더, AI가 만나다" />
+<img src="docs/appstore/02-chat.png" width="190" alt="대화로 일정 추가" />
+<img src="docs/appstore/03-forecast.png" width="190" alt="예상 지출" />
+<img src="docs/appstore/04-basis.png" width="190" alt="계산 근거" />
 
-<sub>주간 계획 · 대화 · 소비 분석 · 카드·적금</sub>
+<sub>이번 주 예산 · 대화로 일정 추가 · 예상 지출 · 계산 근거</sub>
+
+<br/><br/>
+
+<img src="docs/appstore/05-ask.png" width="190" alt="언제든 물어보기" />
+<img src="docs/appstore/06-analysis.png" width="190" alt="소비 분석" />
+<img src="docs/appstore/07-products.png" width="190" alt="카드·적금" />
+<img src="docs/appstore/08-privacy.png" width="190" alt="기기 안에서만" />
+
+<sub>언제든 물어보기 · 소비 분석 · 카드·적금 · 기기 안에서만</sub>
 
 </div>
 
@@ -144,43 +154,9 @@
 설정은 주간 화면 오른쪽 위 동그라미를 누르면 나와요.
 탭은 좌우로 밀어도 넘어가요. 주간 탭에서 **주간을 한 번 더 누르면** 맨 위로 올라가요.
 
-<details>
-<summary><b>화면 더 보기 (12장)</b></summary>
-<br/>
-
-<div align="center">
-
-<img src="docs/screens/00-onboarding.png" width="170" alt="온보딩" />
-<img src="docs/screens/01-weekly.png" width="170" alt="주간" />
-<img src="docs/screens/02-weekly-adjustment.png" width="170" alt="조정안" />
-<img src="docs/screens/03-month.png" width="170" alt="월간" />
-
-<sub>처음 켜면 · 이번 주 · 조정안 · 이번 달</sub>
-
-<br/><br/>
-
-<img src="docs/screens/04-billing.png" width="170" alt="청구 상세" />
-<img src="docs/screens/05-add-event.png" width="170" alt="일정 추가" />
-<img src="docs/screens/06-chat.png" width="170" alt="대화" />
-<img src="docs/screens/07-chat-event-proposal.png" width="170" alt="일정 제안" />
-
-<sub>카드 청구 · 일정 추가 · 대화 · 일정 제안</sub>
-
-<br/><br/>
-
-<img src="docs/screens/08-analysis.png" width="170" alt="분석" />
-<img src="docs/screens/09-products-card.png" width="170" alt="카드" />
-
-<sub>분석 · 카드 추천</sub>
-
-</div>
-
-<br/>
-
-이 화면들은 테스트가 자동으로 찍어요. 사람이 캡처해서 올리는 게 아니라,
-`testCaptureAllScreens`가 앱을 켜서 탭을 돌며 찍기 때문에 화면이 바뀌면 스크린샷도 같이 바뀌어요.
-
-</details>
+맨 위 8장은 App Store에 올리는 스크린샷 그대로예요. 폰 안에 들어간 화면은 사람이 캡처한 게 아니라
+UI 테스트가 앱을 켜서 탭을 돌며 찍기 때문에, 화면이 바뀌면 스크린샷도 같이 바뀌어요.
+README에는 폭을 줄인 사본만 넣었고, 제출용 원본은 6.9"(1320×2868)로 따로 뽑아 둡니다.
 
 <br/>
 
@@ -726,6 +702,9 @@ TEST_RUNNER_KB_TUNE_SCREENSHOT_DIR=$PWD/docs/screens \
   -only-testing:KB_TuneUITests/KB_TuneUITests/testCaptureAllScreens \
   -only-testing:KB_TuneUITests/KB_TuneUITests/testCaptureOnboarding
 ```
+
+위에 보이는 App Store 스크린샷(`docs/appstore/`)은 이 캡처를 소재로 별도 편집기에서 만들어요.
+제출용 원본은 6.9"(1320×2868) 8장이고, README에는 폭을 줄인 사본만 넣습니다.
 
 실제 백엔드에 붙는 대화 캡처는 서버가 떠 있어야 해요.
 
