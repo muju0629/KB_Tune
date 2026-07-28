@@ -32,9 +32,9 @@
 <img src="docs/appstore/05-ask.png" width="190" alt="언제든 물어보기" />
 <img src="docs/appstore/06-analysis.png" width="190" alt="소비 분석" />
 <img src="docs/appstore/07-products.png" width="190" alt="카드·적금" />
-<img src="docs/appstore/08-privacy.png" width="190" alt="기기 안에서만" />
+<img src="docs/appstore/08-privacy.png" width="190" alt="안 나가는 것" />
 
-<sub>언제든 물어보기 · 소비 분석 · 카드·적금 · 기기 안에서만</sub>
+<sub>언제든 물어보기 · 소비 분석 · 카드·적금 · 안 나가는 것</sub>
 
 </div>
 
