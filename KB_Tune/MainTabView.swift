@@ -12,6 +12,8 @@ import SwiftUI
 
 struct MainTabView: View {
     @EnvironmentObject private var model: AppModel
+    /// 손떨림·어지럼 때문에 화면 이동을 줄여 둔 사용자. 남은 전환도 여기서 끈다.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         TabView(selection: $model.selectedTab) {
@@ -24,6 +26,13 @@ struct MainTabView: View {
             ProductsTabView().tag(MainTab.products)
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
+        // 페이지형 TabView는 손으로 밀 때만 따라오고, 코드로 탭을 바꾸면 그냥 잘라 붙인다.
+        // 하단 알약은 미끄러지는데 본문만 뚝 끊기던 이유다. 여기에 한 번 걸어 두면
+        // 탭바로 누르든 화면 안 버튼으로 넘어가든 항상 같은 속도로 밀린다.
+        //
+        // 화면이 도착한 뒤에는 아무것도 움직이지 않는다. 손가락이 미는 방향과 화면이
+        // 미는 방향을 맞추는 것까지가 이 앱에 필요한 모션이다.
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: model.selectedTab)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             // 이미 보고 있는 탭을 다시 누르면 그 화면을 처음 상태로 되돌린다.
             CustomTabBar(selected: $model.selectedTab) { tab in
@@ -40,6 +49,7 @@ struct CustomTabBar: View {
     @Binding var selected: MainTab
     var onReselect: (MainTab) -> Void
     @Namespace private var highlight
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // 선택되면 채워진 아이콘으로 바뀐다 — KB Pay를 비롯한 금융 앱의 공통 문법.
     private let items: [(tab: MainTab, label: String, icon: String, onIcon: String)] = [
@@ -88,7 +98,7 @@ struct CustomTabBar: View {
                 .accessibilityAddTraits(isOn ? .isSelected : [])
             }
         }
-        .animation(slide, value: selected)
+        .animation(reduceMotion ? nil : slide, value: selected)
         .padding(5)
         .background(
             RoundedRectangle(cornerRadius: 26, style: .continuous)

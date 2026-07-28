@@ -136,6 +136,14 @@ class ChatRequest(PlanRequest):
     history: Annotated[list[ChatHistoryItem], Field(max_length=8)] = Field(default_factory=list)
 
 
+class SearchRequest(BaseModel):
+    """웹 검색 요청 — 질문 한 줄만 받는다.
+
+    계획·카드·일정 필드를 일부러 넣지 않았다. 이 경로로는 재무 데이터가 나갈 수 없다.
+    """
+    query: Annotated[str, Field(min_length=1, max_length=200)]
+
+
 # ---------- 엔진 출력(결정론적) ----------
 
 class CategoryStat(BaseModel):

@@ -45,7 +45,7 @@ struct ConnectRow: View {
             }
             .padding(15)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(KB.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(state == .linked ? KB.green.opacity(0.45) : KB.line, lineWidth: 1.5))
         }
@@ -58,7 +58,7 @@ struct ConnectRow: View {
         switch state {
         case .idle:
             Text("연결")
-                .font(.kb(13, .bold)).foregroundStyle(KB.ink)
+                .font(.kb(13, .bold)).foregroundStyle(KB.onYellow)
                 .padding(.horizontal, 14).padding(.vertical, 7)
                 .background(KB.yellow, in: Capsule())
         case .loading:
@@ -105,7 +105,7 @@ struct KBPayConsentSheet: View {
                             RoundedRectangle(cornerRadius: 12, style: .continuous).fill(KB.yellow)
                                 .frame(width: 46, height: 46)
                             Text("KB\nPay").font(.kb(12, .heavy))
-                                .multilineTextAlignment(.center).foregroundStyle(KB.ink)
+                                .multilineTextAlignment(.center).foregroundStyle(KB.onYellow)
                         }
                         VStack(alignment: .leading, spacing: 3) {
                             Text("KB Pay 이용내역을\n불러올까요?")

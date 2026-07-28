@@ -24,7 +24,8 @@ from .llm.extract import extract_from_text
 from .models import (CategorizeRequest, CategorizeResult, ChatRequest,
                      CoachRequest, EstimateRequest, EstimateResult,
                      ExtractRequest, ExtractResult, ForecastResult,
-                     PlanRequest, PlanResult, Profile)
+                     PlanRequest, PlanResult, Profile, SearchRequest)
+from . import websearch
 from .security import BodySizeLimitMiddleware, rate_limit, require_api_key
 
 app = FastAPI(title="KB Tune Agent", version="1.0.0")
@@ -91,6 +92,24 @@ def chat_endpoint(req: ChatRequest):
                     req.history, req.past),
         media_type="text/plain; charset=utf-8",
     )
+
+
+@app.post("/api/search", dependencies=_llm)
+def search_endpoint(req: SearchRequest):
+    """웹 검색 — 앱 데이터로 답할 수 없는 질문만 온다.
+
+    받는 것은 질문 한 줄뿐이다. 계획·카드·일정은 이 경로에 실리지 않는다.
+    키가 없으면 검색을 켜지 않았다고 분명히 답한다.
+    """
+    if not websearch.enabled():
+        return {
+            "answer": "검색은 아직 켜져 있지 않아요. 지금은 성제님의 일정과 소비로 답할 수 있는 것만 도와드릴게요.",
+            "sources": [],
+        }
+    result = websearch.search(req.query)
+    if not result["answer"]:
+        return {"answer": "검색해 봤는데 마땅한 결과가 없었어요.", "sources": []}
+    return result
 
 
 @app.get("/api/eval", dependencies=_auth + [Depends(rate_limit("eval"))])

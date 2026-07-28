@@ -109,9 +109,9 @@ struct WeeklyPlanView: View {
             if let toast {
                 Text(toast)
                     .font(.kb(13, .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(KB.onInverse)
                     .padding(.horizontal, 18).padding(.vertical, 12)
-                    .background(KB.ink.opacity(0.92), in: Capsule())
+                    .background(KB.inverseSurface.opacity(0.92), in: Capsule())
                     .padding(.bottom, 24)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -193,7 +193,7 @@ struct WeeklyPlanView: View {
             }
         }
         .padding(3)
-        .background(.white, in: Capsule())
+        .background(KB.surface, in: Capsule())
         .overlay(Capsule().stroke(KB.line, lineWidth: 1))
     }
 
@@ -203,19 +203,19 @@ struct WeeklyPlanView: View {
         VStack(alignment: .leading, spacing: 22) {
             // 일정이 먼저다. 이번 주에 뭐가 잡혀 있는지 보고 나서 금액을 따진다.
             // 계산 카드(이번 주 계산·다음 달·카드값)는 근거라 일정 아래에 둔다.
-            hero.appearStagger(0)
-            if showAdjustmentPlan { adjustmentPlanCard.appearStagger(1) }
-            if model.shouldShowDailyClose { dailyCloseCard.appearStagger(1) }
-            weekStripPager.appearStagger(2)
-            spendTimeline.appearStagger(3)
-            if !model.upcomingSpends.isEmpty { predictedSpends.appearStagger(4) }
+            hero
+            if showAdjustmentPlan { adjustmentPlanCard }
+            if model.shouldShowDailyClose { dailyCloseCard }
+            weekStripPager
+            spendTimeline
+            if !model.upcomingSpends.isEmpty { predictedSpends }
 
             // 여기서부터 금액 근거
-            rolloverCard.appearStagger(5)
-            nextMonthCard.appearStagger(6)
+            rolloverCard
+            nextMonthCard
 
-            recommendation.appearStagger(7)
-            benefitRow.appearStagger(8)
+            recommendation
+            benefitRow
         }
     }
 
@@ -276,7 +276,7 @@ struct WeeklyPlanView: View {
                     flash("현금 지출로 확인했어요. \(formatWon(total))을 이번 달 지출에 반영했어요.")
                 } label: {
                     Text("현금으로 결제했어요")
-                        .font(.kb(13, .semibold)).foregroundStyle(KB.ink)
+                        .font(.kb(13, .semibold)).foregroundStyle(KB.onYellow)
                         .frame(maxWidth: .infinity).padding(.vertical, 10)
                         .background(KB.yellow, in: Capsule())
                 }
@@ -288,7 +288,7 @@ struct WeeklyPlanView: View {
                     Text("아직 안 썼어요")
                         .font(.kb(13, .medium)).foregroundStyle(KB.muted)
                         .frame(maxWidth: .infinity).padding(.vertical, 10)
-                        .background(.white, in: Capsule())
+                        .background(KB.surface, in: Capsule())
                         .overlay(Capsule().stroke(KB.line, lineWidth: 1))
                 }
             }
@@ -557,7 +557,7 @@ struct WeeklyPlanView: View {
                 Text(model.weekLabel(at: viewed))
                     .font(.kb(13, .semibold)).foregroundStyle(KB.ink)
                 if viewed == model.currentWeekIndex {
-                    Text("이번 주").font(.kb(10.5, .bold)).foregroundStyle(KB.ink)
+                    Text("이번 주").font(.kb(10.5, .bold)).foregroundStyle(KB.onYellow)
                         .padding(.horizontal, 7).padding(.vertical, 2)
                         .background(KB.yellow, in: Capsule())
                 }
@@ -664,7 +664,7 @@ struct WeeklyPlanView: View {
                     Text(items.first?.dayLabel ?? "")
                         .font(.kb(12.5, .semibold)).foregroundStyle(KB.ink)
                     if isToday {
-                        Text("오늘").font(.kb(9.5, .bold)).foregroundStyle(KB.ink)
+                        Text("오늘").font(.kb(9.5, .bold)).foregroundStyle(KB.onYellow)
                             .padding(.horizontal, 6).padding(.vertical, 1.5)
                             .background(KB.yellow, in: Capsule())
                     }
@@ -761,7 +761,7 @@ struct WeeklyPlanView: View {
             ForEach(model.upcomingSpends, id: \.pattern.key) { spend in
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 10) {
-                        IconBadge(systemName: spend.pattern.symbol, background: .white, size: 38)
+                        IconBadge(systemName: spend.pattern.symbol, background: KB.surface, size: 38)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(spend.pattern.key)
                                 .font(.kb(14.5, .semibold)).foregroundStyle(KB.ink)
@@ -795,7 +795,7 @@ struct WeeklyPlanView: View {
                             }
                         } label: {
                             Text("계획에 넣기")
-                                .font(.kb(13, .semibold)).foregroundStyle(KB.ink)
+                                .font(.kb(13, .semibold)).foregroundStyle(KB.onYellow)
                                 .frame(maxWidth: .infinity).padding(.vertical, 10)
                                 .background(KB.yellow, in: Capsule())
                         }
@@ -808,7 +808,7 @@ struct WeeklyPlanView: View {
                             Text("이번엔 안 써요")
                                 .font(.kb(13, .medium)).foregroundStyle(KB.muted)
                                 .frame(maxWidth: .infinity).padding(.vertical, 10)
-                                .background(.white, in: Capsule())
+                                .background(KB.surface, in: Capsule())
                                 .overlay(Capsule().stroke(KB.line, lineWidth: 1))
                         }
                     }
@@ -872,7 +872,7 @@ struct WeeklyPlanView: View {
                         .font(.kb(12, .bold))
                 }
                 .font(.kb(17, .semibold))
-                .foregroundStyle(KB.ink)
+                .foregroundStyle(KB.onYellow)
                 .padding(.horizontal, 16)
                 .frame(maxWidth: .infinity, minHeight: 50)
                 .background(KB.yellow, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
@@ -933,7 +933,7 @@ struct WeeklyPlanView: View {
                             formatRange(low: model.monthEndRemainingLow, high: model.monthEndRemainingHigh),
                             tint: KB.green)
             }
-            .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(KB.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
 
             monthGrid
@@ -952,7 +952,7 @@ struct WeeklyPlanView: View {
                 Text("타임테이블")
                     .font(.kb(16, .semibold)).foregroundStyle(KB.ink)
                 if d == model.todayDayNumber {
-                    Text("오늘").font(.kb(10.5, .bold)).foregroundStyle(KB.ink)
+                    Text("오늘").font(.kb(10.5, .bold)).foregroundStyle(KB.onYellow)
                         .padding(.horizontal, 7).padding(.vertical, 2)
                         .background(KB.yellow, in: Capsule())
                 }
@@ -997,7 +997,7 @@ struct WeeklyPlanView: View {
                 } label: {
                     Text("\(m)월")
                         .font(.kb(13, on ? .semibold : .regular))
-                        .foregroundStyle(KB.ink)
+                        .foregroundStyle(on ? KB.onYellow : KB.ink)
                         .padding(.horizontal, 12).padding(.vertical, 7)
                         .background {
                             if on { Capsule().fill(KB.yellow) }
@@ -1033,7 +1033,7 @@ struct WeeklyPlanView: View {
             }
         }
         .padding(14)
-        .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(KB.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KB.line, lineWidth: 1))
     }
 
@@ -1047,7 +1047,7 @@ struct WeeklyPlanView: View {
             VStack(spacing: 2) {
                 Text("\(DemoClock.dayOfMonth(of: d))")
                     .font(.kb(13.5, isToday ? .bold : .regular))
-                    .foregroundStyle(KB.ink)
+                    .foregroundStyle(isToday ? KB.onYellow : KB.ink)
                     .frame(width: 30, height: 30)
                     .background {
                         if isToday { Circle().fill(KB.yellow) }
@@ -1113,7 +1113,7 @@ struct WeeklyPlanView: View {
             }
             .padding(24)
             .frame(maxWidth: 300)
-            .background(.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .background(KB.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             .padding(.horizontal, 40)
         }
     }
@@ -1177,7 +1177,7 @@ struct DayTimetableView: View {
                     .font(.kb(19, .bold))
                     .foregroundStyle(KB.ink)
                 if day.isToday {
-                    Text("오늘").font(.kb(11, .bold)).foregroundStyle(KB.ink)
+                    Text("오늘").font(.kb(11, .bold)).foregroundStyle(KB.onYellow)
                         .padding(.horizontal, 8).padding(.vertical, 3)
                         .background(KB.yellow, in: Capsule())
                 }
@@ -1241,7 +1241,7 @@ struct DayTimetableBody: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 28)
-        .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(KB.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
     }
 
@@ -1265,7 +1265,7 @@ struct DayTimetableBody: View {
                     }
                 } label: {
                     Text("다음 주로 옮기기")
-                        .font(.kb(13, .semibold)).foregroundStyle(KB.ink)
+                        .font(.kb(13, .semibold)).foregroundStyle(KB.onYellow)
                         .padding(.horizontal, 14).padding(.vertical, 9)
                         .background(KB.yellow, in: Capsule())
                 }
@@ -1276,7 +1276,7 @@ struct DayTimetableBody: View {
                     Text("그대로 둘게요")
                         .font(.kb(13, .medium)).foregroundStyle(KB.muted)
                         .padding(.horizontal, 14).padding(.vertical, 9)
-                        .background(.white, in: Capsule())
+                        .background(KB.surface, in: Capsule())
                         .overlay(Capsule().stroke(KB.line, lineWidth: 1))
                 }
             }
@@ -1365,7 +1365,7 @@ struct DayTimetableBody: View {
         }
         .frame(height: totalHeight)
         .padding(14)
-        .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(KB.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KB.line, lineWidth: 1))
     }
 
@@ -1374,7 +1374,7 @@ struct DayTimetableBody: View {
         let isRisky = ev.riskNote != nil
         return HStack(alignment: .top, spacing: 10) {
             // 블록 배경이 상태색이라 배지는 흰색으로 둬야 아이콘이 보인다.
-            IconBadge(systemName: ev.symbol, background: .white, size: 34)
+            IconBadge(systemName: ev.symbol, background: KB.surface, size: 34)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(ev.title).font(.kb(13.5, .semibold)).foregroundStyle(KB.ink)

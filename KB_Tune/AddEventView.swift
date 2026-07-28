@@ -110,7 +110,7 @@ struct AddEventView: View {
                     } label: {
                         Text(s.rawValue)
                             .font(.kb(14, source == s ? .semibold : .regular))
-                            .foregroundStyle(KB.ink)
+                            .foregroundStyle(source == s ? KB.onYellow : KB.ink)
                             .frame(maxWidth: .infinity).padding(.vertical, 10)
                             .background(source == s ? KB.yellow : .clear,
                                         in: RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -119,7 +119,7 @@ struct AddEventView: View {
                 }
             }
             .padding(3)
-            .background(.white, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .background(KB.surface, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(KB.line, lineWidth: 1))
             .sensoryFeedback(.selection, trigger: source)
 
@@ -134,7 +134,7 @@ struct AddEventView: View {
                 TextField("예: 지민 결혼식, 동아리 회식", text: $title)
                     .font(.kb(16))
                     .padding(14)
-                    .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(KB.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(KB.line, lineWidth: 1))
                     .submitLabel(.done)
                     .onChange(of: title) { _, newValue in
@@ -157,7 +157,7 @@ struct AddEventView: View {
                     }
                 }
                 .padding(14)
-                .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(KB.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(KB.line, lineWidth: 1))
 
                 if amountText.isEmpty, let s = suggested, s.amount > 0 {
@@ -177,7 +177,7 @@ struct AddEventView: View {
                     .tint(KB.ink)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(14)
-                    .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(KB.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(KB.line, lineWidth: 1))
             }
 
@@ -208,7 +208,7 @@ struct AddEventView: View {
                     .buttonStyle(PrimaryButtonStyle())
                 }
                 .padding(16)
-                .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(KB.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
 
             case .denied:
@@ -258,7 +258,7 @@ struct AddEventView: View {
                                 Image(systemName: "chevron.right").font(.system(size: 13)).foregroundStyle(KB.muted)
                             }
                             .padding(14)
-                            .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .background(KB.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(KB.line, lineWidth: 1))
                         }
                         .buttonStyle(.plain)
@@ -347,7 +347,7 @@ struct AddEventView: View {
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(KB.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KB.line, lineWidth: 1))
 
             // 영향
@@ -382,7 +382,7 @@ struct AddEventView: View {
                 }
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(KB.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KB.line, lineWidth: 1))
             }
 

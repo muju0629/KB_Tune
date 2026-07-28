@@ -100,7 +100,7 @@ struct EventEditSheet: View {
                 Stepper("", value: $startHour, in: 0...23.5, step: 0.5).labelsHidden()
             }
             .padding(14)
-            .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(KB.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(KB.line, lineWidth: 1))
             Text("30분 단위로 옮길 수 있어요. 길이(\(Int(event.duration))시간)는 그대로예요.")
                 .font(.kb(11.5)).foregroundStyle(KB.muted)
@@ -118,7 +118,7 @@ struct EventEditSheet: View {
                 }
             }
             .padding(14)
-            .background(.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(KB.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(KB.line, lineWidth: 1))
             if let basis = event.estimateBasis {
                 Text(basis).font(.kb(11.5)).foregroundStyle(KB.muted)
@@ -155,7 +155,7 @@ struct EventEditSheet: View {
                 }
                 .foregroundStyle(KB.expenseRed)
                 .frame(maxWidth: .infinity).padding(.vertical, 14)
-                .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(KB.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .stroke(KB.expenseRed.opacity(0.3), lineWidth: 1))
             }
