@@ -33,7 +33,10 @@ def committed_future(events: list[PlannedEvent], today: int, include_candidate: 
 
 def expected_remaining_spend(profile: Profile, events: list[PlannedEvent], today: int,
                              days_in_month: int, include_candidate: bool) -> int:
-    days_left = days_in_month - today + 1
+    # today는 두 달 통산일일 수 있다(8/1=32). 현재 달의 일자로 환산해야
+    # 남은 날이 음수가 되어 재량지출이 확률을 거꾸로 올리는 일이 없다.
+    day_of_month = (today - 1) % days_in_month + 1
+    days_left = days_in_month - day_of_month + 1
     discretionary = DISCRETIONARY_DAILY * days_left * DIRECTION_DISCRETIONARY[profile.direction]
     return int(committed_future(events, today, include_candidate) + discretionary)
 

@@ -5,6 +5,7 @@ LLM/네트워크 없이 순수 알고리즘만 검증한다(키 불필요).
 from app.data import (DAYS_IN_MONTH, PROFILE, TRANSACTIONS_THIS_MONTH,
                       UPCOMING_EVENTS)
 from app.engine import build_plan
+from app.engine.budget import remaining_weeks
 from app.engine.probability import (SPEND_SIGMA, expected_remaining_spend,
                                     probability_analytic)
 from app.eval.golden import run_golden
@@ -30,6 +31,24 @@ def test_direction_changes_outputs():
     increase = build_plan(PROFILE.model_copy(update={"direction": "increase"}), 22)
     assert reduce.weekly_available == 47_720 and reduce.probability == 88
     assert increase.weekly_available == 80_360 and increase.probability == 74
+
+
+def test_8월_통산일은_현재_달_일자로_계산한다():
+    assert remaining_weeks(32, DAYS_IN_MONTH) == 5   # 8월 1일
+    assert remaining_weeks(62, DAYS_IN_MONTH) == 1  # 8월 31일
+    start = expected_remaining_spend(PROFILE, [], 32, DAYS_IN_MONTH, False)
+    end = expected_remaining_spend(PROFILE, [], 62, DAYS_IN_MONTH, False)
+    assert start == 31 * 7_500
+    assert end == 7_500
+
+
+def test_8월_계획에_7월_지출을_현재_지출로_재사용하지_않는다():
+    august = build_plan(PROFILE, today=40)
+    assert august.variable_spent_to_date == 0
+    assert august.remaining_budget == august.disposable_month
+    assert august.month_estimate_low == 0
+    assert august.month_estimate_high == 0
+    assert august.estimate_basis == "8월에 등록된 지출 일정 없음"
 
 
 def test_calendar_estimate_range_and_no_fake_candidate():

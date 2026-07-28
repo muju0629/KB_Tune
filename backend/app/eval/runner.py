@@ -9,7 +9,8 @@ from .golden import run_golden
 
 
 def run_eval() -> EvalResult:
-    from ..llm.coach import coach  # 지연 임포트(anthropic 선택적)
+    # 실제 /api/chat 과 같은 생성·검증·폴백 경로를 평가한다.
+    from ..llm.chat import allowed_chat_numbers, chat_reply
 
     passed, total, details = run_golden()
 
@@ -17,14 +18,21 @@ def run_eval() -> EvalResult:
     g_total = 0
     for d in ("reduce", "maintain", "increase"):
         plan = build_plan(PROFILE.model_copy(update={"direction": d}), today=21)
-        c = coach(plan)
-        text = " ".join([c.headline, c.reason, c.impact, c.recommendation])
-        ok, bad = groundedness.check(text, set(plan.grounded_numbers))
+        result = chat_reply(plan, "이번 주 소비 계획과 적금 목표를 짧게 알려줘")
+        ok, bad = groundedness.check(result.text, allowed_chat_numbers(plan))
+        # 차단 후 템플릿은 안전하지만, 원 모델이 허위 숫자를 냈다면 모델 접지 점수에는
+        # 실패로 기록한다. 안전 폴백과 모델 품질을 같은 100%로 포장하지 않는다.
+        model_grounded = ok and not result.blocked_numbers
         g_total += 1
-        grounded += int(ok)
-        src = "LLM" if c.used_llm else "템플릿"
-        details.append(f"[{'OK' if ok else 'FAIL'}] groundedness/{d} ({src})"
-                       + ("" if ok else f" ungrounded={bad}"))
+        grounded += int(model_grounded)
+        blocked = (f" · 모델 차단 숫자={list(result.blocked_numbers)}"
+                   if result.blocked_numbers else "")
+        details.append(
+            f"[{'OK' if model_grounded else 'FAIL'}] groundedness/chat/{d} "
+            f"(실제 응답 소스={result.source})"
+            + ("" if ok else f" ungrounded={bad}")
+            + blocked
+        )
 
     rate = round(grounded / g_total, 3) if g_total else 0.0
     return EvalResult(

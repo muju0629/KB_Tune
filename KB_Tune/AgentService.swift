@@ -9,21 +9,138 @@
 
 import Foundation
 import Combine
+import NaturalLanguage
 
-/// 캘린더 일정 제목을 LLM 제공자에게 넘길지에 대한 사용자 동의.
-///
-/// 제목에는 "정형외과 진료", "성당 모임" 같은 값이 들어갈 수 있다 —
-/// 건강·종교·관계는 금액보다 민감하고, 한번 외부로 나가면 회수할 수 없다.
-/// 그래서 기본은 '안 보냄'이고, 명시적으로 동의할 때만 넘긴다.
-/// 동의하지 않아도 일정 유형과 금액은 넘어가므로 조언 자체는 계속 동작한다.
-enum EventTitleConsent {
-    private static let key = "sharesEventTitlesWithLLM"
+/// 월수입·청구액·소비 문맥을 외부 LLM 제공자에게 보낼지에 대한 별도 동의.
+/// 기본값은 false이며, 선택 전에는 로컬 엔진 답변만 사용한다.
+enum CloudAIConsent {
+    static let key = "usesCloudAIAnalysis"
 
-    /// 물어본 적이 있는지. false는 '거절'이 아니라 '아직 안 물어봄'이다.
     static var asked: Bool { UserDefaults.standard.object(forKey: key) != nil }
     static var granted: Bool { UserDefaults.standard.bool(forKey: key) }
 
     static func set(_ value: Bool) { UserDefaults.standard.set(value, forKey: key) }
+}
+
+/// 서버에 보낼 수 있는 짧은 대화 문맥. 화면 모델이나 실행 버튼은 포함하지 않는다.
+struct AgentChatTurn {
+    let role: String       // user | assistant
+    let content: String
+}
+
+/// 네트워크 요청이 만들어지기 직전에 적용하는 개인정보 경계.
+///
+/// 화면에서 실수로 원문을 넘겨도 이 층에서 사용자의 실명과 구조화 개인정보를 지운다.
+/// 일정 제목 원문은 허용하지 않고 카테고리 별칭으로만 바꾼다. 서버의 프롬프트 규칙이나
+/// 불완전한 이름 인식에 의존하지 않고 기기에서 먼저 제거한다.
+enum OutboundPrivacy {
+    static func sanitize(_ source: String, model: AppModel? = nil) -> String {
+        var text = source
+
+        if let name = model?.userName.trimmingCharacters(in: .whitespacesAndNewlines),
+           name.count >= 2 {
+            text = text.replacingOccurrences(of: name, with: "사용자")
+        }
+
+        if let model {
+            let events = model.calendarDays.flatMap(\.events)
+                .filter { !$0.title.isEmpty }
+                .sorted { $0.title.count > $1.title.count }
+            for event in events {
+                let category = safeCategory(event.category)
+                text = text.replacingOccurrences(of: event.title,
+                                                  with: "[\(category) 일정]")
+            }
+        }
+
+        text = redactPersonalNames(in: text)
+
+        // 긴 숫자열은 카드·계좌·주민번호일 가능성이 높다. 금액의 쉼표 표기는 남긴다.
+        let patterns: [(String, String)] = [
+            (#"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}"#, "[이메일]"),
+            (#"(?<!\d)01[016789][ -]?\d{3,4}[ -]?\d{4}(?!\d)"#, "[전화번호]"),
+            (#"(?<!\d)\d{6}[ -]?[1-8]\d{6}(?!\d)"#, "[식별번호]"),
+            (#"(?<!\d)\d{12,19}(?!\d)"#, "[금융번호]"),
+            (#"(?<!\d)(?:\d{4}[- ]){3}\d{4}(?!\d)"#, "[금융번호]"),
+            (#"(?<!\d)\d{2,6}-\d{2,6}-\d{2,6}(?!\d)"#, "[금융번호]"),
+            (#"(?<![A-Z0-9])[A-Z]{1,2}\d{7,8}(?![A-Z0-9])"#, "[여권번호]"),
+            (#"(?:주소(?:는|가|:)?|사는\s*곳(?:은|:)?|거주지(?:는|:)?)[^,.\n]{2,60}"#, "주소 [주소]"),
+            (#"(?:제|내|저의)\s*이름(?:은|이)?\s*[가-힣]{2,4}"#, "제 이름은 [사용자]"),
+            (#"[가-힣]{2,4}(?:님|씨)(?=[은는이가을를과와,\s])"#, "[사람]"),
+            (#"(?<![가-힣])([가-힣]{2,4})\s+(결혼식|생일|돌잔치|장례식|약속|만남)"#, "[사람] $2"),
+            (#"(?<![가-힣])([가-힣]{2,4})(와|과|이랑|랑)\s*(?=(?:카페|약속|만나|밥|술|여행|데이트|결혼))"#, "[사람]$2 ")
+        ]
+        for (pattern, replacement) in patterns {
+            text = replacing(pattern, in: text, with: replacement,
+                             options: [.caseInsensitive])
+        }
+
+        // API 입력 상한보다 여유 있게 작게 유지한다. 잘린 사실은 문맥에 영향을 덜 주도록
+        // 문장 끝에서 자르고, 원문은 로그에도 남기지 않는다.
+        return String(text.prefix(1_200)).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// 외부 모델에는 자유문장 원문 대신 기기에서 판별한 금융 의도만 보낸다.
+    /// 정규식이나 NER가 놓친 제3자 이름이 있어도 원문 자체가 네트워크 본문에 없게 하는
+    /// 구조적 방어다. 구매 판단에 필요한 사용자가 말한 금액만 안전한 숫자로 덧붙인다.
+    static func financialIntent(_ source: String) -> String {
+        let safe = sanitize(source)
+        let compact = safe.replacingOccurrences(of: " ", with: "").lowercased()
+        let intent: String
+        if ["카드값", "청구", "할부", "결제일"].contains(where: compact.contains) {
+            intent = "카드 청구액·결제일·할부 부담에 관해 질문했습니다."
+        } else if ["적금", "저축", "통장"].contains(where: compact.contains) {
+            intent = "저축 목표와 무리 없는 추가 적금에 관해 질문했습니다."
+        } else if ["패턴", "소비습관", "분석", "반복"].contains(where: compact.contains) {
+            intent = "과거 소비 패턴과 다음 소비 예측을 질문했습니다."
+        } else if ["줄이", "줄일", "줄여", "아껴", "절약", "어디서"].contains(where: compact.contains) {
+            intent = "지켜야 할 소비를 제외하고 어디서 줄일지 질문했습니다."
+        } else if ["다음달", "미래", "예측"].contains(where: compact.contains) {
+            intent = "다음 달 소비와 목표 달성 가능성을 질문했습니다."
+        } else if ["사도", "살까", "구매", "지를", "써도"].contains(where: compact.contains) {
+            intent = "새 지출을 해도 현재 계획을 지킬 수 있는지 질문했습니다."
+        } else if ["이번주", "얼마", "가능액", "예산"].contains(where: compact.contains) {
+            intent = "이번 주 추가 사용 가능액과 계산 근거를 질문했습니다."
+        } else {
+            intent = "개인 소비 계획에 관한 조언을 요청했습니다. 원문의 인명·장소·일정 제목은 생략했습니다."
+        }
+        guard let amount = EventPhrase.amount(in: safe), amount > 0 else { return intent }
+        return intent + " 사용자가 말한 검토 금액은 \(amount)원입니다."
+    }
+
+    private static func safeCategory(_ category: String) -> String {
+        let allowed = category.filter { $0.isLetter || $0 == "·" || $0 == " " }
+        return allowed.isEmpty ? "개인" : String(allowed.prefix(12))
+    }
+
+    /// NaturalLanguage의 인명 태깅은 기기 안에서 실행된다. 연락처 형식이 아니어도
+    /// 문장 속 사람 이름을 찾아 네트워크 요청 전에 별칭으로 바꾼다.
+    private static func redactPersonalNames(in source: String) -> String {
+        let tagger = NLTagger(tagSchemes: [.nameType])
+        tagger.string = source
+        let full = source.startIndex..<source.endIndex
+        var ranges: [Range<String.Index>] = []
+        tagger.enumerateTags(in: full, unit: .word, scheme: .nameType,
+                             options: [.omitWhitespace, .omitPunctuation, .joinNames]) { tag, range in
+            if tag == .personalName { ranges.append(range) }
+            return true
+        }
+        var result = source
+        for range in ranges.reversed() { result.replaceSubrange(range, with: "[사람]") }
+        return result
+    }
+
+    private static func replacing(_ pattern: String, in source: String, with replacement: String,
+                                  options: NSRegularExpression.Options = []) -> String {
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: options) else {
+            return source
+        }
+        return regex.stringByReplacingMatches(
+            in: source,
+            range: NSRange(source.startIndex..., in: source),
+            withTemplate: replacement
+        )
+    }
 }
 
 @MainActor
@@ -79,62 +196,104 @@ final class AgentService: ObservableObject {
     /// 그 템플릿보다 앱이 가진 컨텍스트(카드 청구·일정·카테고리)가 훨씬 풍부하다.
     /// 그래서 키가 없을 땐 앱 답변을 쓰고, 키가 붙으면 그때 백엔드에 넘긴다.
     @Published var llmEnabled = false
+    /// true면 백엔드가 OpenAI·Claude처럼 기기 밖의 모델 제공자를 호출한다.
+    @Published private(set) var externalLLM = false
+
+    /// 모델이 서버 안에 있더라도 백엔드 자체가 원격이면 재무 집계값은 기기를 떠난다.
+    /// 동의 화면은 '외부 모델인가'가 아니라 실제 데이터 경계를 기준으로 띄운다.
+    var requiresOffDeviceConsent: Bool {
+        llmEnabled && (externalLLM || !Self.isLoopbackBackend)
+    }
+
+    private var lastPingAttempt: Date?
+    private static let pingCooldown: TimeInterval = 60
 
     /// 헬스체크(짧은 타임아웃).
-    func ping() async {
+    func ping(force: Bool = false) async {
         if ProcessInfo.processInfo.arguments.contains("-ui-test-offline") {
             backendReachable = false
             llmEnabled = false
+            externalLLM = false
             return
         }
-        let req = Self.request("api/health", timeout: 2.5)
+        // LLM이 없는 정상 백엔드에는 같은 질문마다 다시 확인할 이유가 없다.
+        if !force, backendReachable == true, !llmEnabled { return }
+        if !force, let lastPingAttempt,
+           Date().timeIntervalSince(lastPingAttempt) < Self.pingCooldown { return }
+        lastPingAttempt = Date()
+
+        // 백엔드가 꺼진 데모에서도 질문 하나가 오래 멈추지 않게 짧게 확인하고,
+        // 실패 뒤에는 1분 동안 로컬 답변을 즉시 쓴다.
+        let req = Self.request("api/health", timeout: 3)
         do {
             let (data, resp) = try await URLSession.shared.data(for: req)
-            guard accept(resp) else { llmEnabled = false; return }
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+            guard accept(resp) else {
+                print("[KBTune] ping 실패 · HTTP \(code) · \(Self.baseURL.absoluteString)")
+                llmEnabled = false
+                return
+            }
             let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
             llmEnabled = (json?["llm_enabled"] as? Bool) ?? false
+            // 구버전 서버는 이 필드가 없다. 그 경우 보수적으로 외부 모델로 본다.
+            externalLLM = (json?["external_llm"] as? Bool) ?? llmEnabled
+            print("[KBTune] ping 성공 · llm_enabled=\(llmEnabled)")
         } catch {
+            print("[KBTune] ping 예외 · \(Self.baseURL.absoluteString) · \(error)")
             backendReachable = false
             llmEnabled = false
-        }
-    }
-
-    /// 일정 제목 → 예상 지출 추정 (POST /api/estimate).
-    /// 실패하면 nil → 호출부가 EventEstimator(로컬)로 폴백.
-    func estimate(title: String) async -> EstimateResponse? {
-        let req = Self.request("api/estimate", timeout: 10, body: ["title": title])
-        do {
-            let (data, resp) = try await URLSession.shared.data(for: req)
-            guard accept(resp) else { return nil }
-            return try JSONDecoder().decode(EstimateResponse.self, from: data)
-        } catch {
-            backendReachable = false
-            return nil
-        }
-    }
-
-    /// OCR 텍스트 → 거래 구조화 (POST /api/extract).
-    /// 백엔드가 없거나 실패하면 nil → 호출부가 LocalExtractor 로 폴백.
-    func extract(text: String) async -> ExtractResponse? {
-        let req = Self.request("api/extract", timeout: 15, body: ["text": text])
-        do {
-            let (data, resp) = try await URLSession.shared.data(for: req)
-            guard accept(resp) else { return nil }
-            return try JSONDecoder().decode(ExtractResponse.self, from: data)
-        } catch {
-            backendReachable = false
-            return nil
+            externalLLM = false
         }
     }
 
     /// 스트리밍 대화. 토큰이 올 때마다 onToken(델타) 호출.
     /// 반환: true=백엔드 응답 성공, false=실패(호출부가 로컬 폴백).
-    func chatStream(_ message: String, model: AppModel,
+    func chatStream(_ message: String, history: [AgentChatTurn] = [], model: AppModel,
                     onToken: @escaping (String) -> Void) async -> Bool {
         if ProcessInfo.processInfo.arguments.contains("-ui-test-offline") {
             backendReachable = false
             return false
         }
+        // CardAdvisor처럼 헬스체크 없이 바로 들어오는 호출도 있다. 데이터가 담긴 요청을
+        // 만들기 전에 모델 위치를 먼저 확인한다.
+        if backendReachable == nil { await ping() }
+        guard llmEnabled else { return false }
+        guard !externalLLM || CloudAIConsent.granted else { return false }
+        guard Self.isLoopbackBackend || CloudAIConsent.granted else { return false }
+        guard let body = Self.makeChatRequestBody(message: message, history: history, model: model)
+        else { return false }
+        let req = Self.request("api/chat", timeout: 12, body: body)
+
+        do {
+            let (bytes, resp) = try await URLSession.shared.bytes(for: req)
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+            guard accept(resp) else {
+                print("[KBTune] chat 실패 · HTTP \(code)")
+                return false
+            }
+            var buffer = Data()
+            var shownCount = 0
+            for try await b in bytes {
+                buffer.append(b)
+                // 버퍼 전체를 디코드해 멀티바이트(한글) 경계 안전하게 델타 추출
+                if let full = String(data: buffer, encoding: .utf8), full.count > shownCount {
+                    let delta = String(full.dropFirst(shownCount))
+                    shownCount = full.count
+                    onToken(delta)
+                }
+            }
+            return shownCount > 0
+        } catch {
+            print("[KBTune] chat 예외 · \(error)")
+            backendReachable = false
+            return false
+        }
+    }
+
+    /// 실제 `/api/chat` 요청이 사용하는 본문 조립 함수.
+    /// 단위 테스트가 네트워크 직전의 최종 JSON을 검사할 수 있도록 한곳에 둔다.
+    static func makeChatRequestBody(message: String, history: [AgentChatTurn] = [],
+                                    model: AppModel) -> [String: Any]? {
         let fixedCosts: [[String: Any]] = [
             ["name": "고정비", "amount": BudgetEngine.fixed],
         ]
@@ -156,21 +315,34 @@ final class AgentService: ObservableObject {
             "days_until_pay": b.daysUntilPay, "days_until_close": b.daysUntilClose,
             "close_label": b.closeLabel,
         ]
-        // 동의가 없으면 일정 제목을 빼고 유형·금액만 넘긴다. 서버는 제목 없이도 답을 만든다.
+        // 일정 제목은 동의 선택지 자체를 두지 않고 항상 뺀다. 제목에는 자유형 실명·병원·종교처럼
+        // 정규식으로 완전하게 찾을 수 없는 민감정보가 섞이므로 날짜·유형·금액만 전달한다.
         // 서버가 일정 개수를 200개로 제한한다(요청 하나로 프롬프트를 무한정 키우지 못하게).
         // 넘치면 요청 전체가 거절되므로 여기서 잘라 보낸다 — 한 달치라 실제로 닿을 일은 없다.
-        let shareTitles = EventTitleConsent.granted
         let allUpcoming: [[String: Any]] = model.calendarDays
             .filter { $0.dayNumber >= model.todayDayNumber }
             .flatMap { day in
                 day.events.filter { $0.amount > 0 }.map { ev -> [String: Any] in
-                    var e: [String: Any] = ["day": day.dayNumber,
-                                            "amount": ev.amount, "category": ev.category]
-                    if shareTitles { e["title"] = ev.title }
-                    return e
+                    ["day": day.dayNumber,
+                     "amount": ev.amount,
+                     "category": OutboundPrivacy.sanitize(ev.category, model: model)]
                 }
             }
         let upcoming = Array(allUpcoming.prefix(200))
+
+        // 이미 쓴 지출. "이번 달 카페에 얼마 썼어?" 같은 질문은 이게 없으면 답이 안 나온다.
+        // 제목은 여기서도 뺀다 — 지난 소비라고 민감도가 낮아지지 않는다.
+        // 200개를 넘으면 최근 것부터 남긴다(오래된 지출일수록 지금 판단에 덜 쓰인다).
+        let allPast: [[String: Any]] = model.calendarDays
+            .filter { $0.dayNumber < model.todayDayNumber }
+            .flatMap { day in
+                day.events.filter { $0.amount > 0 }.map { ev -> [String: Any] in
+                    ["day": day.dayNumber,
+                     "amount": ev.amount,
+                     "category": OutboundPrivacy.sanitize(ev.category, model: model)]
+                }
+            }
+        let past = Array(allPast.suffix(200))
 
         // 화면에 띄운 숫자를 그대로 넘긴다. 백엔드가 다시 계산하면 시드 차이·할부 반영 여부로
         // 값이 어긋나, 화면엔 70,000원인데 챗봇은 다른 금액을 말하는 상황이 생긴다.
@@ -183,34 +355,32 @@ final class AgentService: ObservableObject {
             "month_end_remaining": model.monthEndRemainingLow,
         ]
 
-        let body: [String: Any] = [
-            "message": message,
+        // 질문 원문은 어느 백엔드에도 보내지 않는다. 기기에서 금융 의도로 바꿔 보내면
+        // NER가 모르는 이름·주소가 있어도 네트워크 경계 밖으로 나갈 수 없다.
+        let safeMessage = OutboundPrivacy.financialIntent(message)
+        guard !safeMessage.isEmpty else { return nil }
+        let safeHistory: [[String: String]] = history.suffix(6).compactMap { turn in
+            let role = turn.role == "assistant" ? "assistant" : "user"
+            let content = turn.role == "assistant"
+                ? OutboundPrivacy.sanitize(turn.content, model: model)
+                : OutboundPrivacy.financialIntent(turn.content)
+            return content.isEmpty ? nil : ["role": role, "content": content]
+        }
+
+        return [
+            "message": safeMessage,
+            "history": safeHistory,
             "profile": profile,
             "today": DemoClock.today,
             "card": card,
             "upcoming": upcoming,
+            "past": past,
             "app_numbers": appNumbers,
         ]
-        let req = Self.request("api/chat", timeout: 12, body: body)
+    }
 
-        do {
-            let (bytes, resp) = try await URLSession.shared.bytes(for: req)
-            guard accept(resp) else { return false }
-            var buffer = Data()
-            var shownCount = 0
-            for try await b in bytes {
-                buffer.append(b)
-                // 버퍼 전체를 디코드해 멀티바이트(한글) 경계 안전하게 델타 추출
-                if let full = String(data: buffer, encoding: .utf8), full.count > shownCount {
-                    let delta = String(full.dropFirst(shownCount))
-                    shownCount = full.count
-                    onToken(delta)
-                }
-            }
-            return shownCount > 0
-        } catch {
-            backendReachable = false
-            return false
-        }
+    static var isLoopbackBackend: Bool {
+        let host = baseURL.host?.lowercased() ?? ""
+        return host == "localhost" || host == "127.0.0.1" || host == "::1"
     }
 }

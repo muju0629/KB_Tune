@@ -37,19 +37,24 @@ enum BudgetEngine {
     /// 오늘 이전에 이미 쓴 일정비 (기본값 — 보통은 AppModel 이 실제 값을 넘긴다)
     static var variableSpentToDate: Int { spentToDate(in: seed) }
 
-    static func spentToDate(in days: [PlanDay]) -> Int {
-        days.filter { thisMonth.contains($0.dayNumber) && $0.dayNumber < today }
+    static func spentToDate(in days: [PlanDay], asOfDay: Int? = nil) -> Int {
+        let referenceDay = asOfDay ?? today
+        let month = DemoClock.range(of: DemoClock.month(of: referenceDay))
+        return days.filter { month.contains($0.dayNumber) && $0.dayNumber < referenceDay }
             .reduce(0) { $0 + $1.spendTotal }
     }
     /// 이번 주에 아직 남아 있는 확정 일정
-    static func committedThisWeek(in days: [PlanDay]) -> Int {
-        let week = DemoClock.weekRange(containing: today)
-        return days.filter { week.contains($0.dayNumber) && $0.dayNumber >= today }
+    static func committedThisWeek(in days: [PlanDay], asOfDay: Int? = nil) -> Int {
+        let referenceDay = asOfDay ?? today
+        let week = DemoClock.weekRange(containing: referenceDay)
+        return days.filter { week.contains($0.dayNumber) && $0.dayNumber >= referenceDay }
             .reduce(0) { $0 + $1.spendTotal }
     }
     /// 오늘부터 월말까지 남은 확정 일정
-    static func committedFuture(in days: [PlanDay]) -> Int {
-        days.filter { thisMonth.contains($0.dayNumber) && $0.dayNumber >= today }
+    static func committedFuture(in days: [PlanDay], asOfDay: Int? = nil) -> Int {
+        let referenceDay = asOfDay ?? today
+        let month = DemoClock.range(of: DemoClock.month(of: referenceDay))
+        return days.filter { month.contains($0.dayNumber) && $0.dayNumber >= referenceDay }
             .reduce(0) { $0 + $1.spendTotal }
     }
 
@@ -104,8 +109,11 @@ enum BudgetEngine {
                             committedFuture: Int? = nil,
                             extraCommitted: Int = 0,
                             income: Int = income,
-                            savingsGoal: Int = savingsGoal) -> Int {
-        let daysLeft = Double(thisMonth.upperBound - today + 1)
+                            savingsGoal: Int = savingsGoal,
+                            asOfDay: Int? = nil) -> Int {
+        let referenceDay = asOfDay ?? today
+        let monthRange = DemoClock.range(of: DemoClock.month(of: referenceDay))
+        let daysLeft = Double(monthRange.upperBound - referenceDay + 1)
         let discretionary = discretionaryDaily * daysLeft * discretionaryFactor(d)
         let committed = Double((committedFuture ?? Self.committedFuture(in: seed)) + extraCommitted)
         let mu = committed + discretionary

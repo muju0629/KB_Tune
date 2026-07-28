@@ -57,9 +57,12 @@ struct WeeklyPlanView: View {
                                                  onClose: { withAnimation(switchSpring) { selectedDay = nil } },
                                                  onAction: { flash($0) },
                                                  onMove: { ev in
-                                                     model.moveEventToNextWeek(ev, from: day.dayNumber)
+                                                     let moved = moveEventToNextWeek(ev, from: day.dayNumber) != nil
                                                      // selectedDay 는 값 복사본 — 모델 변경 후 다시 읽어야 화면이 갱신된다
-                                                     withAnimation(switchSpring) { selectedDay = model.day(number: day.dayNumber) }
+                                                     if moved {
+                                                         withAnimation(switchSpring) { selectedDay = model.day(number: day.dayNumber) }
+                                                     }
+                                                     return moved
                                                  },
                                                  onKeep: { ev in
                                                      model.acceptRisk(of: ev, on: day.dayNumber)
@@ -309,7 +312,7 @@ struct WeeklyPlanView: View {
 
                 VStack(spacing: 7) {
                     ledgerRow("한 주 배분", w.baseAllowance,
-                              note: "이번 달 쓸 수 있는 돈 \(formatWon(model.monthlyDisposable)) ÷ \(model.weekBudgets.count)주")
+                              note: "이번 달 쓸 수 있는 돈을 이 주의 \(w.days.count)일만큼 배분했어요")
                     if w.rollover != 0 {
                         ledgerRow(w.rollover > 0 ? "지난주에서 넘어옴" : "지난주에 미리 씀", w.rollover,
                                   note: w.rollover > 0 ? "아껴 쓴 만큼 이번 주에 더해졌어요"
@@ -488,14 +491,15 @@ struct WeeklyPlanView: View {
                 actionTitle: "다음 주로 이동",
                 gain: event.amount
             ) {
-                model.moveEventToNextWeek(event, from: day)
-                flash("‘\(event.title)’을 다음 주로 옮겼어요. 이번 주 부담이 \(formatWon(event.amount)) 줄었어요.")
+                if moveEventToNextWeek(event, from: day) != nil {
+                    flash("‘\(event.title)’을 다음 주로 옮겼어요. 이번 주 부담이 \(formatWon(event.amount)) 줄었어요.")
+                }
             }
 
         case .reduce(let day, let event, let to):
             adjustmentCard(
                 headline: "이번 주는 이 달의 마지막 주예요",
-                detail: "다음 주로 옮기면 8월이라 이번 달 계획을 벗어나요. 대신 ‘\(event.title)’ 예산을 \(formatWon(to))으로 줄이면 이번 주에 \(formatWon(event.amount - to)) 여유가 생겨요.",
+                detail: "다음 주로 옮기면 \(thisMonth + 1)월이라 이번 달 계획을 벗어나요. 대신 ‘\(event.title)’ 예산을 \(formatWon(to))으로 줄이면 이번 주에 \(formatWon(event.amount - to)) 여유가 생겨요.",
                 actionTitle: "예산 줄이기",
                 gain: event.amount - to
             ) {
@@ -508,7 +512,7 @@ struct WeeklyPlanView: View {
                 LabelBadge(text: "조정안", color: KB.violet)
                 Text("이번 주에 조정할 일정이 없어요.")
                     .font(.kb(14, .semibold)).foregroundStyle(KB.ink)
-                Text("남은 일정이 모두 지켜두기로 한 소비예요. 8월 계획에서 새 날짜를 잡아 주세요.")
+                Text("남은 일정이 모두 지켜두기로 한 소비예요. \(thisMonth + 1)월 계획에서 새 날짜를 잡아 주세요.")
                     .font(.kb(12.5)).foregroundStyle(KB.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -550,7 +554,7 @@ struct WeeklyPlanView: View {
         let viewed = scrolledWeek ?? model.currentWeekIndex
         return VStack(spacing: 10) {
             HStack {
-                Text("7월 \(viewed + 1)주차")
+                Text(model.weekLabel(at: viewed))
                     .font(.kb(13, .semibold)).foregroundStyle(KB.ink)
                 if viewed == model.currentWeekIndex {
                     Text("이번 주").font(.kb(10.5, .bold)).foregroundStyle(KB.ink)
@@ -563,7 +567,7 @@ struct WeeklyPlanView: View {
             ScrollViewReader { proxy in
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: 0) {
-                        ForEach(Array(model.julyWeeks.enumerated()), id: \.offset) { index, slots in
+                        ForEach(Array(model.allWeeks.enumerated()), id: \.offset) { index, slots in
                             HStack(spacing: 0) {
                                 ForEach(Array(slots.enumerated()), id: \.offset) { _, dayNumber in
                                     if let dayNumber, let day = model.day(number: dayNumber) {
@@ -761,7 +765,7 @@ struct WeeklyPlanView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(spend.pattern.key)
                                 .font(.kb(14.5, .semibold)).foregroundStyle(KB.ink)
-                            Text("7월 \(spend.expectedDay)일 즈음")
+                            Text("\(DemoClock.dayLabel(of: spend.expectedDay)) 즈음")
                                 .font(.kb(11.5)).foregroundStyle(KB.muted)
                         }
                         Spacer(minLength: 8)
@@ -849,7 +853,7 @@ struct WeeklyPlanView: View {
                         .fixedSize(horizontal: false, vertical: true)
                     // 주간 합계는 지나간 날까지 포함 — 남은 금액과 창이 달라 함께 밝힌다.
                     Text(model.remainingThisWeek > 0
-                         ? "7월 \(model.todayDayNumber)일 기준 아직 안 쓴 건 \(formatWon(model.remainingThisWeek))이에요."
+                         ? "\(DemoClock.dayLabel(of: model.todayDayNumber)) 기준 아직 안 쓴 건 \(formatWon(model.remainingThisWeek))이에요."
                          : "이번 주 남은 확정 일정은 없어요.")
                         .font(.kb(15))
                         .foregroundStyle(KB.muted)
@@ -961,7 +965,7 @@ struct WeeklyPlanView: View {
 
             if let day {
                 DayTimetableBody(day: day, onAction: { flash($0) },
-                                 onMove: { model.moveEventToNextWeek($0, from: day.dayNumber) },
+                                 onMove: { moveEventToNextWeek($0, from: day.dayNumber) != nil },
                                  onKeep: { model.acceptRisk(of: $0, on: day.dayNumber) },
                                  onEdit: { editing = EditTarget(event: $0, day: day.dayNumber) })
             } else {
@@ -1090,7 +1094,10 @@ struct WeeklyPlanView: View {
                 VStack(spacing: 8) {
                     calculationRow("월 고정비", formatWon(BudgetEngine.fixed))
                     calculationRow("적금 목표", formatWon(model.savingsGoal))
-                    calculationRow("7월 \(model.todayDayNumber - 1)일까지 지출", formatWon(model.spentToDate))
+                    calculationRow(model.todayDayNumber > DemoClock.range(of: thisMonth).lowerBound
+                                   ? "\(DemoClock.dayLabel(of: model.todayDayNumber - 1))까지 지출"
+                                   : "이번 달 현재까지 지출",
+                                   formatWon(model.spentToDate))
                     if BudgetEngine.installmentCarryover > 0 {
                         calculationRow("할부로 다음 달에 넘어갈 돈", formatWon(BudgetEngine.installmentCarryover))
                     }
@@ -1098,7 +1105,7 @@ struct WeeklyPlanView: View {
                     Divider().overlay(KB.line)
                     calculationRow("추가 사용 가능액", formatWon(model.weeklyBudget), emphasized: true)
                 }
-                Text("\(formatWon(model.remainingBudget)) ÷ 남은 \(BudgetEngine.remainingWeeks)주 − 확정 일정 \(formatWon(model.committedThisWeek))")
+                Text("월 가용액을 날짜 수대로 주차에 배분하고, 이월액과 확정 일정을 반영했어요.")
                     .font(.kb(11.5))
                     .foregroundStyle(KB.muted)
                 Button { showSuccess = false } label: { Text("확인") }
@@ -1124,6 +1131,20 @@ struct WeeklyPlanView: View {
         .font(.kb(13))
     }
 
+    /// 앱이 직접 만든 일정은 EventKit과 앱 모델을 같은 날짜로 옮긴다.
+    /// 캘린더 변경이 실패하면 앱만 먼저 움직여 두 화면이 갈라지지 않게 중단한다.
+    @discardableResult
+    private func moveEventToNextWeek(_ event: DayEvent, from day: Int) -> Int? {
+        let target = day + 7
+        guard target <= DemoClock.lastDay else { return nil }
+        if let eventID = event.calendarEventID,
+           !calendar.reschedule(eventID: eventID, day: target, startHour: event.startHour) {
+            flash("기기 캘린더에서 일정을 옮기지 못했어요. 권한을 확인해 주세요.")
+            return nil
+        }
+        return model.moveEventToNextWeek(event, from: day)
+    }
+
     private func flash(_ message: String) {
         withAnimation(.spring(response: 0.35)) { toast = message }
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
@@ -1138,7 +1159,7 @@ struct DayTimetableView: View {
     let day: PlanDay
     var onClose: () -> Void
     var onAction: (String) -> Void
-    var onMove: ((DayEvent) -> Void)? = nil    // 위험 일정 → 다음 주로 이동
+    var onMove: ((DayEvent) -> Bool)? = nil    // 위험 일정 → 다음 주로 이동
     var onKeep: ((DayEvent) -> Void)? = nil    // 위험 감수하고 유지(경고 해제)
     var onEdit: ((DayEvent) -> Void)? = nil    // 일정 탭 → 시간·금액 수정/삭제
 
@@ -1187,7 +1208,7 @@ struct DayTimetableView: View {
 struct DayTimetableBody: View {
     let day: PlanDay
     var onAction: (String) -> Void
-    var onMove: ((DayEvent) -> Void)? = nil
+    var onMove: ((DayEvent) -> Bool)? = nil
     var onKeep: ((DayEvent) -> Void)? = nil
     var onEdit: ((DayEvent) -> Void)? = nil
 
@@ -1239,8 +1260,9 @@ struct DayTimetableBody: View {
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 8) {
                 Button {
-                    onMove?(ev)
-                    onAction("‘\(ev.title)’를 다음 주로 옮겼어요. 이번 주 추가 사용 가능액을 지켰어요.")
+                    if onMove?(ev) == true {
+                        onAction("‘\(ev.title)’를 다음 주로 옮겼어요. 이번 주 추가 사용 가능액을 지켰어요.")
+                    }
                 } label: {
                     Text("다음 주로 옮기기")
                         .font(.kb(13, .semibold)).foregroundStyle(KB.ink)

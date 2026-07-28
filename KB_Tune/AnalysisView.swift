@@ -25,7 +25,6 @@ struct AnalysisView: View {
     @EnvironmentObject private var model: AppModel
     @StateObject private var store = ImageStore()
 
-    @StateObject private var agent = AgentService()
     @State private var picks: [PhotosPickerItem] = []
     @State private var isImporting = false
 
@@ -241,7 +240,7 @@ struct AnalysisView: View {
         }
     }
 
-    /// 온디바이스 Vision OCR → 백엔드 구조화(실패 시 로컬 파서)
+    /// 온디바이스 Vision OCR → 온디바이스 규칙 파서
     ///
     /// 한 번 읽은 캡처는 결과를 캐시해 두고 다시 읽지 않는다. 예전에는 누를 때마다
     /// 저장된 전체를 다시 OCR해서, 캡처가 쌓일수록 느려지고 서버로 보내는 글자 수도 함께 늘었다.
@@ -260,12 +259,10 @@ struct AnalysisView: View {
                 store.cacheText(text, for: shot.id)
                 texts.append(text)
             }
-            // 서버는 20,000자를 넘으면 요청 전체를 거절한다. 보관 상한(20장) 덕에 닿을 일은
-            // 거의 없지만, 글자가 유난히 많은 캡처가 섞였을 때를 대비해 최근 것 위주로 자른다.
+            // 원본 이미지뿐 아니라 OCR 원문도 외부로 보내지 않는다. 보관 상한(20장) 안에서
+            // 글자가 유난히 많은 캡처가 섞여도 메모리 사용이 튀지 않게 최근 것 위주로 자른다.
             let text = String(texts.joined(separator: "\n").suffix(19_000))
-
-            var result = await agent.extract(text: text)
-            if result == nil { result = LocalExtractor.parse(text) }   // 백엔드 없어도 동작
+            let result = LocalExtractor.parse(text)
             withAnimation(.snappy(duration: 0.25)) {
                 extracted = result
                 isExtracting = false

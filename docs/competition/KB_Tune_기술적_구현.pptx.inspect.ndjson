@@ -1,0 +1,94 @@
+{"kind":"deck","id":"pr/wsryro","name":"Deck"}
+{"kind":"layout","layoutId":"f39d3f39-2e12-4991-bbe0-eb620522928b","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"aace9a62-c383-45a1-83b2-d102338bf43c","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/obkeyn","slide":1,"title":"실현 가능성 · 기술적 구현","textShapes":48}
+{"kind":"textbox","id":"sh/obi9c3qh","slide":1,"name":"section-title","text":"실현 가능성 · 기술적 구현","textPreview":"실현 가능성 · 기술적 구현","textChars":15,"textLines":1,"bbox":[42,28,360,30]}
+{"kind":"shape","id":"sh/na983ypc","slide":1,"name":"yellow-underline","bbox":[42,64,124,0]}
+{"kind":"textbox","id":"sh/290rat8r","slide":1,"name":"left-title-1","text":"1) 접지된 AI — 숫자는 엔진이, 문장은 LLM이","textPreview":"1) 접지된 AI — 숫자는 엔진이, 문장은 LLM이","textChars":29,"textLines":1,"bbox":[42,92,390,42]}
+{"kind":"textbox","id":"sh/xgba987e","slide":1,"name":"left-body-1","text":"주간 예산·목표 달성 확률·카드 청구액은 결정론 엔진이 계산합니다. LLM은 그 결과를 설명할 뿐 숫자를 만들지 않습니다. 응답에 엔진이 내지 않은 숫자가 섞이면 groundedness 검증이 걸러냅니다. 같은 엔진을 iOS에도 포팅해, 서버가 없어도 같은 값이 나옵니다.","textPreview":"주간 예산·목표 달성 확률·카드 청구액은 결정론 엔진이 계산합니다. LLM은 그 결과를 설명할 뿐 숫자를 만들지 않습니다. 응답에 엔진이 내지 않은 숫자가 섞이면 groundedness 검증이 걸러냅니다. 같은 엔진을 iOS에도 포팅해, 서버가 ...","textChars":152,"textLines":1,"bbox":[42,134,390,122]}
+{"kind":"shape","id":"sh/cfi9gn6t","slide":1,"name":"left-rule-1","bbox":[42,260,390,0]}
+{"kind":"textbox","id":"sh/be9s7ip8","slide":1,"name":"left-title-2","text":"2) 온디바이스 우선 — 개인정보가 기기를 떠나지 않음","textPreview":"2) 온디바이스 우선 — 개인정보가 기기를 떠나지 않음","textChars":30,"textLines":1,"bbox":[42,270,390,42]}
+{"kind":"textbox","id":"sh/ad0redon","slide":1,"name":"left-body-2","text":"결제 캡처는 Apple Vision으로 기기 안에서 OCR합니다. 이미지 원본은 서버로 전송하지 않고, 최근 20장만 잠금 상태에서 복호화되지 않는 등급으로 보관합니다. 이름과 나이는 서버 스키마에 필드조차 없고, 캘린더 일정 제목은 사용자가 동의했을 때만 전달됩니다.","textPreview":"결제 캡처는 Apple Vision으로 기기 안에서 OCR합니다. 이미지 원본은 서버로 전송하지 않고, 최근 20장만 잠금 상태에서 복호화되지 않는 등급으로 보관합니다. 이름과 나이는 서버 스키마에 필드조차 없고, 캘린더 일정 제목은 사용자가 동...","textChars":150,"textLines":1,"bbox":[42,312,390,132]}
+{"kind":"shape","id":"sh/dk7qxo7u","slide":1,"name":"left-rule-2","bbox":[42,448,390,0]}
+{"kind":"textbox","id":"sh/sjy94jqp","slide":1,"name":"left-title-3","text":"3) 무상태 백엔드 — 남기지 않아서 지킨다","textPreview":"3) 무상태 백엔드 — 남기지 않아서 지킨다","textChars":24,"textLines":1,"bbox":[42,458,390,42]}
+{"kind":"textbox","id":"sh/yxgv61ob","slide":1,"name":"left-body-3","text":"데이터베이스를 두지 않습니다. 요청마다 계산하고 아무것도 저장하지 않아, 유출될 축적 데이터가 존재하지 않습니다. 요청 단계에서는 API 키 인증, 클라이언트별·전체 합 속도 제한, 본문 크기 제한, 프롬프트 주입 방어가 순서대로 적용됩니다.","textPreview":"데이터베이스를 두지 않습니다. 요청마다 계산하고 아무것도 저장하지 않아, 유출될 축적 데이터가 존재하지 않습니다. 요청 단계에서는 API 키 인증, 클라이언트별·전체 합 속도 제한, 본문 크기 제한, 프롬프트 주입 방어가 순서대로 적용됩니다.","textChars":135,"textLines":1,"bbox":[42,500,390,124]}
+{"kind":"shape","id":"sh/zypcz6pg","slide":1,"name":"column-divider","bbox":[458,91,0,568]}
+{"kind":"textbox","id":"sh/0zyd8b61","slide":1,"name":"diagram-caption","text":"개인정보는 기기에 두고, 검증된 숫자만 설명 레이어로 전달","textPreview":"개인정보는 기기에 두고, 검증된 숫자만 설명 레이어로 전달","textChars":32,"textLines":1,"bbox":[486,32,748,34]}
+{"kind":"shape","id":"sh/lk7u1g7m","slide":1,"name":"user-to-device","bbox":[476,358,28,0]}
+{"kind":"shape","id":"sh/ml0valo7","slide":1,"name":"device-to-backend","bbox":[735,316,37,0]}
+{"kind":"shape","id":"sh/nm9w3qps","slide":1,"name":"backend-to-model","bbox":[1042,373,35,0]}
+{"kind":"shape","id":"sh/8nidcv6d","slide":1,"name":"calendar-to-app-a","bbox":[520,208,0,28]}
+{"kind":"shape","id":"sh/9ore507y","slide":1,"name":"calendar-to-app-b","bbox":[520,236,38,0]}
+{"kind":"shape","id":"sh/ap0velo3","slide":1,"name":"app-to-calendar-a","bbox":[520,246,38,0]}
+{"kind":"shape","id":"sh/vq9w7qpo","slide":1,"name":"app-to-calendar-b","bbox":[520,220,0,26]}
+{"kind":"shape","id":"sh/rutcvqlw","slide":1,"name":"security-to-engine","bbox":[905,226,0,22]}
+{"kind":"shape","id":"sh/6tkbm54b","slide":1,"name":"engine-to-llm","bbox":[905,317,0,22]}
+{"kind":"shape","id":"sh/twbux032","slide":1,"name":"llm-to-ground","bbox":[905,407,0,22]}
+{"kind":"shape","id":"sh/sv2dovmh","slide":1,"name":"response-down","bbox":[905,518,0,62]}
+{"kind":"shape","id":"sh/jq9crq50","slide":1,"name":"response-left","bbox":[621,580,284,0]}
+{"kind":"shape","id":"sh/ip0bil4f","slide":1,"name":"model-response-a","bbox":[1155,464,0,54]}
+{"kind":"shape","id":"sh/5sbut03q","slide":1,"name":"model-response-b","bbox":[1042,518,113,0]}
+{"kind":"shape","id":"sh/4ritkvm5","slide":1,"name":"user-head","bbox":[468,326,16,16]}
+{"kind":"shape","id":"sh/vm9cn65o","slide":1,"name":"user-body","bbox":[463,345,26,22]}
+{"kind":"textbox","id":"sh/al0bel43","slide":1,"name":"user-label","text":"사용자","textPreview":"사용자","textChars":3,"textLines":1,"bbox":[460,374,34,20]}
+{"kind":"shape","id":"sh/0re9o721","slide":1,"name":"device-boundary","bbox":[502,102,236,478]}
+{"kind":"textbox","id":"sh/lsnaxc3m","slide":1,"name":"device-title","text":"A  사용자 기기 (iOS)","textPreview":"A  사용자 기기 (iOS)","textChars":15,"textLines":1,"bbox":[519,118,200,26]}
+{"kind":"textbox","id":"sh/y5wrmhkv","slide":1,"name":"device-subtitle","text":"원본 데이터 처리 · 로컬 폴백","textPreview":"원본 데이터 처리 · 로컬 폴백","textChars":17,"textLines":1,"bbox":[519,145,200,19]}
+{"kind":"shape","id":"sh/z658vmlg","slide":1,"name":"calendar-icon","bbox":[518,177,54,43]}
+{"kind":"shape","id":"sh/8vy9sr2x","slide":1,"name":"calendar-top-line","bbox":[526,188,38,0]}
+{"kind":"textbox","id":"sh/9w7a1wji","slide":1,"name":"calendar-mark","text":"17","textPreview":"17","textChars":2,"textLines":1,"bbox":[530,191,30,22]}
+{"kind":"textbox","id":"sh/mtgrqhk7","slide":1,"name":"calendar-label","text":"iOS 캘린더\n(EventKit)","textPreview":"iOS 캘린더 | (EventKit)","textChars":18,"textLines":2,"bbox":[581,176,130,46]}
+{"kind":"shape","id":"sh/nupszm1s","slide":1,"name":"swiftui-box","bbox":[519,238,202,58]}
+{"kind":"textbox","id":"sh/ozu9gn2t","slide":1,"name":"swiftui-title","text":"KB Tune 앱","textPreview":"KB Tune 앱","textChars":9,"textLines":1,"bbox":[529,245,182,21]}
+{"kind":"textbox","id":"sh/p03qps3e","slide":1,"name":"swiftui-subtitle","text":"SwiftUI","textPreview":"SwiftUI","textChars":7,"textLines":1,"bbox":[529,266,182,24]}
+{"kind":"shape","id":"sh/h8zalw7u","slide":1,"name":"budget-box","bbox":[519,311,202,58]}
+{"kind":"textbox","id":"sh/g7q9cr69","slide":1,"name":"budget-title","text":"BudgetEngine","textPreview":"BudgetEngine","textChars":12,"textLines":1,"bbox":[529,318,182,21]}
+{"kind":"textbox","id":"sh/v6hsjmp4","slide":1,"name":"budget-subtitle","text":"결정론 계산 · iOS 포팅","textPreview":"결정론 계산 · iOS 포팅","textChars":15,"textLines":1,"bbox":[529,339,182,24]}
+{"kind":"shape","id":"sh/u58rahoj","slide":1,"name":"vision-box","bbox":[519,384,202,64]}
+{"kind":"textbox","id":"sh/t4zahc7y","slide":1,"name":"vision-title","text":"Apple Vision OCR","textPreview":"Apple Vision OCR","textChars":16,"textLines":1,"bbox":[529,391,182,21]}
+{"kind":"textbox","id":"sh/83q9876d","slide":1,"name":"vision-subtitle","text":"이미지 원본은 기기 안에서 처리","textPreview":"이미지 원본은 기기 안에서 처리","textChars":17,"textLines":1,"bbox":[529,412,182,30]}
+{"kind":"shape","id":"sh/72xsf2ps","slide":1,"name":"storage-box","bbox":[519,463,202,64]}
+{"kind":"textbox","id":"sh/61or6ho7","slide":1,"name":"storage-title","text":"암호화 저장","textPreview":"암호화 저장","textChars":6,"textLines":1,"bbox":[529,470,182,21]}
+{"kind":"textbox","id":"sh/l0fadc7m","slide":1,"name":"storage-subtitle","text":"잠금 중 복호화 불가 · 최근 20장","textPreview":"잠금 중 복호화 불가 · 최근 20장","textChars":20,"textLines":1,"bbox":[529,491,182,30]}
+{"kind":"textbox","id":"sh/kz694761","slide":1,"name":"device-foot","text":"서버 미연결 시에도 동일한 예산 계산","textPreview":"서버 미연결 시에도 동일한 예산 계산","textChars":20,"textLines":1,"bbox":[519,543,202,20]}
+{"kind":"shape","id":"sh/a9kfy90n","slide":1,"name":"backend-boundary","bbox":[773,102,270,478]}
+{"kind":"textbox","id":"sh/butgre18","slide":1,"name":"backend-title","text":"B  백엔드 (FastAPI)","textPreview":"B  백엔드 (FastAPI)","textChars":16,"textLines":1,"bbox":[790,118,236,26]}
+{"kind":"textbox","id":"sh/cv2x0jit","slide":1,"name":"backend-subtitle","text":"요청마다 계산하는 무상태 API","textPreview":"요청마다 계산하는 무상태 API","textChars":17,"textLines":1,"bbox":[790,145,236,19]}
+{"kind":"shape","id":"sh/xwbytoje","slide":1,"name":"security-box","bbox":[791,177,234,50]}
+{"kind":"textbox","id":"sh/250fu90r","slide":1,"name":"security-title","text":"1  보안 계층","textPreview":"1  보안 계층","textChars":8,"textLines":1,"bbox":[801,184,214,21]}
+{"kind":"textbox","id":"sh/n69gne1c","slide":1,"name":"security-subtitle","text":"인증 · 속도 제한 · 본문 크기 제한 · CORS 차단","textPreview":"인증 · 속도 제한 · 본문 크기 제한 · CORS 차단","textChars":31,"textLines":1,"bbox":[801,205,214,16]}
+{"kind":"shape","id":"sh/o72xwzix","slide":1,"name":"deterministic-box","bbox":[791,248,234,70]}
+{"kind":"textbox","id":"sh/p8byp4ji","slide":1,"name":"deterministic-title","text":"2  결정론 엔진","textPreview":"2  결정론 엔진","textChars":9,"textLines":1,"bbox":[801,255,214,21]}
+{"kind":"textbox","id":"sh/e10fqp0v","slide":1,"name":"deterministic-subtitle","text":"예산 · 확률 · 위험 · 다음 달 예측","textPreview":"예산 · 확률 · 위험 · 다음 달 예측","textChars":22,"textLines":1,"bbox":[801,276,214,36]}
+{"kind":"shape","id":"sh/f29gju10","slide":1,"name":"llm-layer-box","bbox":[791,339,234,68]}
+{"kind":"textbox","id":"sh/365crqhs","slide":1,"name":"llm-layer-title","text":"3  LLM 계층","textPreview":"3  LLM 계층","textChars":9,"textLines":1,"bbox":[801,346,214,21]}
+{"kind":"textbox","id":"sh/i5wvilgn","slide":1,"name":"llm-layer-subtitle","text":"프롬프트 조립 + 주입 방어","textPreview":"프롬프트 조립 + 주입 방어","textChars":15,"textLines":1,"bbox":[801,367,214,34]}
+{"kind":"shape","id":"sh/587ut0zy","slide":1,"name":"groundedness-box","bbox":[791,429,234,70]}
+{"kind":"textbox","id":"sh/47edkvyd","slide":1,"name":"groundedness-title","text":"4  groundedness 검증","textPreview":"4  groundedness 검증","textChars":18,"textLines":1,"bbox":[801,436,214,21]}
+{"kind":"textbox","id":"sh/rapcvah4","slide":1,"name":"groundedness-subtitle","text":"엔진이 내지 않은 숫자 차단","textPreview":"엔진이 내지 않은 숫자 차단","textChars":15,"textLines":1,"bbox":[801,457,214,36]}
+{"kind":"textbox","id":"sh/q9gvm5gj","slide":1,"name":"response-label","text":"검증된 응답","textPreview":"검증된 응답","textChars":6,"textLines":1,"bbox":[806,548,96,20]}
+{"kind":"shape","id":"sh/dc7ex0za","slide":1,"name":"database-none","bbox":[791,604,234,45]}
+{"kind":"textbox","id":"sh/sbydovyp","slide":1,"name":"database-none-text","text":"D  Database 없음 — 무상태(stateless)","textPreview":"D  Database 없음 — 무상태(stateless)","textChars":31,"textLines":1,"bbox":[803,614,210,24]}
+{"kind":"shape","id":"sh/7elcj6h0","slide":1,"name":"backend-to-stateless","bbox":[908,580,0,24]}
+{"kind":"shape","id":"sh/mdcva1gf","slide":1,"name":"model-boundary","bbox":[1077,102,160,478]}
+{"kind":"textbox","id":"sh/cja9k7ex","slide":1,"name":"model-title","text":"C  언어 모델","textPreview":"C  언어 모델","textChars":8,"textLines":1,"bbox":[1093,118,128,25]}
+{"kind":"textbox","id":"sh/xkjatcfi","slide":1,"name":"model-subtitle","text":"선택","textPreview":"선택","textChars":2,"textLines":1,"bbox":[1093,145,128,18]}
+{"kind":"shape","id":"sh/ahsrixw7","slide":1,"name":"offline-box","bbox":[1094,181,126,58]}
+{"kind":"textbox","id":"sh/bi1sr2xs","slide":1,"name":"offline-title","text":"offline","textPreview":"offline","textChars":7,"textLines":1,"bbox":[1104,188,106,21]}
+{"kind":"textbox","id":"sh/ofq9g7e1","slide":1,"name":"offline-subtitle","text":"외부 호출 0","textPreview":"외부 호출 0","textChars":7,"textLines":1,"bbox":[1104,209,106,24]}
+{"kind":"shape","id":"sh/pgzapsfm","slide":1,"name":"default-badge","bbox":[1143,169,65,22]}
+{"kind":"textbox","id":"sh/2t8rexwv","slide":1,"name":"default-badge-text","text":"기본값","textPreview":"기본값","textChars":3,"textLines":1,"bbox":[1143,171,65,17]}
+{"kind":"shape","id":"sh/nehsn2xg","slide":1,"name":"local-model-box","bbox":[1094,259,126,58]}
+{"kind":"textbox","id":"sh/8butsre5","slide":1,"name":"local-model-title","text":"local","textPreview":"local","textChars":5,"textLines":1,"bbox":[1104,266,106,21]}
+{"kind":"textbox","id":"sh/9c3a1wfq","slide":1,"name":"local-model-subtitle","text":"Ollama / llama.cpp","textPreview":"Ollama / llama.cpp","textChars":18,"textLines":1,"bbox":[1104,287,106,24]}
+{"kind":"shape","id":"sh/hsn618na","slide":1,"name":"claude-box","bbox":[1094,337,126,58]}
+{"kind":"textbox","id":"sh/gre5s36p","slide":1,"name":"claude-title","text":"Claude API","textPreview":"Claude API","textChars":10,"textLines":1,"bbox":[1104,344,106,21]}
+{"kind":"textbox","id":"sh/fq5ozy54","slide":1,"name":"claude-subtitle","text":"명시적으로 선택","textPreview":"명시적으로 선택","textChars":8,"textLines":1,"bbox":[1104,365,106,24]}
+{"kind":"shape","id":"sh/upwnqtoj","slide":1,"name":"openai-box","bbox":[1094,415,126,58]}
+{"kind":"textbox","id":"sh/pg7658n6","slide":1,"name":"openai-title","text":"OpenAI API","textPreview":"OpenAI API","textChars":10,"textLines":1,"bbox":[1104,422,106,21]}
+{"kind":"textbox","id":"sh/4fy5w36l","slide":1,"name":"openai-subtitle","text":"명시적으로 선택","textPreview":"명시적으로 선택","textChars":8,"textLines":1,"bbox":[1104,443,106,24]}
+{"kind":"textbox","id":"sh/3u5o3y50","slide":1,"name":"model-foot","text":"특정 클라우드에\n종속되지 않음","textPreview":"특정 클라우드에 | 종속되지 않음","textChars":16,"textLines":2,"bbox":[1093,520,128,38]}
+{"kind":"shape","id":"sh/2twnudov","slide":1,"name":"transport-label-bg","bbox":[739,270,33,82]}
+{"kind":"textbox","id":"sh/5k3mton2","slide":1,"name":"transport-label","text":"HTTPS\n·\nX-API-\nKey","textPreview":"HTTPS | · | X-API- | Key","textChars":18,"textLines":4,"bbox":[740,274,31,74]}
+{"kind":"textbox","id":"sh/kju5kj6h","slide":1,"name":"transport-caption","text":"텍스트만\n전송\n이미지 원본\n없음","textPreview":"텍스트만 | 전송 | 이미지 원본 | 없음","textChars":17,"textLines":4,"bbox":[740,376,30,72]}
+{"kind":"notes","id":"nt/obkeyn","slide":1,"text":"[Sources]\n- /Users/muju/Desktop/KB_Tune/README.md\n- /Users/muju/Desktop/KB_Tune/backend/README.md\n- /Users/muju/Desktop/KB_Tune/docs/security.md\n- /Users/muju/Desktop/KB_Tune/KB_Tune/AgentService.swift\n- /Users/muju/Desktop/KB_Tune/KB_Tune/ImageStore.swift\n- /Users/muju/Desktop/KB_Tune/backend/app/config.py\n- /Users/muju/Desktop/KB_Tune/backend/app/main.py\n[/Sources]"}

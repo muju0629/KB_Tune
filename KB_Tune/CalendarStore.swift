@@ -168,22 +168,26 @@ final class CalendarStore: ObservableObject {
         formatter.locale = Locale(identifier: "ko_KR")
         formatter.dateFormat = "M월 d일 (E) HH:mm"
 
-        let dayOfMonth = Calendar.current.component(.day, from: now)
-
         events = store.events(matching: predicate)
             .sorted { $0.startDate < $1.startDate }
             .prefix(50)
-            .map { ek in
-                PlanEvent(
+            .compactMap { ek -> PlanEvent? in
+                let serialDay = Self.serialDay(of: ek.startDate)
+                // 앱의 7~8월 데모 창 밖 일정을 골랐을 때 오늘 일정으로 잘못
+                // 들어가는 것보다, 가져오기 목록에서 제외하는 편이 안전하다.
+                guard serialDay > 0 else { return nil }
+                let components = Calendar.current.dateComponents([.hour, .minute], from: ek.startDate)
+                let startHour = Double(components.hour ?? 19) + Double(components.minute ?? 0) / 60
+                return PlanEvent(
                     title: ek.title ?? "일정",
                     amount: 0,
                     symbol: "calendar",
                     dayLabel: formatter.string(from: ek.startDate),
                     fromDeviceCalendar: true,
-                    dayOfMonth: Self.serialDay(of: ek.startDate)
+                    dayOfMonth: serialDay,
+                    startHour: startHour
                 )
             }
-        _ = dayOfMonth
         didFetch = true
     }
 

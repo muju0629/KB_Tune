@@ -12,6 +12,11 @@ struct KB_TuneApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                // KB 팔레트(DesignSystem.swift)는 밝은 화면 하나만 정의한다.
+                // 기기가 다크모드면 커스텀 색은 그대로 밝게 남는데 탭바·입력창·키보드 같은
+                // 시스템 컴포넌트만 어두워져, 크림색 본문 아래 검은 탭바가 붙는 화면이 된다.
+                // 다크 팔레트를 제대로 만들기 전까지는 밝은 화면으로 고정한다.
+                .preferredColorScheme(.light)
         }
     }
 }

@@ -1,0 +1,5 @@
+Query chain:
+ →Find: Target Application 'muju.KB-Tune'
+  ↪︎Find: Descendants matching type StaticText
+    ↪︎Find: Elements containing elements matching predicate 'label CONTAINS "801,000원"'
+      ↪︎Find: First Match

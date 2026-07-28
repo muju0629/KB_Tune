@@ -11,7 +11,10 @@ Direction = Literal["reduce", "maintain", "increase"]
 # 사람이 실제로 쓸 수 있는 범위보다 넉넉하되, 무한하지는 않게 잡는다.
 Won = Annotated[int, Field(ge=0, le=100_000_000)]
 ShortText = Annotated[str, Field(max_length=40)]
-Day = Annotated[int, Field(ge=1, le=31)]
+# 앱은 날짜를 '통산일' 하나로 센다 — 7월 1일이 1, 8월 1일이 32, 8월 31일이 62.
+# 달을 넘나드는 계산이 정수 덧셈으로 끝나기 때문이다. 그래서 상한이 31이 아니라 62다.
+# 31로 두면 8월 일정이 하나라도 섞인 순간 요청 전체가 거절된다.
+Day = Annotated[int, Field(ge=1, le=62)]
 
 
 # ---------- 입력 ----------
@@ -64,14 +67,14 @@ class CardBilling(BaseModel):
     '쓴 날'과 '돈 나가는 날'이 다르다는 사실은 월 예산 계산만으로는 드러나지 않는다.
     조언할 때 "다음 달 카드값이 이미 얼마"를 근거로 쓰려면 이 값들이 필요하다.
     """
-    due_next: int = 0          # 다음 결제일에 실제로 빠질 금액
-    usage: int = 0             # 이번 이용기간 이용금액
-    carryover: int = 0         # 할부로 그 다음 결제일에 넘어가는 금액
-    pay_label: str = ""        # "8월 14일"
-    next_pay_label: str = ""   # "9월 14일"
-    days_until_pay: int = 0
-    days_until_close: int = 0  # 이용기간 마감까지 남은 일수 (0 = 오늘 마감)
-    close_label: str = ""      # "7월 26일"
+    due_next: Won = 0          # 다음 결제일에 실제로 빠질 금액
+    usage: Won = 0             # 이번 이용기간 이용금액
+    carryover: Won = 0         # 할부로 그 다음 결제일에 넘어가는 금액
+    pay_label: ShortText = ""        # "8월 14일"
+    next_pay_label: ShortText = ""   # "9월 14일"
+    days_until_pay: Annotated[int, Field(ge=0, le=366)] = 0
+    days_until_close: Annotated[int, Field(ge=0, le=366)] = 0  # 이용기간 마감까지 남은 일수
+    close_label: ShortText = ""      # "7월 26일"
 
 
 class UpcomingEvent(BaseModel):
@@ -108,6 +111,9 @@ class PlanRequest(BaseModel):
     include_candidate: bool = False  # 위험 후보 일정을 계획에 반영할지
     card: Optional[CardBilling] = None
     upcoming: Annotated[list[UpcomingEvent], Field(max_length=200)] = Field(default_factory=list)
+    # 이미 쓴 지출. "7월에 카페에 얼마 썼어?"처럼 지난 소비를 묻는 질문은 이게 없으면
+    # 답할 수 없다. 형식은 upcoming 과 같고, 제목은 앱이 보내지 않으므로 여기서도 비어 있다.
+    past: Annotated[list[UpcomingEvent], Field(max_length=200)] = Field(default_factory=list)
     app_numbers: Optional[AppNumbers] = None
 
 
@@ -115,8 +121,19 @@ class CoachRequest(PlanRequest):
     pass
 
 
+class ChatHistoryItem(BaseModel):
+    """사용자가 선택해 보낸 짧은 대화 문맥.
+
+    system 역할은 허용하지 않는다. 과거 대화는 어디까지나 user/assistant 메시지이며,
+    서버의 보안·접지 지시보다 높은 우선순위를 가질 수 없다.
+    """
+    role: Literal["user", "assistant"]
+    content: Annotated[str, Field(min_length=1, max_length=600)]
+
+
 class ChatRequest(PlanRequest):
     message: Annotated[str, Field(min_length=1, max_length=2_000)]
+    history: Annotated[list[ChatHistoryItem], Field(max_length=8)] = Field(default_factory=list)
 
 
 # ---------- 엔진 출력(결정론적) ----------
@@ -223,7 +240,8 @@ class ExtractRequest(BaseModel):
     # 상한은 본문 크기 제한(config.MAX_BODY_BYTES)의 2차 방어선이다.
     # Content-Length 없이 오는 chunked 요청은 미들웨어가 못 막으므로 여기서 잘린다.
     text: Annotated[str, Field(max_length=20_000)] | None = None          # iOS Vision(온디바이스 OCR) 결과
-    image_base64: Annotated[str, Field(max_length=1_400_000)] | None = None  # 이미지 직접 전달(LLM 비전, 키 필요)
+    # 하위 호환 스키마로만 남아 있고 엔드포인트는 항상 422로 거절한다.
+    image_base64: Annotated[str, Field(max_length=1_400_000)] | None = None
 
 
 class ExtractedTransaction(BaseModel):
@@ -236,7 +254,7 @@ class ExtractedTransaction(BaseModel):
 class ExtractResult(BaseModel):
     transactions: list[ExtractedTransaction]
     total: int
-    method: str          # ocr-rule | llm-vision | llm-text
+    method: str          # ocr-rule | on-device-required | none
     warnings: list[str] = Field(default_factory=list)
 
 

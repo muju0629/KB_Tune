@@ -12,9 +12,10 @@ struct SettingsView: View {
 
     enum EditField: Identifiable { case income, savings; var id: Int { hashValue } }
     @State private var editing: EditField?
+    @State private var showResetConfirm = false
 
-    /// EventTitleConsent 와 같은 키를 본다 — 여기서 끄면 전송도 즉시 멈춘다.
-    @AppStorage("sharesEventTitlesWithLLM") private var sharesEventTitles = false
+    /// AgentService의 동의 키와 같은 값을 본다 — 여기서 끄면 전송도 즉시 멈춘다.
+    @AppStorage(CloudAIConsent.key) private var usesCloudAI = false
 
     private var savingPct: Int {
         model.monthlyIncome > 0
@@ -26,12 +27,14 @@ struct SettingsView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 18) {
+                    if model.storageRecoveryNeeded { storageRecoveryWarning }
                     profileCard
                     planSection
                     keepsSection
                     calendarBasisSection
                     privacySection
                     infoSection
+                    demoResetSection
                 }
                 .padding(20)
             }
@@ -40,6 +43,26 @@ struct SettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .sheet(item: $editing) { editSheet($0) }
+    }
+
+    // MARK: 프로필
+
+    private var storageRecoveryWarning: some View {
+        HStack(alignment: .top, spacing: 11) {
+            Image(systemName: "externaldrive.badge.exclamationmark")
+                .foregroundStyle(KB.caution)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("기존 저장본을 보호하고 있어요")
+                    .font(.kb(14, .semibold)).foregroundStyle(KB.ink)
+                Text("읽지 못한 파일을 새 데모 데이터로 덮어쓰지 않았어요. 앱을 업데이트한 뒤 다시 열거나, 아래에서 직접 데모 상태로 초기화해 주세요.")
+                    .font(.kb(11.5)).foregroundStyle(KB.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(14)
+        .background(KB.yellowSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .stroke(KB.caution.opacity(0.35), lineWidth: 1))
     }
 
     // MARK: 프로필
@@ -149,12 +172,12 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("개인정보").font(.kb(13, .semibold)).foregroundStyle(KB.muted)
             VStack(spacing: 0) {
-                Toggle(isOn: $sharesEventTitles) {
+                Toggle(isOn: $usesCloudAI) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("일정 제목까지 함께 분석")
+                        Text("클라우드 AI 분석")
                             .font(.kb(14.5)).foregroundStyle(KB.ink)
-                        Text("끄면 일정 유형과 금액만 넘어가요")
-                            .font(.kb(11.5)).foregroundStyle(KB.muted)
+                        Text(usesCloudAI ? "질문 원문·실명 없이 필요한 집계값만 전달" : "기기 안의 예산·패턴 엔진만 사용")
+                            .font(.kb(11.5)).foregroundStyle(usesCloudAI ? KB.green : KB.muted)
                     }
                 }
                 .tint(KB.green)
@@ -163,7 +186,7 @@ struct SettingsView: View {
             .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
 
-            Text("대화 기능을 켰을 때만 해당돼요. 일정 제목에는 병원·종교처럼 민감한 내용이 들어갈 수 있어서 기본은 꺼져 있어요. 이름과 나이는 어느 쪽이든 보내지 않아요.")
+            Text("기본은 ‘기기 안에서만’이에요. 클라우드 AI를 켜도 질문 원문·실명·일정 제목은 보내지 않고, 답변에 필요한 날짜·유형·금액과 재무 집계값만 전달해요.")
                 .font(.kb(11)).foregroundStyle(KB.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -184,6 +207,33 @@ struct SettingsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16).padding(.vertical, 14)
+        }
+    }
+
+    // MARK: 데모 초기화
+
+    /// 넣은 일정·바꾼 설정은 기기에 남는다. 시연을 처음부터 다시 하려면 되돌릴 길이 있어야 한다.
+    private var demoResetSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button { showResetConfirm = true } label: {
+                HStack(spacing: 12) {
+                    rowIcon("arrow.counterclockwise")
+                    Text("데모 상태로 되돌리기").font(.kb(14.5)).foregroundStyle(KB.ink)
+                    Spacer()
+                }
+                .padding(.horizontal, 16).padding(.vertical, 14)
+                .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
+            }
+            Text("넣은 일정과 바꾼 설정을 지우고 처음 상태로 돌아가요. 기기 캘린더의 일정은 그대로예요.")
+                .font(.kb(11)).foregroundStyle(KB.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .alert("데모 상태로 되돌릴까요?", isPresented: $showResetConfirm) {
+            Button("취소", role: .cancel) { }
+            Button("되돌리기", role: .destructive) { model.resetToDemo() }
+        } message: {
+            Text("이 기기에 저장된 일정·금액·설정이 지워져요. 되돌릴 수 없어요.")
         }
     }
 

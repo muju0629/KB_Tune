@@ -60,24 +60,40 @@ struct SavingsEval: Identifiable {
 
 enum RecoEngine {
 
+    /// 카드 추천에 쓰는 소비 원장. 일정 한 건을 정확히 한 카테고리에만 넣는다.
+    /// 이전의 `spendProfile`은 "모임·식사"처럼 분석용 묶음이라 외식과 모임에
+    /// 같은 돈이 두 번 들어갔고, 반대로 실제 교통 일정은 누락됐다.
+    static func normalizedCardSpend(_ m: AppModel) -> [String: Int] {
+        var result: [String: Int] = [:]
+
+        for event in m.days(of: DemoClock.firstMonth).flatMap(\.events) where event.amount > 0 {
+            let category: String
+            switch event.category {
+            case "외식", "데이트", "가족": category = "외식"
+            case "모임", "술·모임": category = "술·모임"
+            case "쇼핑": category = "쇼핑"
+            case "카페": category = "카페"
+            case "교통": category = "교통"
+            case "배달": category = "배달"
+            case "구독": category = "구독"
+            case "문화", "여가": category = "문화"
+            default: category = "기타"
+            }
+            result[category, default: 0] += event.amount
+        }
+        return result
+    }
+
     /// 현재는 7월 캘린더 예상액이다. 실제 카드 전월실적과는 구분해 표시한다.
-    static func recognizedSpend(_ m: AppModel) -> Int { m.spendMonthly }
+    static func recognizedSpend(_ m: AppModel) -> Int {
+        normalizedCardSpend(m).values.reduce(0, +)
+    }
 
     // MARK: 카드
 
     static func evalCards(_ m: AppModel) -> CardReco {
-        let recognized = recognizedSpend(m)
-        let schedule = Dictionary(uniqueKeysWithValues: m.spendProfile.map { ($0.name, $0.monthly) })
-        // 상품 규칙의 기존 카테고리명에 7월 일정비를 대응한다.
-        let byName: [String: Int] = [
-            "외식": (schedule["모임·식사"] ?? 0) + (schedule["데이트·가족"] ?? 0),
-            "술·모임": schedule["모임·식사"] ?? 0,
-            "쇼핑": (schedule["경조사·쇼핑"] ?? 0) + (schedule["건강·관리"] ?? 0),
-            "카페": schedule["학업·연구"] ?? 0,
-            "교통": schedule["출근 점심·교통"] ?? 0,
-            "배달": 0,
-            "구독": 0,
-        ]
+        let byName = normalizedCardSpend(m)
+        let recognized = byName.values.reduce(0, +)
 
         var ranked: [CardEval] = []
         var excluded: [CardEval] = []
@@ -128,6 +144,12 @@ enum RecoEngine {
                         if rule.cap > 0 { amount = min(amount, rule.cap) }
                     }
                     amount = (amount / 100) * 100
+
+                    // 노리2처럼 규칙별 한도 외에 상품 전체 통합한도가 있는 경우,
+                    // 뒤 규칙이 남은 한도를 넘어 혜택을 부풀리지 못하게 한다.
+                    if card.monthlyBenefitCap > 0 {
+                        amount = min(amount, max(0, card.monthlyBenefitCap - sum))
+                    }
                     lines.append((rule.label, amount))
                     sum += amount
                 }
@@ -177,8 +199,10 @@ enum RecoEngine {
     }
 
     static func evalSavings(_ m: AppModel) -> [SavingsEval] {
-        let free = m.monthlyIncome - m.spendMonthly    // 월 여유자금
-        let goal = m.savingsGoal
+        // 사용자는 이미 savingsGoal만큼 저축하기로 했다. 상품 화면은 "적금 하나 더"
+        // 흐름이므로 기존 목표를 다시 추천하지 않고, 모든 확정 비용을 반영한 안전한
+        // 추가 납입액만 시뮬레이션한다.
+        let additional = m.suggestedSavingsAmount
 
         return SavingsCatalog.all.map { p in
             switch p.id {
@@ -195,11 +219,11 @@ enum RecoEngine {
             case "my-made":
                 var e = SavingsEval(
                     product: p, verdict: .pick,
-                    fitCopy: "월 수입 \(formatWon(m.monthlyIncome))에서 7월 일정 예상액 \(formatWon(m.spendMonthly))을 빼면 고정비 차감 전 \(formatWon(free))이 남아요. 월 \(formatWon(goal)) 자동저축 전 고정비를 한 번 더 확인해 주세요.")
-                e.monthlyDeposit = goal
+                    fitCopy: "기존 적금 목표 \(formatWon(m.savingsGoal))과 확정 비용을 먼저 반영했어요. 지금 계획에서 무리 없이 더 넣을 수 있는 금액은 월 \(formatWon(additional))이에요.")
+                e.monthlyDeposit = additional
                 e.months = 12
-                e.estInterest = savingsInterest(monthly: goal, months: 12, ratePct: p.expectedRate)
-                e.maxInterest = savingsInterest(monthly: goal, months: 12, ratePct: p.maxRate)
+                e.estInterest = savingsInterest(monthly: additional, months: 12, ratePct: p.expectedRate)
+                e.maxInterest = savingsInterest(monthly: additional, months: 12, ratePct: p.maxRate)
                 e.unmet = ["우대 최고 0.6%p는 자동이체·KB카드 결제계좌 등 선택 조건을 실제로 충족해야 해요."]
                 return e
 
@@ -207,7 +231,7 @@ enum RecoEngine {
                 var e = SavingsEval(
                     product: p, verdict: .alternative,
                     fitCopy: "여행·행사처럼 날짜가 정해진 목표가 생기면 1~6개월로 짧게 모으는 쪽이 맞아요. 월 30만원까지 넣을 수 있어요.")
-                e.monthlyDeposit = min(goal, 300_000)
+                e.monthlyDeposit = min(additional, 300_000)
                 e.months = 6
                 e.estInterest = savingsInterest(monthly: e.monthlyDeposit, months: 6, ratePct: p.expectedRate)
                 e.maxInterest = savingsInterest(monthly: e.monthlyDeposit, months: 6, ratePct: p.maxRate)

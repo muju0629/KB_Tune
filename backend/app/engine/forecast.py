@@ -18,6 +18,7 @@ from ..models import ForecastResult, PredictedEvent, RecurringPattern, Transacti
 
 MONTHS = 1               # 현재 제공된 캘린더 범위(2026년 7월)
 DOMINANT_RATIO = 0.66    # 한 가맹점이 이 비율 이상이면 '고정 지출'로 이름 붙임
+MIN_OCCURRENCES = 2      # 한 번뿐인 결혼식·정장 구매를 반복 소비로 오인하지 않는다
 
 
 def _cadence(occurrences: int) -> tuple[str, int] | None:
@@ -39,6 +40,10 @@ def detect_patterns(txns: list[Transaction]) -> list[RecurringPattern]:
 
     patterns: list[RecurringPattern] = []
     for cat, items in by_cat.items():
+        # 한 달 데이터에서 한 번 나온 항목은 반복이라는 증거가 없다. 월 1회로
+        # 추정하면 결혼식·정장 구매 같은 일회성 지출까지 다음 달에 복제된다.
+        if len(items) < MIN_OCCURRENCES:
+            continue
         res = _cadence(len(items))
         if res is None:
             continue

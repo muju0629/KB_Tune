@@ -3,7 +3,7 @@
 //  KB_Tune
 //
 //  일정 제목 → 예상 지출 범위 추정.
-//  1순위는 백엔드 /api/estimate, 실패하면 같은 7월 일정 기준으로 로컬에서 계산한다.
+//  과거 이력과 같은 유형의 7월 일정 기준으로 기기 안에서 계산한다.
 //
 
 import Foundation
@@ -51,13 +51,14 @@ enum EventEstimator {
         "교통": (10_000, 5_000, 15_000),
     ]
 
-    static func estimate(_ title: String) -> EstimateResponse {
+    static func estimate(_ title: String, history: [SpendRecord]? = nil) -> EstimateResponse {
         let t = title.replacingOccurrences(of: " ", with: "")
+        let source = history ?? SpendHistory.allRecords
 
         // 1순위: 과거에 같은 일정을 쓴 적이 있으면 그 이력이 규칙보다 정확하다.
-        if let p = SpendHistory.predict(title: title) {
+        if let p = SpendHistory.predict(title: title, in: source) {
             return EstimateResponse(
-                title: title, category: SpendHistory.category(for: title) ?? "기타",
+                title: title, category: SpendHistory.category(for: title, in: source) ?? "기타",
                 amount: p.amount, low: p.low, high: p.high, confidence: p.confidence,
                 basis: "\(p.reason) \(p.detail)",
                 method: "history"
@@ -125,6 +126,18 @@ enum EventEstimator {
             category = cat
             base = def
             break
+        }
+
+        // 규칙의 고정값보다 기기 안의 개인 결제 이력을 우선한다. 표본이 한 건뿐이면
+        // 우연일 수 있어 학습값으로 쓰지 않고, 최소 2건부터 중앙값을 대표값으로 삼는다.
+        if let personal = SpendHistory.representative(for: category, in: source) {
+            let confidence = min(0.92, 0.55 + Double(personal.sampleCount) * 0.07)
+            return EstimateResponse(
+                title: title, category: category, amount: personal.amount,
+                low: personal.low, high: personal.high, confidence: confidence,
+                basis: "기기에 저장된 개인 \(category) 결제 \(personal.sampleCount)건의 중앙값 \(formatWon(personal.amount))이에요. 관측 범위는 \(formatWon(personal.low))~\(formatWon(personal.high))이에요.",
+                method: "history"
+            )
         }
 
         if let estimate = calendarEstimate[category] {

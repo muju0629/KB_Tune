@@ -40,7 +40,10 @@ def week_bounds(today: int) -> tuple[int, int]:
 
 
 def remaining_weeks(today: int, days_in_month: int) -> int:
-    days_left = days_in_month - today + 1
+    # 앱은 7/1=1, 8/1=32인 통산일을 보낸다. 월말 31에서 통산일을 바로
+    # 빼면 8월에는 음수가 되므로, 현재 달의 일자로 먼저 정규화한다.
+    day_of_month = (today - 1) % days_in_month + 1
+    days_left = days_in_month - day_of_month + 1
     return max(1, math.ceil(days_left / 7))
 
 

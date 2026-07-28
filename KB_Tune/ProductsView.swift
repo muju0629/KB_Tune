@@ -806,10 +806,13 @@ struct ProductLinkFooter: View {
     let url: String
     let label: String
 
+    @State private var opened: WebLink?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let u = URL(string: url) {
-                Link(destination: u) {
+                // Safari 로 튕겨 나가지 않고 앱 안에서 연다 — '완료'로 바로 돌아온다.
+                Button { opened = WebLink(url: u) } label: {
                     HStack {
                         Text(label)
                         Spacer()
@@ -819,6 +822,7 @@ struct ProductLinkFooter: View {
                     .padding(.horizontal, 16).frame(height: 50)
                     .background(KB.yellow, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
+                .sheet(item: $opened) { SafariSheet(url: $0.url) }
             }
             Text("검증일 \(productVerifiedAt) 기준 · \(productDisclaimer)")
                 .font(.kb(11)).foregroundStyle(KB.muted)

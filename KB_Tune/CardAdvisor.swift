@@ -8,9 +8,8 @@
 //  문제는 그게 표로만 나열돼서, 사용자가 "그래서 나한테 왜 좋은데?"를 스스로 조립해야 했다는 것.
 //  이 파일이 그 조립을 대신한다.
 //
-//  백엔드 에이전트가 붙어 있으면 자연어 요약을 받고, 없으면 같은 근거로 로컬 문장을 만든다.
-//  데모 중 백엔드가 꺼져 있어도 화면이 비면 안 되므로 로컬 경로가 기본값이고,
-//  에이전트 응답은 그 위에 덮어쓴다.
+//  카드 설명은 결정론 추천 근거만으로 기기 안에서 만든다. 좁은 카드 질문 하나 때문에
+//  월수입·청구액·전체 미래 일정을 외부 모델에 붙여 보내지 않는 데이터 최소화 경계다.
 //
 
 import SwiftUI
@@ -25,7 +24,6 @@ final class CardAdvisor: ObservableObject {
     @Published private(set) var source: Source = .local
     @Published private(set) var isStreaming = false
 
-    private let agent = AgentService()
     private var explainedCardID: String?
 
     /// 카드 하나에 대한 설명을 만든다. 같은 카드면 다시 부르지 않는다.
@@ -37,55 +35,10 @@ final class CardAdvisor: ObservableObject {
         summary = Self.localSummary(eval, reco: reco, model: model)
         source = .local
 
-        // 2) 에이전트가 살아 있으면 자연어 요약으로 교체한다.
-        isStreaming = true
-        defer { isStreaming = false }
-
-        var streamed = ""
-        let ok = await agent.chatStream(Self.prompt(eval, reco: reco, model: model), model: model) { delta in
-            streamed += delta
-        }
-        if ok, streamed.count > 20 {
-            summary = streamed.trimmingCharacters(in: .whitespacesAndNewlines)
-            source = .agent
-        }
+        isStreaming = false
     }
 
     func reset() { explainedCardID = nil }
-
-    // MARK: 에이전트 프롬프트
-
-    /// 결정론 엔진이 계산한 근거만 넘긴다. 금액을 새로 지어내지 않게 하는 게 핵심이다.
-    private static func prompt(_ e: CardEval, reco: CardReco, model: AppModel) -> String {
-        let benefits = e.benefitLines
-            .filter { $0.amount > 0 }
-            .map { "\($0.label) 월 \($0.amount)원" }
-            .joined(separator: ", ")
-        let spend = model.spendProfile
-            .sorted { $0.monthly > $1.monthly }
-            .prefix(3)
-            .map { "\($0.name) 월 \($0.monthly)원" }
-            .joined(separator: ", ")
-
-        return """
-        아래는 결정론 엔진이 계산한 카드 추천 근거야. 이걸 바탕으로 \(model.userName)님에게 \
-        "왜 이 카드인지"를 2~3문장으로 설명해줘.
-
-        카드: \(e.product.name) (\(e.product.kind.label))
-        연회비: 월 환산 \(e.product.annualFee / 12)원
-        예상 혜택: 월 \(e.estMonthly)원 → 연회비 빼면 월 \(e.netMonthly)원
-        혜택이 나온 곳: \(benefits.isEmpty ? "없음" : benefits)
-        전월실적 기준: \(e.product.spendRequirement)원 / 이 사람 예상 실적: \(reco.recognizedSpend)원
-        이 사람의 7월 주요 소비: \(spend)
-        아직 못 채운 조건: \(e.unmet.isEmpty ? "없음" : e.unmet.joined(separator: " / "))
-
-        규칙:
-        - 위에 없는 금액이나 혜택을 지어내지 마.
-        - 실적을 채우려고 더 쓰라고 권하지 마.
-        - 해요체로, 군더더기 없이.
-        - 이 사람의 실제 소비 카테고리를 근거로 들어.
-        """
-    }
 
     // MARK: 로컬 요약 (백엔드 없이도 같은 근거로 설명)
 

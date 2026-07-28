@@ -178,9 +178,9 @@ enum MatchEngine {
     /// 같이 붙어 다니는 소비 — 저녁 자리에 배달·카페가 섞이는 식.
     private static func related(_ a: String, _ b: String) -> Bool {
         let groups: [Set<String>] = [
-            ["외식", "배달", "카페", "술·모임"],
-            ["쇼핑", "자기관리", "건강"],
-            ["교통", "여가", "문화"],
+            ["외식", "배달", "카페", "술·모임", "모임", "데이트", "가족"],
+            ["쇼핑", "자기관리", "건강", "생활", "경조사"],
+            ["교통", "여가", "문화", "출근", "업무·학업"],
         ]
         return groups.contains { $0.contains(a) && $0.contains(b) }
     }

@@ -20,7 +20,9 @@ struct ChatMessage: Identifiable {
     /// 답변에 붙는 실행 버튼. 에이전트가 말만 하지 않고 계획을 실제로 바꾸거나
     /// 다음 화면으로 데려가는 자리다. (기획 보고서 3절 '도구 호출 구조로 승격'의 축소판)
     enum Actions: Equatable {
-        case addEvent
+        /// 제안 당시의 초안을 메시지에 고정한다. 이후 다른 제안이 생겨도 과거 버튼이
+        /// 전역 pending 값을 잘못 추가하지 않는다.
+        case addEvent(EventPhrase.Draft)
         case setDirection(SpendDirection)   // 다음 달 소비 방향을 저장
         case openProducts                   // 카드·적금 탭으로 이동
         case moveEvent(day: Int, eventID: UUID, title: String, amount: Int)
@@ -47,19 +49,37 @@ struct StreamedAnswer: View {
     let text: String
 
     private var paragraphs: [String] {
-        text.components(separatedBy: "\n\n")
+        let raw = text.components(separatedBy: "\n\n")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+        guard raw.count > 4 else { return raw }
+        return Array(raw.prefix(3)) + [raw.dropFirst(3).joined(separator: " ")]
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach(Array(paragraphs.enumerated()), id: \.offset) { i, para in
-                Text(Self.highlightNumbers(para))
-                    .font(.kb(i == 0 ? 15 : 14, i == 0 ? .semibold : .regular))
-                    .foregroundStyle(i == 0 ? KB.ink : KB.ink.opacity(0.88))
-                    .lineSpacing(i == 0 ? 3 : 4)
-                    .fixedSize(horizontal: false, vertical: true)
+                if i == 0 {
+                    HStack(alignment: .top, spacing: 8) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(KB.yellow)
+                            .frame(width: 4)
+                        Text(Self.highlightNumbers(para))
+                            .font(.kb(15, .semibold))
+                            .foregroundStyle(KB.ink)
+                            .lineSpacing(3)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(10)
+                    .background(KB.yellowSoft,
+                                in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                } else {
+                    Text(Self.highlightNumbers(para))
+                        .font(.kb(13.5))
+                        .foregroundStyle(KB.ink.opacity(0.86))
+                        .lineSpacing(4)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }
@@ -85,6 +105,7 @@ struct StreamedAnswer: View {
                 guard let r = Range(m.range, in: s),
                       let ar = Range(r, in: attr) else { continue }
                 attr[ar].inlinePresentationIntent = .stronglyEmphasized
+                attr[ar].foregroundColor = KB.green
             }
         }
         return attr
@@ -136,6 +157,11 @@ struct ChatbotView: View {
     @EnvironmentObject private var model: AppModel
 
     @StateObject private var agent = AgentService()
+    @StateObject private var speech = SpeechService()
+    @StateObject private var calendar = CalendarStore()
+
+    /// 대화로 제안 중인 일정. "추가해줘"나 금액 수정이 이걸 가리킨다.
+    @State private var pending: EventPhrase.Draft?
     @State private var messages: [ChatMessage] = []
     @State private var input = ""
     @State private var isThinking = false
@@ -167,7 +193,11 @@ struct ChatbotView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 14) {
                         ForEach(messages) { msg in
-                            bubble(msg).id(msg.id)
+                            // 마지막 실행 카드 아래에 실제 여유 공간을 둔다. 키보드·입력창 높이가
+                            // 달라도 버튼이 가려지지 않고 scrollTo의 기준 프레임에도 포함된다.
+                            bubble(msg)
+                                .padding(.bottom, msg.id == messages.last?.id ? 56 : 0)
+                                .id(msg.id)
                         }
                         if isThinking { typingBubble.id("typing") }
                         Color.clear.frame(height: 1).id("chat-end")
@@ -176,6 +206,16 @@ struct ChatbotView: View {
                     .padding(.vertical, 18)
                 }
                 .onChange(of: messages.count) { _, _ in scrollToEnd(proxy) }
+                .onChange(of: messages.last?.id) { _, messageID in
+                    guard let messageID else { return }
+                    Task { @MainActor in
+                        // 실행 카드가 실제 높이를 얻은 뒤 그 카드 자체를 기준으로 맞춘다.
+                        try? await Task.sleep(for: .milliseconds(120))
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            proxy.scrollTo(messageID, anchor: .bottom)
+                        }
+                    }
+                }
                 .onChange(of: isThinking) { _, _ in scrollToEnd(proxy) }
             }
 
@@ -197,41 +237,51 @@ struct ChatbotView: View {
             }
         }
         .onAppear(perform: seedIfNeeded)
+        .onChange(of: speech.isRecording) { wasRecording, isRecording in
+            if wasRecording, !isRecording { adoptSpeechTranscript() }
+        }
+        .onDisappear { speech.stop() }
         .task {
             await agent.ping()
-            // 백엔드가 실제로 외부 모델을 쓸 때만 물어본다. offline이면 나가는 게 없으니
-            // 동의를 받을 일도 없다 — 의미 없는 팝업을 띄우지 않기 위해서.
-            showConsent = agent.llmEnabled && !EventTitleConsent.asked
+            // 외부 모델뿐 아니라 원격 백엔드도 재무 집계값이 기기를 떠나는 경계다.
+            showConsent = agent.requiresOffDeviceConsent && !CloudAIConsent.asked
         }
         .sheet(isPresented: $showConsent) { consentSheet }
     }
 
-    // MARK: 일정 제목 공유 동의
+    // MARK: 외부 AI 동의
 
     private var consentSheet: some View {
-        SheetContainer(title: "일정 제목도 같이 볼까요?") {
+        SheetContainer(title: "AI 분석 방식을 골라주세요") {
             VStack(alignment: .leading, spacing: 16) {
-                Text("답변은 AI가 만들어요. 이때 이번 달 일정과 금액이 AI 제공자에게 전달돼요.")
+                Text("외부 AI를 쓰지 않아도 예산 계산과 일정 추가는 기기 안에서 그대로 동작해요.")
                     .font(.kb(14)).foregroundStyle(KB.ink)
                     .fixedSize(horizontal: false, vertical: true)
 
-                consentRow(icon: "text.bubble.fill", tint: KB.green, title: "제목까지 보내면",
-                           detail: "\"25일 결혼식이 있으니 이번 주 지출을 옮겨보세요\"처럼 구체적으로 답해요.")
-                consentRow(icon: "lock.fill", tint: KB.muted, title: "유형·금액만 보내면",
-                           detail: "\"25일 경조사 지출이 있어요\"까지만 답해요. 제목은 기기 밖으로 안 나가요.")
+                consentRow(icon: "iphone", tint: KB.green, title: "기기 안에서만",
+                           detail: "과거 소비 패턴과 예산 엔진으로 답해요. 외부 AI로 금융 문맥을 보내지 않아요.")
+                consentRow(icon: "person.crop.circle.badge.checkmark", tint: KB.green,
+                           title: "식별정보 없이 분석",
+                           detail: "질문 원문·실명·일정 제목은 보내지 않아요. 답변에 필요한 날짜·유형·금액과 재무 집계값만 외부 AI에 보내요.")
 
-                Text("이름과 나이는 어느 쪽이든 보내지 않아요. 설정에서 언제든 바꿀 수 있어요.")
+                Text("선택은 설정에서 언제든 바꿀 수 있어요. 아무것도 고르지 않고 닫으면 ‘기기 안에서만’으로 저장돼요.")
                     .font(.kb(11.5)).foregroundStyle(KB.muted)
                     .fixedSize(horizontal: false, vertical: true)
 
-                HStack(spacing: 10) {
-                    consentButton("유형·금액만", filled: false) { chooseConsent(false) }
-                    consentButton("제목까지 함께", filled: true) { chooseConsent(true) }
+                VStack(spacing: 9) {
+                    consentButton("기기 안에서만", filled: true) {
+                        chooseConsent(cloud: false)
+                    }
+                    consentButton("식별정보 없이 분석", filled: false) {
+                        chooseConsent(cloud: true)
+                    }
                 }
             }
         }
-        // X로 닫거나 쓸어내리면 '보내지 않음'으로 본다 — 답을 안 한 걸 동의로 치지 않는다.
-        .onDisappear { if !EventTitleConsent.asked { EventTitleConsent.set(false) } }
+        // X로 닫거나 쓸어내리면 외부 전송에 동의하지 않은 것으로 본다.
+        .onDisappear {
+            if !CloudAIConsent.asked { chooseConsent(cloud: false) }
+        }
     }
 
     private func consentRow(icon: String, tint: Color,
@@ -262,8 +312,8 @@ struct ChatbotView: View {
         }
     }
 
-    private func chooseConsent(_ granted: Bool) {
-        EventTitleConsent.set(granted)
+    private func chooseConsent(cloud: Bool) {
+        CloudAIConsent.set(cloud)
         showConsent = false
     }
 
@@ -281,6 +331,12 @@ struct ChatbotView: View {
                 HStack(spacing: 5) {
                     Text("Tune")
                     Circle().fill(KB.green).frame(width: 6, height: 6)
+                    Label(privacyBadgeLabel,
+                          systemImage: "lock.fill")
+                        .font(.kb(9.5, .medium))
+                        .foregroundStyle(KB.green)
+                        .padding(.horizontal, 6).padding(.vertical, 3)
+                        .background(.white.opacity(0.75), in: Capsule())
                 }
                     .font(.kb(15, .semibold))
                     .foregroundStyle(KB.ink)
@@ -298,7 +354,12 @@ struct ChatbotView: View {
         .padding(.horizontal, 18).padding(.vertical, 10)
         .background(KB.yellowSoft)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Tune 계획 도우미. 이번 주 추가 사용 가능액 \(formatWon(model.weeklyBudget))")
+        .accessibilityLabel("Tune 계획 도우미. \(privacyBadgeLabel). 이번 주 추가 사용 가능액 \(formatWon(model.weeklyBudget))")
+    }
+
+    private var privacyBadgeLabel: String {
+        guard CloudAIConsent.granted else { return "기기 안에서만" }
+        return "직접식별자·원문 비공개"
     }
 
     // MARK: 말풍선
@@ -369,7 +430,7 @@ struct ChatbotView: View {
                 .tint(KB.muted)
             }
 
-            actionButtons(for: msg.actions)
+            actionButtons(for: msg)
         }
         .padding(14)
         .background(.white, in: UnevenRoundedRectangle(topLeadingRadius: 5, bottomLeadingRadius: 16,
@@ -404,17 +465,24 @@ struct ChatbotView: View {
     }
 
     @ViewBuilder
-    private func actionButtons(for actions: ChatMessage.Actions?) -> some View {
-        switch actions {
-        case .addEvent:
+    private func actionButtons(for message: ChatMessage) -> some View {
+        switch message.actions {
+        case .addEvent(let draft):
             HStack(spacing: 8) {
-                // 8월은 아직 계획 모델 밖 — 실제로 반영되지 않으니 문구도 그렇게 말한다.
-                smallAction("100,000원 예약", filled: true) { flash("8월 2일 데이트 100,000원을 8월 계획 예산에 예약했어요.") }
+                smallAction("일정 추가", filled: true) {
+                    messages.append(confirm(draft))
+                    consumeAction(message.id)
+                }
                 smallAction("금액 변경", filled: false) {
-                    input = "200일 데이트 예산을 "
+                    pending = draft
+                    input = "\(draft.title) 예산을 "
                     inputFocused = true
                 }
-                smallAction("예약하지 않기", filled: false) { flash("이번엔 예약하지 않을게요.") }
+                smallAction("안 넣을래요", filled: false) {
+                    if pending == draft { pending = nil }
+                    consumeAction(message.id)
+                    flash("이번엔 넣지 않을게요.")
+                }
             }
             .padding(.top, 2)
 
@@ -422,9 +490,13 @@ struct ChatbotView: View {
             HStack(spacing: 8) {
                 smallAction("\(dir.label)로 정하기", filled: true) {
                     withAnimation(.snappy(duration: 0.25)) { model.direction = dir }
+                    consumeAction(message.id)
                     flash("다음 달 소비 방향을 ‘\(dir.label)’로 저장했어요. 설정에서 언제든 바꿀 수 있어요.")
                 }
-                smallAction("지금은 유지", filled: false) { flash("방향은 그대로 둘게요.") }
+                smallAction("지금은 유지", filled: false) {
+                    consumeAction(message.id)
+                    flash("방향은 그대로 둘게요.")
+                }
             }
             .padding(.top, 2)
 
@@ -432,18 +504,26 @@ struct ChatbotView: View {
             // 고르면 그 답이 그대로 다음 질문이 된다 — 타이핑 없이 대화가 이어진다.
             FlowLayout(spacing: 8) {
                 ForEach(options, id: \.self) { option in
-                    smallAction(option, filled: false) { send(option) }
+                    smallAction(option, filled: false) {
+                        consumeAction(message.id)
+                        send(option)
+                    }
                 }
             }
             .padding(.top, 4)
 
         case .openProducts:
             HStack(spacing: 8) {
-                smallAction("적금 보러 가기", filled: true) {
+                // 카드 질문에도 쓰이는 버튼이라 상품을 특정하지 않는다.
+                smallAction("카드·적금 보러 가기", filled: true) {
                     model.wantsSavings = true    // 넘어간 화면이 적금 쪽을 열어둔다
+                    consumeAction(message.id)
                     withAnimation(.easeInOut(duration: 0.3)) { model.selectedTab = .products }
                 }
-                smallAction("나중에", filled: false) { flash("필요할 때 다시 물어봐 주세요.") }
+                smallAction("나중에", filled: false) {
+                    consumeAction(message.id)
+                    flash("필요할 때 다시 물어봐 주세요.")
+                }
             }
             .padding(.top, 2)
 
@@ -454,8 +534,19 @@ struct ChatbotView: View {
                         flash("일정을 다시 확인해 주세요.")
                         return
                     }
-                    model.moveEventToNextWeek(event, from: day)
-                    flash("‘\(title)’을 다음 주로 옮겼어요. 이번 주에 \(formatWon(amount)) 여유가 생겼어요.")
+                    let calendarID = event.calendarEventID
+                    let startHour = event.startHour
+                    guard let target = model.moveEventToNextWeek(event, from: day) else {
+                        flash("다음 주로 옮길 수 없는 일정이에요.")
+                        return
+                    }
+                    let calendarSynced = calendarID.map {
+                        calendar.reschedule(eventID: $0, day: target, startHour: startHour)
+                    } ?? true
+                    consumeAction(message.id)
+                    flash(calendarSynced
+                          ? "‘\(title)’을 다음 주로 옮겼어요. 이번 주에 \(formatWon(amount)) 여유가 생겼어요."
+                          : "앱 계획은 옮겼지만 기기 캘린더는 바꾸지 못했어요.")
                 }
                 smallAction("다른 일정 보기", filled: false) {
                     input = "다른 일정 중에서 미룰 만한 건 뭐야?"
@@ -545,6 +636,38 @@ struct ChatbotView: View {
     // MARK: 입력창
 
     private var inputBar: some View {
+        VStack(spacing: 6) {
+            if speech.isRecording || speech.error != nil {
+                micStatus
+            }
+            inputRow
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+        .padding(.top, 2)
+    }
+
+    /// 녹음 중일 때만 뜨는 줄. 어디서 처리되는지(기기/서버)를 같이 밝힌다.
+    private var micStatus: some View {
+        HStack(spacing: 6) {
+            if let err = speech.error {
+                Image(systemName: "exclamationmark.circle").font(.kb(11))
+                Text(err).font(.kb(11.5))
+            } else {
+                Image(systemName: "waveform").font(.kb(11))
+                Text(speech.transcript.isEmpty ? "듣고 있어요" : speech.transcript)
+                    .font(.kb(11.5)).lineLimit(1)
+                Spacer()
+                Text("기기에서 인식")
+                    .font(.kb(10.5))
+            }
+        }
+        .foregroundStyle(speech.error != nil ? KB.ink : KB.muted)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 4)
+    }
+
+    private var inputRow: some View {
         HStack(spacing: 10) {
             TextField("편하게 말해 주세요", text: $input)
                 .font(.kb(14))
@@ -555,6 +678,20 @@ struct ChatbotView: View {
                 .onSubmit { send(input) }
                 .focused($inputFocused)
                 .disabled(isThinking)
+
+            // 말로 넣기. 누르면 듣기 시작하고 다시 누르면 멈춘다.
+            // 알아들은 문장은 입력창에 들어가므로, 보내기 전에 고칠 수 있다.
+            Button {
+                Task { await toggleRecording() }
+            } label: {
+                Image(systemName: speech.isRecording ? "stop.fill" : "mic.fill")
+                    .font(.kb(16, .bold))
+                    .foregroundStyle(speech.isRecording ? .white : KB.ink)
+                    .frame(width: 44, height: 44)
+                    .background(speech.isRecording ? KB.green : KB.yellowSoft, in: Circle())
+            }
+            .disabled(isThinking)
+            .accessibilityLabel(speech.isRecording ? "녹음 멈추기" : "말로 입력하기")
 
             Button {
                 send(input)
@@ -568,9 +705,24 @@ struct ChatbotView: View {
             .opacity(input.trimmingCharacters(in: .whitespaces).isEmpty ? 0.5 : 1)
             .accessibilityLabel("질문 보내기")
         }
-        .padding(.horizontal, 16)
-        .padding(.bottom, 8)
-        .padding(.top, 2)
+    }
+
+    /// 녹음 시작/정지. 멈출 때 알아들은 문장을 입력창으로 옮긴다.
+    private func toggleRecording() async {
+        if speech.isRecording {
+            speech.stop()
+            adoptSpeechTranscript()
+        } else {
+            await speech.start()
+        }
+    }
+
+    /// 사용자가 버튼을 다시 누르지 않아도 인식기가 자동으로 끝낸 최종 문장을 입력창에 둔다.
+    private func adoptSpeechTranscript() {
+        let text = speech.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        input = text
+        inputFocused = true
     }
 
     // MARK: 동작
@@ -588,6 +740,7 @@ struct ChatbotView: View {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty, !isThinking else { return }
         messages.append(ChatMessage(role: .user, conclusion: trimmed))
+        let history = recentAgentHistory()
         input = ""
         inputFocused = false
         thinkingStep = 0
@@ -606,12 +759,26 @@ struct ChatbotView: View {
                 withAnimation(.easeInOut(duration: 0.3)) { thinkingStep = 2 }
             }
 
-            // LLM 키가 없으면 백엔드도 템플릿으로 답한다. 그 템플릿보다 앱 답변이
-            // 카드 청구·앞으로의 일정·카테고리까지 알고 있어서 낫다. 그래서 키가 있을 때만 호출한다.
+            // 앱이 아는 질문은 앱이 답한다. 인사·적금 목적·일정 미루기처럼 정해진 답이 있는 건
+            // 앱 쪽이 정확한 금액과 실행 버튼, 되묻기까지 함께 주기 때문이다.
+            // 예전에는 백엔드가 켜지면 전부 LLM 으로 넘겨서 "안녕"에도 맥락 없는 답이 돌아왔다.
+            // 앱이 직접 맡아야 하는 건 둘뿐이다.
+            //   · 일정 잡기 — 실제로 계획과 캘린더를 바꾸는 동작이라 모델에 맡길 수 없다.
+            //   · 인사 — 서버가 안 되더라도 즉답해야 한다.
+            // 나머지는 전부 LLM 이 답한다. 앱이 가진 숫자(주간 가능액·카드 청구·일정)가
+            // 요청에 함께 실려 나가므로, 소비 질문도 내 데이터를 근거로 답한다.
+            // 규칙 답변을 앞세우면 "추천해줄래"의 '줄' 같은 글자에 걸려 엉뚱한 답이 나간다.
+            // 상품 추천은 앱이 답한다. 규칙이 좋아서가 아니라 상품 목록과 혜택 계산이
+            // 앱에만 있기 때문이다 — LLM 은 어떤 카드·적금이 있는지 모르니 일반론밖에 못 한다.
+            let scripted = eventTurn(trimmed) ?? greetingReply(trimmed) ?? productReply(trimmed)
+
+            // 켠 직후 헬스체크가 늦어 실패했을 뿐 서버는 멀쩡한 경우가 많다. 한 번 더 확인한다.
+            if scripted == nil, !agent.llmEnabled { await agent.ping() }
+
             var streamed = ""
             var ok = false
-            if agent.llmEnabled {
-                ok = await agent.chatStream(trimmed, model: model) { delta in
+            if scripted == nil, agent.llmEnabled {
+                ok = await agent.chatStream(trimmed, history: history, model: model) { delta in
                     streamed += delta
                 }
             }
@@ -620,7 +787,9 @@ struct ChatbotView: View {
             stageUpdates.cancel()
             withAnimation(.easeOut(duration: 0.25)) { isThinking = false }
 
-            if ok, !streamed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if let scripted {
+                messages.append(scripted)
+            } else if ok, !streamed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 messages.append(ChatMessage(
                     role: .agent,
                     conclusion: streamed.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -640,9 +809,19 @@ struct ChatbotView: View {
         Task { @MainActor in
             // 답변과 추천 영역이 같은 프레임에서 바뀐 뒤의 실제 높이를 기준으로 맞춘다.
             await Task.yield()
+            // 실행 버튼이 붙는 답변은 메시지 추가와 칩 제거가 같은 렌더링 주기에 일어난다.
+            // 한 번의 yield만으로는 이전 높이를 잡아 버튼이 입력창 뒤에 남을 수 있어,
+            // 레이아웃이 확정된 다음 프레임에 스크롤한다.
+            try? await Task.sleep(for: .milliseconds(80))
             withAnimation(.easeOut(duration: 0.25)) {
                 if isThinking { proxy.scrollTo("typing", anchor: .bottom) }
-                else { proxy.scrollTo("chat-end", anchor: .bottom) }
+                // LazyVStack의 투명 1pt 앵커는 최적화되며 scrollTo가 무시될 수 있다.
+                // 실제 마지막 말풍선을 기준으로 맞춰 실행 버튼까지 입력창 위에 올린다.
+                else if let lastMessageID = messages.last?.id {
+                    proxy.scrollTo(lastMessageID, anchor: .bottom)
+                } else {
+                    proxy.scrollTo("chat-end", anchor: .bottom)
+                }
             }
         }
     }
@@ -652,6 +831,28 @@ struct ChatbotView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
             withAnimation(.easeOut) { toast = nil }
         }
+    }
+
+    /// 실행이 끝난 메시지의 버튼을 없애 중복 추가·중복 이동을 막는다.
+    private func consumeAction(_ messageID: UUID) {
+        guard let index = messages.firstIndex(where: { $0.id == messageID }) else { return }
+        messages[index].actions = nil
+    }
+
+    /// 현재 질문 직전의 짧은 문맥만 보낸다. 일정 미리보기와 실행 버튼이 붙은 메시지는
+    /// 원문 제목이나 동작 상태를 포함할 수 있어 제외한다. 실제 전송 시 사용자 발화는
+    /// AgentService가 자유문장 대신 구조화된 금융 의도로 바꾼다.
+    private func recentAgentHistory() -> [AgentChatTurn] {
+        messages.dropLast()
+            .filter { $0.preview == nil && $0.actions == nil }
+            .suffix(6)
+            .map { message in
+                let role = message.role == .user ? "user" : "assistant"
+                let content = [message.conclusion, message.reason]
+                    .compactMap { $0 }
+                    .joined(separator: "\n")
+                return AgentChatTurn(role: role, content: content)
+            }
     }
 
     private func rangeText(low: Int, high: Int) -> String {
@@ -721,7 +922,8 @@ struct ChatbotView: View {
         let b = model.billing
 
         // 금융 질문 사이에 짧은 인사가 들어와도 갑자기 예산 답변으로 돌리지 않는다.
-        if q.contains("안녕") || q == "hi" || q == "hello" {
+        // 인사는 넓게 받는다. 서버가 잠깐 안 되더라도 인사에 답을 못 하면 안 된다.
+        if Self.greetings.contains(where: { q.contains($0) }) {
             return ChatMessage(
                 role: .agent,
                 conclusion: "안녕하세요, 성제님. 오늘은 어떤 소비가 마음에 걸려요?",
@@ -760,8 +962,7 @@ struct ChatbotView: View {
 
         // ① 지금 이걸 사도 되나 — 이번 주 예산 + 앞으로의 일정 + 다음 달 카드값을 함께 본다.
         if q.contains("사도") || q.contains("살까") || q.contains("바지") || q.contains("구매") || q.contains("지를") {
-            let over = max(0, upcomingTotal - BudgetEngine.remainingBudget(income: model.monthlyIncome,
-                                                                          savingsGoal: model.savingsGoal))
+            let over = max(0, upcomingTotal - model.remainingBudget)
             let tight = model.weeklyBudget == 0 || over > 0
             return ChatMessage(
                 role: .agent,
@@ -770,14 +971,17 @@ struct ChatbotView: View {
                     : "이번 주 여유 안에서는 가능해요. 다만 다음 달 카드 청구액도 같이 보고 정하는 게 좋아요.",
                 reason: upcomingEvents.isEmpty
                     ? "이번 주 남은 확정 일정은 없어요."
-                    : "앞으로 \(upcomingSummary)이 잡혀 있어서 남은 예산 \(formatWon(BudgetEngine.remainingBudget(income: model.monthlyIncome, savingsGoal: model.savingsGoal)))에서 \(formatWon(upcomingTotal))이 이미 예약된 상태예요.",
+                    : "앞으로 \(upcomingSummary)이 잡혀 있어서 남은 예산 \(formatWon(model.remainingBudget))에서 \(formatWon(upcomingTotal))이 이미 예약된 상태예요.",
                 impact: "이번 주 추가 사용 가능액 \(formatWon(model.weeklyBudget)) · \(b.payLabel) 카드 청구액 \(formatWon(b.dueNext))에 얹혀요",
                 basis: "7월 캘린더 · KB ALL 카드 이용내역 \(b.count)건 \(formatWon(b.usage)) · 할부 이월 \(formatWon(b.carryover))"
             )
         }
 
         // ② 어디서 줄일까 — 보호 소비는 건드리지 않고 가장 큰 카테고리부터 제안한다.
-        if q.contains("줄") || q.contains("아껴") || q.contains("절약") || q.contains("어디서") {
+        //
+        // "줄" 한 글자로 잡으면 "추천해줄래"·"알려줄래"까지 걸려서 엉뚱한 답이 나간다.
+        // 줄인다는 뜻으로 쓰인 형태만 받는다.
+        if ["줄이", "줄일", "줄여", "아껴", "아낄", "절약", "어디서"].contains(where: { q.contains($0) }) {
             let top = topCategory
             return ChatMessage(
                 role: .agent,
@@ -829,10 +1033,41 @@ struct ChatbotView: View {
             )
         }
 
+        // 카드 추천 — 실제 상품을 이름으로 답한다. 순위는 RecoEngine 이 정한다.
+        if q.contains("카드"),
+           ["추천", "고르", "골라", "어떤", "뭐가좋", "만들", "발급"].contains(where: { q.contains($0) }) {
+            let reco = RecoEngine.evalCards(model)
+            guard let pick = reco.pick else {
+                return ChatMessage(
+                    role: .agent,
+                    conclusion: "지금 소비로는 혜택이 남는 카드가 없어요.",
+                    reason: "실적 조건을 채우려고 더 쓰는 건 권하지 않아요.",
+                    actions: .openProducts
+                )
+            }
+            let second = reco.alternative
+            return ChatMessage(
+                role: .agent,
+                conclusion: "\(pick.product.name)이 가장 잘 맞아요. 연회비까지 빼면 월 \(formatWon(pick.netMonthly)) 남아요.",
+                reason: pick.benefitLines.isEmpty
+                    ? pick.fitCopy
+                    : pick.benefitLines.prefix(2).map { "\($0.label) \(formatWon($0.amount))" }.joined(separator: " · ")
+                      + " 기준이에요.",
+                impact: second.map { "다음은 \($0.product.name) 월 \(formatWon($0.netMonthly))이에요" },
+                basis: pick.unmet.isEmpty
+                    ? "인정 실적 \(formatWon(reco.recognizedSpend)) 기준 · 조건을 모두 채운 계산이에요"
+                    : "확인이 필요한 조건: \(pick.unmet.joined(separator: " · "))",
+                actions: .openProducts
+            )
+        }
+
         // ⑤ 적금 — 여력이 없으면 없다고 말한다. 금융 앱이 무리한 저축을 권하면 안 된다.
-        if q.contains("적금") || q.contains("통장") || q.contains("저축") && q.contains("만들") {
-            let remaining = BudgetEngine.remainingBudget(income: model.monthlyIncome,
-                                                         savingsGoal: model.savingsGoal)
+        //
+        // '만들다'가 함께 나올 때만 이 답을 낸다. 예전 조건은 || 가 먼저 묶여서
+        // "적금" 한 단어만 있어도 걸렸고, 이자를 묻는 질문에도 개설 안내가 나갔다.
+        if ["적금", "통장", "저축"].contains(where: { q.contains($0) }),
+           ["만들", "가입", "시작", "하나더", "들까", "들래"].contains(where: { q.contains($0) }) {
+            let remaining = model.remainingBudget
             let roomy = model.probability >= AppModel.atRiskProbability && remaining > b.carryover
             return ChatMessage(
                 role: .agent,
@@ -870,6 +1105,13 @@ struct ChatbotView: View {
         }
 
         if q.contains("200일") || q.contains("데이트") || q.contains("다음주") || q.contains("8월2일") {
+            let draft = EventPhrase.Draft(
+                day: DemoClock.serial(month: 8, day: 2), title: "200일 데이트",
+                category: "데이트", amount: 100_000, low: 70_000, high: 150_000,
+                basis: "과거 기념일 지출과 식사·카페·이동 범위를 함께 봤어요.",
+                amountWasSpoken: false
+            )
+            pending = draft
             return ChatMessage(
                 role: .agent,
                 conclusion: "8월 2일 200일 데이트 비용으로 100,000원을 8월 계획 예산에 예약할까요? 실제 출금은 없어요.",
@@ -877,7 +1119,7 @@ struct ChatbotView: View {
                 impact: "7월 계산에는 넣지 않고, 8월 예산에서 따로 확보",
                 basis: "8월 2일 캘린더의 ‘200일’·‘데이트’ 일정",
                 preview: EventPreview(title: "200일 데이트", amount: 100_000, day: "8월 2일 일요일"),
-                actions: .addEvent
+                actions: .addEvent(draft)
             )
         }
 
@@ -936,12 +1178,186 @@ struct ChatbotView: View {
 
         return ChatMessage(
             role: .agent,
-            conclusion: "그 질문은 지금 소비 계획만으로는 정확히 답하기 어려워요.",
+            conclusion: Self.unknownConclusion,
             reason: "사려는 것의 금액이나 바꾸고 싶은 일정 이름을 한 가지만 더 알려주실래요? 자연스럽게 이어서 말해도 괜찮아요.",
             impact: "현재 추가 사용 가능액 \(formatWon(model.weeklyBudget))",
             basis: "2026년 7월 캘린더 · 입력한 월수입과 저축 목표"
         )
     }
+
+    // MARK: 대화로 일정 잡기
+
+    /// 일정 이야기면 답을 만들고, 아니면 nil.
+    ///
+    /// 세 갈래다 — 새 일정 제안 / 제안 중인 금액 수정 / 넣어달라는 확정.
+    private func eventTurn(_ text: String) -> ChatMessage? {
+        let q = text.replacingOccurrences(of: " ", with: "")
+
+        // 날짜와 할 일이 같이 있으면 새 제안으로 본다.
+        if let draft = EventPhrase.parse(text) {
+            pending = draft
+            return proposal(for: draft)
+        }
+
+        // 할 일은 말했지만 날짜가 빠졌다면 LLM으로 원문을 보내지 않고 기기에서 되묻는다.
+        // 고른 문구에는 활동 이름도 함께 넣어 다음 턴에서 바로 완성된 Draft가 된다.
+        let eventIntent = ["잡", "추가", "등록", "가려고", "갈거", "갈까", "약속", "예정", "하려"]
+            .contains { q.contains($0) }
+        if EventPhrase.day(in: text) == nil, eventIntent,
+           let title = EventPhrase.recognizedTitle(in: text) {
+            return ChatMessage(
+                role: .agent,
+                conclusion: "\(title) 일정은 언제로 잡을까요?",
+                reason: "날짜를 고르면 과거 소비 기록으로 금액을 먼저 예상하고, 추가 전 영향을 보여드릴게요.",
+                actions: .choices(["내일 \(title)", "이번 주말 \(title)", "다음 주 토요일 \(title)"])
+            )
+        }
+        guard var draft = pending else { return nil }
+
+        // 제안이 떠 있는 상태에서 금액만 말하면 그 금액으로 다시 계산한다.
+        if EventPhrase.day(in: text) == nil, let spoken = EventPhrase.amount(in: text) {
+            draft.amount = spoken
+            draft.low = spoken
+            draft.high = spoken
+            draft.basis = "말씀하신 금액으로 다시 계산했어요."
+            draft.amountWasSpoken = true
+            pending = draft
+            return proposal(for: draft)
+        }
+        // "추가해줘" — 확정.
+        if q.contains("추가") || q.contains("넣어") || q.contains("잡아줘") || q.contains("등록") {
+            return confirm(draft)
+        }
+        return nil
+    }
+
+    /// 넣기 전 판단. 되는지 안 되는지와 그 영향까지 같이 보여준다.
+    private func proposal(for d: EventPhrase.Draft) -> ChatMessage {
+        let before = model.weeklyBudget(for: model.direction, on: d.day)
+        let after = model.weeklyBudget(for: model.direction,
+                                       extraCommitted: d.amount, on: d.day)
+        let probBefore = model.probability(for: model.direction, on: d.day)
+        let probAfter = model.probability(for: model.direction,
+                                          extraCommitted: d.amount, on: d.day)
+        let tight = after == 0 || (probBefore - probAfter) >= 10
+        let label = DemoClock.dayLabel(of: d.day)
+        let weekLabel = model.currentWeekRange.contains(d.day)
+            ? "이번 주"
+            : "\(DemoClock.shortLabel(of: d.day))이 든 주"
+
+        return ChatMessage(
+            role: .agent,
+            conclusion: tight
+                ? "\(label) \(d.title), 넣으면 이번 주가 빠듯해져요."
+                : "\(label) \(d.title), 넣어도 괜찮아요.",
+            reason: d.basis,
+            impact: "\(weekLabel) 추가 사용 가능액 \(formatWon(before)) → \(formatWon(after)) · "
+                  + "적금 목표 확률 \(probBefore)% → \(probAfter)%",
+            basis: d.amountWasSpoken
+                ? "말씀하신 금액 기준"
+                : "\(d.category) 유형의 과거 금액 기준 · 금액이 다르면 말씀해 주세요",
+            preview: EventPreview(title: d.title, amount: d.amount, day: label),
+            actions: .addEvent(d)
+        )
+    }
+
+    /// 계획과 기기 캘린더에 실제로 넣는다.
+    private func confirm(_ d: EventPhrase.Draft) -> ChatMessage {
+        // 시간을 안 말했으니 저녁 7시로 잡는다. 하루 화면에서 언제든 옮길 수 있다.
+        let calendarID = calendar.save(title: d.title, day: d.day, startHour: 19, duration: 2)
+        model.addEvent(title: d.title, day: d.day, amount: d.amount,
+                       category: d.category, basis: d.basis, startHour: 19,
+                       calendarEventID: calendarID)
+        if pending == d { pending = nil }
+
+        let label = DemoClock.dayLabel(of: d.day)
+        let weekLabel = model.currentWeekRange.contains(d.day)
+            ? "이번 주"
+            : "\(DemoClock.shortLabel(of: d.day))이 든 주"
+        return ChatMessage(
+            role: .agent,
+            conclusion: "\(label) \(d.title) \(formatWon(d.amount))을 계획에 넣었어요.",
+            reason: calendarID != nil
+                ? "기기 캘린더에도 저녁 7시로 적어뒀어요."
+                : "캘린더 권한이 없어 앱 안에만 넣었어요.",
+            impact: "\(weekLabel) 추가 사용 가능액 \(formatWon(model.weeklyBudget(for: model.direction, on: d.day)))",
+            basis: "금액이나 시간은 하루 화면에서 바꿀 수 있어요."
+        )
+    }
+
+    // MARK: 상품 추천 — 앱만 아는 것
+
+    private static let wantsReco = ["추천", "고르", "골라", "어떤", "뭐가좋", "만들", "발급", "가입"]
+
+    /// 카드·적금 추천이면 실제 상품으로 답하고, 아니면 nil.
+    private func productReply(_ text: String) -> ChatMessage? {
+        let q = text.replacingOccurrences(of: " ", with: "")
+        guard Self.wantsReco.contains(where: { q.contains($0) }) else { return nil }
+        if q.contains("카드") { return cardReco() }
+        if q.contains("적금") || q.contains("저축") || q.contains("통장") { return savingsReco() }
+        return nil
+    }
+
+    private func cardReco() -> ChatMessage {
+        let reco = RecoEngine.evalCards(model)
+        guard let pick = reco.pick else {
+            return ChatMessage(role: .agent,
+                               conclusion: "지금 소비로는 혜택이 남는 카드가 없어요.",
+                               reason: "실적을 채우려고 더 쓰는 건 권하지 않아요.",
+                               actions: .openProducts)
+        }
+        return ChatMessage(
+            role: .agent,
+            conclusion: "\(pick.product.name)이 가장 잘 맞아요. 연회비까지 빼면 월 \(formatWon(pick.netMonthly)) 남아요.",
+            reason: pick.benefitLines.isEmpty ? pick.fitCopy
+                : pick.benefitLines.prefix(2).map { "\($0.label) \(formatWon($0.amount))" }
+                    .joined(separator: " · ") + " 기준이에요.",
+            impact: reco.alternative.map { "다음은 \($0.product.name) 월 \(formatWon($0.netMonthly))이에요" },
+            basis: pick.unmet.isEmpty
+                ? "인정 실적 \(formatWon(reco.recognizedSpend)) 기준"
+                : "확인이 필요한 조건: \(pick.unmet.joined(separator: " · "))",
+            actions: .openProducts
+        )
+    }
+
+    private func savingsReco() -> ChatMessage {
+        // 판매중이고 조건이 맞는 것만 후보다. 신청기간이 끝난 상품을 권하면 안 된다.
+        let candidates = RecoEngine.evalSavings(model)
+            .filter { $0.verdict == .pick || $0.verdict == .buffer || $0.verdict == .alternative }
+        guard let pick = candidates.first else {
+            return ChatMessage(role: .agent,
+                               conclusion: "지금 조건에 맞는 적금이 없어요.",
+                               reason: "여력이 생기면 다시 봐드릴게요. 무리한 저축은 권하지 않아요.",
+                               actions: .openProducts)
+        }
+        return ChatMessage(
+            role: .agent,
+            conclusion: "\(pick.product.name)을 추천해요. 연 \(pick.product.rateLabel) 상품이에요.",
+            reason: pick.fitCopy,
+            impact: pick.estInterest > 0
+                ? "월 \(formatWon(pick.monthlyDeposit))씩 \(pick.months)개월이면 이자 \(formatWon(pick.estInterest)) 예상이에요"
+                : nil,
+            basis: pick.unmet.isEmpty
+                ? "우대 조건을 모두 채운 기준이에요"
+                : "확인이 필요한 조건: \(pick.unmet.joined(separator: " · "))",
+            actions: .openProducts
+        )
+    }
+
+    /// 인사면 답을 만들고 아니면 nil. 인사 분기가 agentReply 의 첫 갈래라 그대로 나온다.
+    private func greetingReply(_ text: String) -> ChatMessage? {
+        let q = text.replacingOccurrences(of: " ", with: "")
+        guard Self.greetings.contains(where: { q.contains($0) }) else { return nil }
+        return agentReply(to: text)
+    }
+
+    /// 어느 의도에도 안 걸렸을 때 쓰는 문장. 이 값으로 '앱이 모른다'를 판별한다.
+    fileprivate static let unknownConclusion = "그 질문은 지금 소비 계획만으로는 정확히 답하기 어려워요."
+
+    /// 인사로 받아들일 말들. 줄임말과 오타까지 넉넉히 잡는다.
+    fileprivate static let greetings = [
+        "안녕", "하이", "헬로", "할로", "ㅎㅇ", "반가", "방가", "hi", "hello", "hey", "여보세요",
+    ]
 }
 
 /// 답변을 기다리는 동안 살아 있는 느낌을 주는 타이핑 점(웨이브 애니메이션).

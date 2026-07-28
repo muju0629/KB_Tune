@@ -41,6 +41,10 @@ def _checked_llm_url(raw: str, var: str) -> str:
     )
 
 
+def _is_loopback_url(raw: str) -> bool:
+    return (urlparse(raw).hostname or "").lower() in ("localhost", "127.0.0.1", "::1")
+
+
 # --- 로컬 모델(OpenAI 호환 서버) ---
 # Ollama: http://localhost:11434/v1 · Bonsai(llama-server): http://localhost:8080/v1
 LOCAL_LLM_BASE_URL = _checked_llm_url(
@@ -76,6 +80,7 @@ TRUST_PROXY = os.getenv("KB_TUNE_TRUST_PROXY", "").lower() in ("1", "true", "yes
 RATE_LLM = int(os.getenv("KB_TUNE_RATE_LLM", "20"))              # 클라이언트당 / 60초
 RATE_LLM_GLOBAL = int(os.getenv("KB_TUNE_RATE_LLM_GLOBAL", "200"))  # 전체 합 / 60초
 RATE_EVAL = int(os.getenv("KB_TUNE_RATE_EVAL", "3"))             # 클라이언트당 / 300초
+RATE_EVAL_GLOBAL = int(os.getenv("KB_TUNE_RATE_EVAL_GLOBAL", "20"))  # 전체 합 / 300초
 RATE_CHEAP = int(os.getenv("KB_TUNE_RATE_CHEAP", "120"))         # 클라이언트당 / 60초
 
 
@@ -102,3 +107,17 @@ def llm_backend() -> str:
 def llm_enabled() -> bool:
     """언어 생성에 실제 모델을 쓰는지(=offline이 아닌지)."""
     return llm_backend() != "offline"
+
+
+def llm_is_external(backend: str | None = None) -> bool:
+    """모델 호출이 이 서버 기기 밖으로 나가는지.
+
+    `local`은 제품명이 아니라 OpenAI 호환 프로토콜 선택지다. URL이 원격 HTTPS면 실제로는
+    외부 전송이므로 동의·비식별화 경계를 똑같이 적용한다.
+    """
+    selected = backend or llm_backend()
+    if selected in ("claude", "openai"):
+        return True
+    if selected == "local":
+        return not _is_loopback_url(LOCAL_LLM_BASE_URL)
+    return False

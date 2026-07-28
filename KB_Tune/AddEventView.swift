@@ -8,7 +8,7 @@
 //  입력 경로 2가지
 //    · 직접 입력            : 제목·날짜를 사용자가 씀
 //    · 캘린더에서 가져오기   : EventKit으로 기기 캘린더(iCloud·구글·네이버 동기화분 포함) 읽기
-//  추정은 백엔드 /api/estimate → 실패 시 EventEstimator(로컬) 폴백.
+//  추정은 과거 소비 이력 + 온디바이스 EventEstimator가 맡는다.
 //
 
 import SwiftUI
@@ -17,7 +17,6 @@ struct AddEventView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
 
-    @StateObject private var agent = AgentService()
     @StateObject private var calendar = CalendarStore()
 
     enum Source: String, CaseIterable { case manual = "직접 입력", device = "캘린더에서" }
@@ -34,6 +33,9 @@ struct AddEventView: View {
     @State private var suggested: EstimateResponse?  // 제목으로 미리 잡은 회색 예상 금액
     @State private var isEstimating = false
     @State private var chosenAdjustment: String?
+    /// 기기 캘린더에서 읽은 일정은 이미 EventKit에 존재한다. 다시 save하면
+    /// 같은 일정이 두 개 생기므로 앱 모델에만 연결한다.
+    @State private var importedFromDeviceCalendar = false
 
     private let spring = Animation.spring(response: 0.38, dampingFraction: 0.86)
 
@@ -103,6 +105,7 @@ struct AddEventView: View {
                 ForEach(Source.allCases, id: \.self) { s in
                     Button {
                         withAnimation(.snappy(duration: 0.2)) { source = s }
+                        if s == .manual { importedFromDeviceCalendar = false }
                         if s == .device { Task { await loadDeviceEvents() } }
                     } label: {
                         Text(s.rawValue)
@@ -236,10 +239,12 @@ struct AddEventView: View {
                     ForEach(calendar.events) { ev in
                         Button {
                             title = ev.title
-                            if (22...31).contains(ev.dayOfMonth),
-                               let d = Self.cal.date(from: DateComponents(year: 2026, month: 7, day: ev.dayOfMonth, hour: 19, minute: 0)) {
-                                date = d
+                            if (DemoClock.today...DemoClock.lastDay).contains(ev.dayOfMonth) {
+                                let hour = Int(ev.startHour)
+                                let minute = Int((ev.startHour - Double(hour)) * 60)
+                                date = Self.date(ev.dayOfMonth, hour: hour, minute: minute)
                             }
+                            importedFromDeviceCalendar = true
                             runEstimate()
                         } label: {
                             HStack(spacing: 12) {
@@ -273,14 +278,15 @@ struct AddEventView: View {
     @ViewBuilder
     private var cardImpactRow: some View {
         let b = model.billing
-        if dayNumber <= BillingCycle.closingDay {
-            impactRow("\(b.payLabel) 카드 청구액",
+        let paymentLabel = BillingCycle.paymentLabel(for: dayNumber)
+        if BillingCycle.isInReferenceStatement(dayNumber) {
+            impactRow("\(paymentLabel) 카드 청구액",
                       from: formatWon(b.dueNext),
                       to: formatWon(BillingCycle.projectedDue(adding: amount, on: dayNumber)),
                       warn: false, tint: KB.ink)
         } else {
             HStack {
-                Text("\(b.nextPayLabel) 카드 청구액").font(.kb(13)).foregroundStyle(KB.muted)
+                Text("\(paymentLabel) 카드 청구액").font(.kb(13)).foregroundStyle(KB.muted)
                 Spacer()
                 Text("+\(formatWon(amount))").font(.kb(13, .semibold))
                     .foregroundStyle(KB.ink)
@@ -292,10 +298,11 @@ struct AddEventView: View {
 
     private var resultStep: some View {
         // '전'은 이미 추가한 일정까지 반영된 현재값 — model.weeklyBudget/probability와 같은 기준.
-        let before = model.weeklyBudget
+        let before = model.weeklyBudget(for: model.direction, on: dayNumber)
         let after = before - amount
-        let probBefore = model.probability
-        let probAfter = model.probability(for: model.direction, extraCommitted: amount)
+        let probBefore = model.probability(for: model.direction, on: dayNumber)
+        let probAfter = model.probability(for: model.direction,
+                                          extraCommitted: amount, on: dayNumber)
         let risky = (probBefore - probAfter) >= 10 || after < 0
 
         return VStack(alignment: .leading, spacing: 18) {
@@ -369,7 +376,7 @@ struct AddEventView: View {
                     adjustmentRow(id: "keep", title: "그대로 추가",
                                   detail: "추가 사용 가능액 \(formatWon(max(after, 0))) · 확률 \(probAfter)%")
                     adjustmentRow(id: "half", title: "예산을 절반으로 줄이기",
-                                  detail: "\(formatWon(amount / 2))로 조정하면 확률 \(model.probability(for: model.direction, extraCommitted: amount / 2))%")
+                                  detail: "\(formatWon(amount / 2))로 조정하면 확률 \(model.probability(for: model.direction, extraCommitted: amount / 2, on: dayNumber))%")
                     adjustmentRow(id: "next", title: "다음 주로 옮기기",
                                   detail: "이번 주 계획을 그대로 지켜요 · 확률 \(probBefore)%")
                 }
@@ -389,22 +396,31 @@ struct AddEventView: View {
                 // 최종 금액·날짜 기준으로 위험 재판정 → 위험하면 경고를 일정에 남긴다.
                 var note: String? = nil
                 var detail: String? = nil
-                if model.currentWeekRange.contains(dayNumber) {
-                    let finalAfter = before - amount
-                    let finalProb = model.probability(for: model.direction, extraCommitted: amount)
-                    if finalAfter < 0 {
-                        note = "이번 주 예산을 \(formatWon(-finalAfter)) 넘겨요"
-                        detail = "그대로 두면 적금 목표 확률이 \(probBefore)% → \(finalProb)%로 낮아져요. 금액을 줄이거나 다음 주로 옮기는 걸 추천해요."
-                    } else if probBefore - finalProb >= 10 {
-                        note = "적금 목표 확률을 \(probBefore - finalProb)%p 낮춰요"
+                let finalBefore = model.weeklyBudget(for: model.direction, on: dayNumber)
+                let finalAfter = finalBefore - amount
+                let finalProbBefore = model.probability(for: model.direction, on: dayNumber)
+                let finalProb = model.probability(for: model.direction,
+                                                  extraCommitted: amount, on: dayNumber)
+                if finalAfter < 0 {
+                        note = "이 주 예산을 \(formatWon(-finalAfter)) 넘겨요"
+                        detail = "그대로 두면 적금 목표 확률이 \(finalProbBefore)% → \(finalProb)%로 낮아져요. 금액을 줄이거나 다음 주로 옮기는 걸 추천해요."
+                    } else if finalProbBefore - finalProb >= 10 {
+                        note = "적금 목표 확률을 \(finalProbBefore - finalProb)%p 낮춰요"
                         detail = "금액을 줄이거나 다음 주로 옮기면 목표 확률을 지킬 수 있어요."
-                    }
                 }
 
+                // 사용자가 직접 넣은 일정은 기기 캘린더에도 남긴다.
+                // 권한이 없으면 앱 안에만 두고 넘어간다 — 캘린더를 안 줘도 계획은 세워져야 한다.
+                // 돌려받은 식별자가 있어야 나중에 이 일정을 캘린더에서도 고치거나 지울 수 있다.
+                let calendarID = importedFromDeviceCalendar
+                    ? nil
+                    : calendar.save(title: title, day: dayNumber,
+                                    startHour: startHour, duration: 2)
                 model.addEvent(title: title, day: dayNumber, amount: amount,
                                category: estimate?.category ?? "기타",
                                basis: estimate?.basis, startHour: startHour,
-                               riskNote: note, riskDetail: detail)
+                               riskNote: note, riskDetail: detail,
+                               calendarEventID: calendarID)
                 withAnimation(spring) { step = .done }
             } label: { Text("이 계획으로 일정 추가") }
             .buttonStyle(PrimaryButtonStyle())
@@ -456,7 +472,7 @@ struct AddEventView: View {
             Spacer(minLength: 40)
             Image(systemName: "checkmark.circle.fill").font(.system(size: 54)).foregroundStyle(KB.green)
             Text("일정을 추가했어요").font(.kb(20, .bold)).foregroundStyle(KB.ink)
-            Text("\(DemoClock.dayLabel(of: dayNumber)) ‘\(title)’ \(formatWon(amount))을 반영했어요.\n이번 주에는 \(formatWon(model.weeklyBudget))까지 쓸 수 있어요.")
+            Text("\(DemoClock.dayLabel(of: dayNumber)) ‘\(title)’ \(formatWon(amount))을 반영했어요.\n그 주에는 \(formatWon(model.weeklyBudget(for: model.direction, on: dayNumber)))까지 더 쓸 수 있어요.")
                 .font(.kb(13.5)).foregroundStyle(KB.muted)
                 .multilineTextAlignment(.center).lineSpacing(3)
             Spacer()
@@ -481,13 +497,13 @@ struct AddEventView: View {
         else { await calendar.connect(); if calendar.access == .authorized { calendar.fetchUpcoming() } }
     }
 
-    /// 백엔드 추정 → 실패 시 로컬 추정기
+    /// 일정 원문을 밖으로 보내지 않는 온디바이스 추정기
     private func runEstimate() {
         let t = title.trimmingCharacters(in: .whitespaces)
         guard !t.isEmpty else { return }
         isEstimating = true
-        Task {
-            let result = await agent.estimate(title: t) ?? EventEstimator.estimate(t)
+        Task { @MainActor in
+            let result = EventEstimator.estimate(t)
             estimate = result
             // 사용자가 직접 적은 금액이 있으면 그 값이 우선, 없으면 추정치.
             let typed = Int(amountText.filter(\.isNumber)) ?? 0

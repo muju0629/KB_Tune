@@ -42,7 +42,7 @@ struct EventEditSheet: View {
     /// 저장하기 전에 결과를 보여줘야 판단할 수 있다.
     private var previewWeekly: Int {
         let delta = amount - event.amount
-        return model.weeklyBudget(for: model.direction, extraCommitted: delta)
+        return model.weeklyBudget(for: model.direction, extraCommitted: delta, on: dayNumber)
     }
 
     var body: some View {
@@ -81,7 +81,7 @@ struct EventEditSheet: View {
             IconBadge(systemName: event.symbol, size: 42)
             VStack(alignment: .leading, spacing: 3) {
                 Text(event.title).font(.kb(16, .bold)).foregroundStyle(KB.ink)
-                Text("7월 \(dayNumber)일 · \(event.category)")
+                Text("\(DemoClock.dayLabel(of: dayNumber)) · \(event.category)")
                     .font(.kb(12.5)).foregroundStyle(KB.muted)
             }
             Spacer()
@@ -133,11 +133,12 @@ struct EventEditSheet: View {
             HStack {
                 Text("이번 주 추가 사용 가능액").font(.kb(13.5)).foregroundStyle(KB.ink)
                 Spacer()
-                Text(formatWon(model.weeklyBudget)).font(.kb(13))
+                Text(formatWon(model.weeklyBudget(for: model.direction, on: dayNumber))).font(.kb(13))
                     .foregroundStyle(KB.muted).strikethrough()
                 Image(systemName: "arrow.right").font(.system(size: 10)).foregroundStyle(KB.muted)
                 Text(formatWon(previewWeekly)).money(15)
-                    .foregroundStyle(previewWeekly >= model.weeklyBudget ? KB.green : KB.caution)
+                    .foregroundStyle(previewWeekly >= model.weeklyBudget(for: model.direction, on: dayNumber)
+                                     ? KB.green : KB.caution)
             }
         }
         .padding(15)
@@ -189,7 +190,7 @@ struct EventEditSheet: View {
         if amount != event.amount {
             model.updateEventAmount(event, on: dayNumber, amount: amount)
         }
-        onDone("‘\(event.title)’을 수정했어요. 이번 주 추가 사용 가능액은 \(formatWon(model.weeklyBudget))이에요.")
+        onDone("‘\(event.title)’을 수정했어요. 그 주 추가 사용 가능액은 \(formatWon(model.weeklyBudget(for: model.direction, on: dayNumber)))이에요.")
         dismiss()
     }
 

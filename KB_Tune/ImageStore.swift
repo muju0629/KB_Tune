@@ -29,24 +29,29 @@ final class ImageStore: ObservableObject {
     static let maxShots = 20
 
     private let dir: URL
+    private var storageReady = false
 
     init() {
         let base = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         dir = base.appendingPathComponent("uploads", isDirectory: true)
         // 카드앱·토스 캡처는 금융 정보다. 기본 보호등급(첫 잠금해제 후 접근 가능)으로는
         // 기기가 잠긴 상태에서도 읽히므로, 잠금 중엔 복호화 자체가 안 되는 등급으로 올린다.
-        try? FileManager.default.createDirectory(
-            at: dir, withIntermediateDirectories: true,
-            attributes: [.protectionKey: FileProtectionType.complete])
-        // iCloud·iTunes 백업에서 제외 — 기기 밖으로 나갈 이유가 없는 데이터다.
-        var res = URLResourceValues()
-        res.isExcludedFromBackup = true
-        var d = dir
-        try? d.setResourceValues(res)
+        do {
+            try FileManager.default.createDirectory(
+                at: dir, withIntermediateDirectories: true,
+                attributes: [.protectionKey: FileProtectionType.complete])
+            // iCloud·iTunes 백업에서 제외 — 기기 밖으로 나갈 이유가 없는 데이터다.
+            try protectAndExclude(dir)
+            storageReady = true
+        } catch {
+            // 보호 속성을 증명하지 못한 저장소는 읽지도 쓰지도 않는다.
+            storageReady = false
+        }
         load()
     }
 
     func load() {
+        guard storageReady else { shots = []; return }
         let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
         shots = files
             .filter { $0.pathExtension == "jpg" }
@@ -58,13 +63,19 @@ final class ImageStore: ObservableObject {
     }
 
     func add(_ images: [UIImage]) {
+        guard storageReady else { return }
         let base = Int(Date().timeIntervalSince1970 * 1000)
         for (i, img) in images.enumerated() {
             let name = "\(base + i)-\(UUID().uuidString.prefix(4)).jpg"
             let url = dir.appendingPathComponent(name)
             if let data = img.jpegData(compressionQuality: 0.8) {
                 // 폴더 등급을 물려받지만, 파일마다 명시해 두면 폴더가 바뀌어도 안 흔들린다.
-                try? data.write(to: url, options: [.atomic, .completeFileProtection])
+                do {
+                    try data.write(to: url, options: [.atomic, .completeFileProtection])
+                    try protectAndExclude(url)
+                } catch {
+                    try? FileManager.default.removeItem(at: url)
+                }
             }
         }
         load()
@@ -82,13 +93,21 @@ final class ImageStore: ObservableObject {
 
     /// 이미 읽어둔 OCR 결과. 없으면 nil — 호출부가 그때만 OCR을 돌린다.
     func cachedText(for id: String) -> String? {
-        try? String(contentsOf: textURL(id), encoding: .utf8)
+        guard storageReady else { return nil }
+        return try? String(contentsOf: textURL(id), encoding: .utf8)
     }
 
     /// OCR 결과를 캡처 옆에 남긴다. 원문 텍스트에도 결제 내역이 들어 있어
     /// 이미지와 같은 보호등급을 건다.
     func cacheText(_ text: String, for id: String) {
-        try? Data(text.utf8).write(to: textURL(id), options: [.atomic, .completeFileProtection])
+        guard storageReady else { return }
+        let url = textURL(id)
+        do {
+            try Data(text.utf8).write(to: url, options: [.atomic, .completeFileProtection])
+            try protectAndExclude(url)
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     // MARK: 보관 정책
@@ -104,5 +123,15 @@ final class ImageStore: ObservableObject {
     private func remove(id: String) {
         try? FileManager.default.removeItem(at: dir.appendingPathComponent(id + ".jpg"))
         try? FileManager.default.removeItem(at: textURL(id))
+    }
+
+    private func protectAndExclude(_ url: URL) throws {
+        try FileManager.default.setAttributes(
+            [.protectionKey: FileProtectionType.complete],
+            ofItemAtPath: url.path)
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        var protectedURL = url
+        try protectedURL.setResourceValues(values)
     }
 }

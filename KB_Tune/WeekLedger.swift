@@ -6,7 +6,7 @@
 //
 //  계산 순서는 사용자가 머릿속으로 하는 것과 같게 맞췄다.
 //    ① 월 수입에서 고정비·적금·다음 달로 넘어갈 할부를 뺀다 → 이 달에 쓸 수 있는 돈
-//    ② 그 돈을 이 달의 주 수로 나눈다                      → 한 주에 배분되는 기본 금액
+//    ② 그 돈을 각 주가 포함한 날짜 수대로 나눈다            → 부분 주도 같은 하루 예산
 //    ③ 지난주에 남긴(또는 넘긴) 금액을 더한다              → 이번 주에 실제로 배분된 금액
 //    ④ 이번 주 일정비를 뺀다                               → 추가로 더 쓸 수 있는 여유
 //
@@ -23,7 +23,7 @@ struct WeekBudget: Identifiable {
     let index: Int                 // 0-based. 화면의 "N주차"는 index + 1
     var month: Int = DemoClock.firstMonth
     let days: ClosedRange<Int>     // 이 달에서 이 주가 걸치는 날짜
-    let baseAllowance: Int         // 이 달에 쓸 수 있는 돈 ÷ 주 수
+    let baseAllowance: Int         // 이 달에 쓸 수 있는 돈을 이 주의 일수만큼 배분한 금액
     let rollover: Int              // 지난주에서 넘어온 금액(음수면 넘겨 쓴 것)
     let plannedSpend: Int          // 이 주에 잡힌 일정비
 
@@ -66,11 +66,23 @@ enum WeekLedger {
         let ranges = weekRanges(month: month)
         guard !ranges.isEmpty else { return [] }
 
-        let base = disposable / ranges.count
+        // 월 경계에 걸친 첫·마지막 주는 2~5일뿐인데도 온전한 7일 주와 같은 금액을
+        // 주면 월초·월말의 "하루에 쓸 수 있는 돈"이 튄다. 월 가용액을 각 주가
+        // 실제로 포함한 날짜 수에 비례해 나누고, 정수 나눗셈의 나머지는 마지막 주에
+        // 모아 월 총액이 정확히 보존되게 한다.
+        let totalDays = ranges.reduce(0) { $0 + $1.count }
         var carried = openingRollover
+        var allocated = 0
         var result: [WeekBudget] = []
 
         for (i, range) in ranges.enumerated() {
+            let base: Int
+            if i == ranges.indices.last {
+                base = disposable - allocated
+            } else {
+                base = disposable * range.count / max(1, totalDays)
+                allocated += base
+            }
             let week = WeekBudget(index: i, month: month, days: range, baseAllowance: base,
                                   rollover: carried, plannedSpend: spendByWeek[i] ?? 0)
             result.append(week)
@@ -91,9 +103,17 @@ enum WeekLedger {
     /// 사용자는 그게 실제로 돌아가는지 알 수 없다.
     static func nextMonthOpening(disposable: Int,
                                  carriedIn: Int,
-                                 weeksInNextMonth: Int = 5) -> WeekBudget {
-        WeekBudget(index: 0, month: DemoClock.months.last ?? DemoClock.firstMonth, days: 1...7,
-                   baseAllowance: disposable / max(1, weeksInNextMonth),
+                                 month: Int) -> WeekBudget {
+        let calendar = Calendar(identifier: .gregorian)
+        let first = calendar.date(from: DateComponents(year: DemoClock.demoYear,
+                                                        month: month, day: 1))
+        let daysInMonth = first.flatMap { calendar.range(of: .day, in: .month, for: $0)?.count } ?? 30
+        // Calendar의 일요일=1을 월요일=0으로 바꾼다. 9월 1일이 화요일이면 첫 주는 6일이다.
+        let weekday = first.map { calendar.component(.weekday, from: $0) } ?? 2
+        let mondayOffset = (weekday + 5) % 7
+        let firstWeekDays = min(daysInMonth, 7 - mondayOffset)
+        return WeekBudget(index: 0, month: month, days: 1...max(1, firstWeekDays),
+                   baseAllowance: disposable * firstWeekDays / max(1, daysInMonth),
                    rollover: carriedIn,
                    plannedSpend: 0)
     }

@@ -32,13 +32,15 @@ struct CardTransaction: Identifiable {
     /// "18:33"
     var timeLabel: String? {
         guard let hour else { return nil }
-        return String(format: "%02d:%02d", Int(hour), Int((hour - Double(Int(hour))) * 60 + 0.5))
+        let minuteOfDay = max(0, Int((hour * 60).rounded())) % (24 * 60)
+        return String(format: "%02d:%02d", minuteOfDay / 60, minuteOfDay % 60)
     }
 
     var isInstallment: Bool { installmentMonths > 1 }
 
     /// n회차 청구액. 나누어떨어지지 않는 나머지는 1회차에 붙인다(카드사 관행).
     func installmentAmount(round n: Int) -> Int {
+        guard n >= 1, n <= installmentMonths else { return 0 }
         guard isInstallment else { return n == 1 ? amount : 0 }
         let base = amount / installmentMonths
         return n == 1 ? base + (amount - base * installmentMonths) : base
@@ -72,6 +74,21 @@ enum BillingCycle {
     static let closingDay = 26
     /// 결제일 — 이용기간이 끝난 다음 달 14일.
     static let payDay = 14
+    /// 화면의 원본 이용내역이 속한 확정 사이클(6/27~7/26)의 통산 기준일.
+    static let referenceCloseDay = DemoClock.serial(month: 7, day: closingDay)
+    static let referencePayDay = DemoClock.serial(month: 8, day: payDay)
+
+    /// 해당 이용일이 청구될 결제일. 7/27~8/26 사용분은 9/14에 청구된다.
+    static func paymentLabel(for day: Int) -> String {
+        let month = DemoClock.month(of: day)
+        let paymentMonth = month + (DemoClock.dayOfMonth(of: day) <= closingDay ? 1 : 2)
+        return "\(paymentMonth)월 \(payDay)일"
+    }
+
+    /// 현재 보유한 카드 명세(6/27~7/26)에 합산할 수 있는 이용일인지.
+    static func isInReferenceStatement(_ day: Int) -> Bool {
+        day <= referenceCloseDay
+    }
 
     /// 사용자의 KB ALL 카드(2054) 이용내역 · 이용기간 26.06.27~26.07.26.
     /// 카드사 앱 기준 총 14건 633,220원.
@@ -102,8 +119,10 @@ enum BillingCycle {
         // 다음 결제일 청구액 = 일시불 전액 + 할부 1회차
         let dueNext = transactions.reduce(0) { $0 + $1.installmentAmount(round: 1) }
 
-        // 그 다음 결제일 = 할부 2회차
-        let carryover = transactions.reduce(0) { $0 + $1.installmentAmount(round: 2) }
+        // 다음 결제일 뒤로 남는 할부 잔액. 3개월 이상 할부도 마지막 회차까지 모두 잡는다.
+        let carryover = transactions.reduce(0) {
+            $0 + max(0, $1.amount - $1.installmentAmount(round: 1))
+        }
 
         return BillingSummary(
             usage: usage,
@@ -111,9 +130,10 @@ enum BillingCycle {
             dueNext: dueNext,
             carryover: carryover,
             installments: transactions.filter(\.isInstallment),
-            daysUntilClose: max(0, closingDay - today),
-            // 결제일은 다음 달 14일 — 7월(31일)이 끝나고 14일 더.
-            daysUntilPay: (DemoClock.lastDayOfMonth(containing: DemoClock.today) - today) + payDay,
+            // today는 8월부터 32 이상인 통산일이다. 월 일자 26과 직접 빼면
+            // D-day가 깨지므로 확정 명세의 통산 마감일·결제일과 비교한다.
+            daysUntilClose: max(0, referenceCloseDay - today),
+            daysUntilPay: max(0, referencePayDay - today),
             periodLabel: "6/\(closingDay + 1)~7/\(closingDay)",
             closeLabel: "7월 \(closingDay)일",
             payLabel: "8월 \(payDay)일",
@@ -126,6 +146,6 @@ enum BillingCycle {
     static func projectedDue(adding amount: Int, on day: Int,
                              today: Int = DemoClock.today) -> Int {
         let base = summary(today: today).dueNext
-        return day <= closingDay ? base + amount : base
+        return isInReferenceStatement(day) ? base + amount : base
     }
 }

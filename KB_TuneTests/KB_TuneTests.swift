@@ -5,6 +5,7 @@
 //  Created by Sungjeh Yoon on 7/21/26.
 //
 
+import Foundation
 import Testing
 @testable import KB_Tune
 
@@ -109,6 +110,27 @@ struct KB_TuneTests {
         }
     }
 
+    /// 3개월 이상 할부도 2회차만이 아니라 남은 모든 회차가 다음 달 예산에 잡혀야 한다.
+    @Test func installmentCarryoverIncludesEveryRemainingRound() {
+        let transaction = CardTransaction(day: 9, merchant: "테스트", amount: 100_000,
+                                          installmentMonths: 3)
+        let summary = BillingCycle.summary(today: 22, transactions: [transaction])
+
+        #expect(transaction.installmentAmount(round: 1) == 33_334)
+        #expect(transaction.installmentAmount(round: 2) == 33_333)
+        #expect(transaction.installmentAmount(round: 3) == 33_333)
+        #expect(transaction.installmentAmount(round: 4) == 0)
+        #expect(summary.dueNext == 33_334)
+        #expect(summary.carryover == 66_666)
+        #expect(summary.deferred == summary.carryover)
+    }
+
+    @Test func transactionTimeNeverRendersSixtyMinutes() {
+        let transaction = CardTransaction(day: 1, merchant: "테스트", amount: 1_000,
+                                          hour: 9.999)
+        #expect(transaction.timeLabel == "10:00")
+    }
+
     @Test func julyCalendarTotalsAreConfirmedValues() {
         let model = onJuly22 { AppModel() }
 
@@ -172,6 +194,88 @@ struct KB_TuneTests {
         let e = EventEstimator.estimate("와드")
         #expect(e.method == "history")
         #expect(e.amount == 40_000)
+    }
+
+    @Test func cafeEstimateComesFromPersonalMedianAndChangesWithHistory() throws {
+        let previous = SpendHistory.learnedRecords
+        defer { SpendHistory.replaceLearnedRecords(previous) }
+        SpendHistory.replaceLearnedRecords([])
+
+        let baseline = EventEstimator.estimate("카페 약속")
+        #expect(baseline.amount == 20_000)       // 10,000원·30,000원 표본의 중앙값
+        #expect(baseline.method == "history")
+        #expect(baseline.basis.contains("2건"))
+        #expect(baseline.basis.contains("중앙값"))
+
+        SpendHistory.replaceLearnedRecords([
+            SpendRecord(title: "퇴근 커피", category: "카페", month: 7, day: 10,
+                        amount: 50_000, onCalendar: true)
+        ])
+        let learned = EventEstimator.estimate("카페 약속")
+        let draft = try #require(EventPhrase.parse("8월 5일 카페 갈래"))
+
+        #expect(learned.amount == 30_000)        // 10,000·30,000·50,000원의 중앙값
+        #expect(learned.basis.contains("3건"))
+        #expect(draft.amount == learned.amount)  // 자연어 일정 추가도 같은 이력을 쓴다
+        #expect(draft.basis.contains("3건"))
+    }
+
+    @Test func dailyCloseLearnsCashPaymentAndResetClearsIt() {
+        let previous = SpendHistory.learnedRecords
+        defer { SpendHistory.replaceLearnedRecords(previous) }
+
+        onJuly22 {
+            let model = AppModel()
+            model.addEvent(title: "카페 약속", day: 22, amount: 50_000,
+                           category: "카페", basis: "사용자 확인", state: .reserved)
+            let cafeID = model.day(number: 22)?.events.first { $0.title == "카페 약속" }?.id
+
+            model.resolveDailyClose(paidCash: true)
+
+            let learnedCafe = model.learnedSpendRecords.first { $0.sourceEventID == cafeID }
+            #expect(learnedCafe?.amount == 50_000)
+            #expect(learnedCafe?.category == "카페")
+            #expect(model.day(number: 22)?.events.first { $0.id == cafeID }?.state == .confirmed)
+            #expect(EventEstimator.estimate("카페 약속").amount == 30_000)
+
+            let learnedCount = model.learnedSpendRecords.count
+            model.resolveDailyClose(paidCash: true)
+            #expect(model.learnedSpendRecords.count == learnedCount) // 같은 결제를 중복 학습하지 않는다
+
+            model.resetToDemo()
+            #expect(model.learnedSpendRecords.isEmpty)
+            #expect(EventEstimator.estimate("카페 약속").amount == 20_000)
+        }
+    }
+
+    @Test func learnedHistoryRoundTripsAndOldStateDefaultsToEmptyHistory() throws {
+        let learned = SpendRecord(title: "카페 약속", category: "카페", month: 7, day: 22,
+                                  amount: 24_000, onCalendar: true, sourceEventID: UUID())
+        let state = PersistedState(
+            hasOnboarded: true,
+            usesDemoData: true,
+            kbPayLinked: false,
+            monthlyIncome: 2_200_000,
+            savingsGoal: 800_000,
+            direction: .maintain,
+            hobbies: ["카페"],
+            calendarDays: AppModel.makeCalendar(),
+            learnedSpendRecords: [learned],
+            dismissedPredictions: [],
+            dailyCloseDismissed: false
+        )
+
+        let restored = try JSONDecoder().decode(
+            PersistedState.self,
+            from: JSONEncoder().encode(state)
+        )
+        #expect(restored.learnedSpendRecords == [learned])
+
+        let oldJSON = #"{"version":1,"hasOnboarded":true,"usesDemoData":true,"kbPayLinked":false,"monthlyIncome":2200000,"savingsGoal":800000,"direction":"maintain","hobbies":["카페"],"calendarDays":[{"weekday":"수","dateLabel":"7/22","dayNumber":22,"events":[]}],"dismissedPredictions":[],"dailyCloseDismissed":false}"#
+        let old = try JSONDecoder().decode(PersistedState.self, from: Data(oldJSON.utf8))
+
+        #expect(old.calendarDays.count == 1)
+        #expect(old.learnedSpendRecords.isEmpty)
     }
 
     @Test func upcomingSpendsCoverCalendarGaps() {
@@ -387,6 +491,360 @@ struct KB_TuneTests {
         let ward = model.day(number: 22)?.events.first { $0.title == "와드" }
         // 사용자가 확인한 금액 → low == high 이고 예측도 아니므로 '예상' 접두어가 붙지 않는다
         #expect(ward?.isEstimated == false)
+    }
+
+    // MARK: 대화 문장 → 일정
+
+    /// 사용자가 실제로 말할 법한 문장에서 날짜·이름·금액을 뽑아내야 한다.
+    @Test func parsesDateAndActivityFromEverydaySentence() throws {
+        let d = onJuly22 {
+            try! #require(EventPhrase.parse("나 7/31일날 약속 잡아도 될까? 친구들이랑 강남에서 술 한잔 할거같은데"))
+        }
+        #expect(DemoClock.month(of: d.day) == 7)
+        #expect(DemoClock.dayOfMonth(of: d.day) == 31)
+        #expect(d.title == "술 약속")
+        #expect(d.amountWasSpoken == false)      // 금액을 안 말했으니 추정으로 채운다
+        #expect(d.amount > 0)
+    }
+
+    /// 금액을 말하면 추정하지 않고 그 값을 쓴다.
+    @Test func spokenAmountWinsOverEstimate() throws {
+        let d = onJuly22 { try! #require(EventPhrase.parse("8월 2일 데이트 10만원")) }
+        #expect(DemoClock.month(of: d.day) == 8)
+        #expect(DemoClock.dayOfMonth(of: d.day) == 2)
+        #expect(d.title == "데이트")
+        #expect(d.amount == 100_000)
+        #expect(d.amountWasSpoken)
+    }
+
+    /// 평범한 질문을 일정 제안으로 오해하면 안 된다.
+    /// 날짜와 할 일이 둘 다 있어야만 후보로 본다.
+    @Test func plainQuestionsAreNotTreatedAsEvents() {
+        onJuly22 {
+            #expect(EventPhrase.parse("이번 주 얼마까지 써도 돼?") == nil)   // 날짜도 할 일도 없음
+            #expect(EventPhrase.parse("안녕") == nil)
+            #expect(EventPhrase.parse("내일 날씨 어때?") == nil)             // 날짜만 있고 할 일 없음
+            #expect(EventPhrase.parse("술 한잔 하고 싶다") == nil)           // 할 일만 있고 날짜 없음
+        }
+    }
+
+    /// 데모 기간(7~8월) 밖 날짜는 받지 않는다.
+    @Test func datesOutsideTheDemoWindowAreRejected() {
+        onJuly22 {
+            #expect(EventPhrase.parse("12월 25일 술 한잔") == nil)
+        }
+    }
+
+    // MARK: 기기 캘린더 연결
+
+    /// 직접 넣은 일정은 기기 캘린더 식별자를 함께 들고 있어야 한다.
+    /// 이 값이 없으면 나중에 지우거나 시간을 옮겨도 기기 캘린더에는 반영되지 않는다.
+    @Test func addedEventRemembersItsCalendarID() {
+        let model = onJuly22 { AppModel() }
+
+        onJuly22 {
+            model.addEvent(title: "테스트 모임", day: 23, amount: 20_000,
+                           category: "모임", basis: nil, calendarEventID: "EK-123")
+            let added = model.day(number: 23)?.events.first { $0.title == "테스트 모임" }
+            #expect(added?.calendarEventID == "EK-123")
+        }
+    }
+
+    /// 예측 수락은 예산 항목이지 약속이 아니다 — 기기 캘린더에 넣지 않는다.
+    @Test func acceptedPredictionIsNotWrittenToDeviceCalendar() {
+        let model = onJuly22 { AppModel() }
+        let spend = onJuly22 {
+            try! #require(model.upcomingSpends.first { $0.pattern.key == "쿠팡 장보기" })
+        }
+
+        onJuly22 {
+            model.acceptPrediction(spend)
+            let added = model.day(number: spend.expectedDay)?
+                .events.first { $0.title == "쿠팡 장보기" }
+            #expect(added?.calendarEventID == nil)
+        }
+    }
+
+    // MARK: 기기 저장
+
+    /// 저장했다 되살려도 일정·금액·상태가 그대로여야 한다.
+    ///
+    /// id 를 `let id = UUID()` 로 둔 구조체는 인코딩에서 빠지기 쉽고, 빠지면 복원할 때
+    /// 새 id 가 생긴다. 그러면 "같은 일정"을 못 찾아 수정·삭제가 엉뚱한 걸 건드린다.
+    @Test func calendarSurvivesSaveAndRestore() throws {
+        let days = onJuly22 { AppModel.makeCalendar() }
+
+        let data = try JSONEncoder().encode(days)
+        let restored = try JSONDecoder().decode([PlanDay].self, from: data)
+
+        #expect(restored.count == days.count)
+        #expect(restored.map(\.id) == days.map(\.id))            // id 가 보존돼야 한다
+        #expect(restored.map(\.dayNumber) == days.map(\.dayNumber))
+
+        let before = try #require(days.first { $0.dayNumber == 22 }?
+            .events.first { $0.title == "와드" })
+        let after = try #require(restored.first { $0.dayNumber == 22 }?
+            .events.first { $0.title == "와드" })
+
+        #expect(after.id == before.id)
+        #expect(after.amount == 40_000)
+        #expect(after.state == before.state)
+        #expect(after.estimateBasis == before.estimateBasis)
+        #expect(after.isProtected == before.isProtected)
+    }
+
+    @Test func olderCalendarJSONUsesSafeDefaultsInsteadOfFailingWholeRestore() throws {
+        let legacy = #"{"weekday":"수","dateLabel":"7/22","dayNumber":22,"events":[{"title":"옛 일정","symbol":"calendar","startHour":19,"duration":2,"amount":12000}]}"#
+        let day = try JSONDecoder().decode(PlanDay.self, from: Data(legacy.utf8))
+        let event = try #require(day.events.first)
+
+        #expect(day.dayNumber == 22)
+        #expect(event.title == "옛 일정")
+        #expect(event.category == "기타")
+        #expect(event.state == .confirmed)
+        #expect(event.calendarEventID == nil)
+    }
+
+    /// 테스트 중에는 기기 저장을 읽지도 쓰지도 않는다 —
+    /// 앞선 실행이 남긴 일정이 섞이면 아래 기대값들이 전부 흔들린다.
+    @Test func persistenceIsOffDuringTests() {
+        #expect(LocalStore.isDisabled)
+        #expect(LocalStore.load() == nil)
+    }
+
+    // MARK: 핵심 계산 회귀
+
+    @Test func suggestedSavingsDoesNotSubtractInstallmentTwice() {
+        onJuly22 {
+            let model = AppModel()
+
+            // remainingBudget에 할부 이월액 90,590원이 이미 포함돼 있다.
+            #expect(model.remainingBudget == 113_410)
+            #expect(model.suggestedSavingsAmount == 50_000)
+        }
+    }
+
+    @Test func savingsRecommendationUsesOnlySafeAdditionalDeposit() {
+        onJuly22 {
+            let model = AppModel()
+            let pick = try! #require(RecoEngine.evalSavings(model).first { $0.product.id == "my-made" })
+
+            #expect(pick.monthlyDeposit == model.suggestedSavingsAmount)
+            #expect(pick.monthlyDeposit < model.savingsGoal)
+            #expect(pick.estInterest == RecoEngine.savingsInterest(
+                monthly: model.suggestedSavingsAmount, months: 12,
+                ratePct: pick.product.expectedRate
+            ))
+        }
+    }
+
+    @Test func cardSpendUsesOneNormalizedLedger() {
+        let model = onJuly22 { AppModel() }
+        let spend = RecoEngine.normalizedCardSpend(model)
+
+        // 일정 한 건은 한 카테고리에만 속하므로 추천 입력 합계가 월간 일정 합계와 같다.
+        #expect(spend.values.reduce(0, +) == model.julyEstimateHigh)
+        #expect(RecoEngine.recognizedSpend(model) == model.julyEstimateHigh)
+        #expect((spend["교통"] ?? 0) > 0)
+    }
+
+    @Test func nori2BenefitNeverExceedsAggregateMonthlyCap() {
+        let model = onJuly22 { AppModel() }
+        let evaluation = try! #require(RecoEngine.evalCards(model).ranked.first { $0.product.id == "nori2" })
+
+        #expect(evaluation.product.monthlyBenefitCap == 20_000)
+        #expect(evaluation.estMonthly <= evaluation.product.monthlyBenefitCap)
+        #expect(evaluation.benefitLines.reduce(0) { $0 + $1.amount } == evaluation.estMonthly)
+    }
+
+    @Test func partialWeeksAreProratedAndPreserveMonthlyTotal() {
+        let disposable = 965_000
+        let weeks = WeekLedger.build(disposable: disposable, spendByWeek: [:], month: 7)
+
+        #expect(weeks.map(\.baseAllowance).reduce(0, +) == disposable)
+        #expect(weeks.first?.days.count == 5)
+        #expect(weeks.first?.baseAllowance == disposable * 5 / 31)
+        #expect(weeks[1].days.count == 7)
+        #expect(weeks[1].baseAllowance == disposable * 7 / 31)
+
+        let august = WeekLedger.build(disposable: disposable, spendByWeek: [:], month: 8)
+        #expect(august.map(\.baseAllowance).reduce(0, +) == disposable)
+        #expect(august.first?.days.count == 2)
+    }
+
+    @Test func futureEventPreviewUsesItsOwnWeek() {
+        let model = onJuly22 { AppModel() }
+        model.openingRollover = 600_000
+        let target = DemoClock.serial(month: 8, day: 3)
+        let currentBefore = model.weeklyBudget
+        let targetBefore = model.weeklyBudget(for: .maintain, on: target)
+
+        #expect(targetBefore > 10_000)
+        #expect(model.weeklyBudget(for: .maintain, extraCommitted: 10_000, on: target)
+                == targetBefore - 10_000)
+        #expect(model.weeklyBudget == currentBefore)
+    }
+
+    @Test func augustBillingUsesSerialDatesAndCorrectPaymentMonth() {
+        let augustFirst = DemoClock.serial(month: 8, day: 1)
+        let augustTwentySeventh = DemoClock.serial(month: 8, day: 27)
+        let summary = BillingCycle.summary(today: augustFirst)
+
+        #expect(summary.daysUntilPay == 13)
+        #expect(summary.daysUntilClose == 0) // 화면의 확정 명세는 7/26에 이미 마감
+        #expect(BillingCycle.paymentLabel(for: augustFirst) == "9월 14일")
+        #expect(BillingCycle.paymentLabel(for: augustTwentySeventh) == "10월 14일")
+        #expect(!BillingCycle.isInReferenceStatement(augustFirst))
+    }
+
+    @Test func restoredCalendarRecomputesTodayMarker() {
+        let saved = onJuly22 { AppModel.makeCalendar() }
+        let augustSecond = DemoClock.serial(month: 8, day: 2)
+        let restored = AppModel.markingToday(saved, today: augustSecond)
+
+        #expect(restored.filter(\.isToday).count == 1)
+        #expect(restored.first(where: \.isToday)?.dayNumber == augustSecond)
+    }
+
+    /// 앱을 켠 뒤 자정이 지나도 한 화면 안에서 '오늘' 기준이 둘로 갈라지지 않아야 한다.
+    @Test func modelCalculationsUseTheLaunchDateSnapshot() {
+        DemoClock.fixedToday = 22
+        let model = AppModel()
+        let expected = BudgetEngine.spentToDate(in: model.calendarDays, asOfDay: 22)
+        DemoClock.fixedToday = 23
+        defer { DemoClock.fixedToday = nil }
+
+        #expect(model.todayDayNumber == 22)
+        #expect(model.spentToDate == expected)
+        #expect(model.committedThisWeek
+                == BudgetEngine.committedThisWeek(in: model.calendarDays, asOfDay: 22))
+    }
+
+    @Test func automaticEventTimesDoNotOverlapAtTheEndOfDay() {
+        let events = [
+            DayEvent(title: "첫 일정", symbol: "calendar", startHour: 19,
+                     duration: 2, amount: 0),
+            DayEvent(title: "둘째 일정", symbol: "calendar", startHour: 21,
+                     duration: 2, amount: 0),
+        ]
+        let slot = AppModel.freeSlot(after: events)
+        let overlaps = events.contains {
+            slot < $0.startHour + $0.duration && $0.startHour < slot + 2
+        }
+
+        #expect(!overlaps)
+        #expect(slot + 2 <= 24)
+    }
+
+    @Test func predictionDismissalOnlyHidesThatOccurrence() {
+        let model = onJuly22 { AppModel() }
+        let spend = onJuly22 {
+            try! #require(model.upcomingSpends.first { $0.pattern.key == "쿠팡 장보기" })
+        }
+        let later = UpcomingSpend(pattern: spend.pattern,
+                                  expectedDay: spend.expectedDay + spend.pattern.cadenceDays,
+                                  amount: spend.amount, reason: spend.reason)
+
+        model.dismissPrediction(spend)
+
+        #expect(model.dismissedPredictions.contains(AppModel.predictionOccurrenceKey(spend)))
+        #expect(!model.dismissedPredictions.contains(AppModel.predictionOccurrenceKey(later)))
+    }
+
+    @Test func septemberPreviewUsesItsActualPartialWeek() {
+        let opening = WeekLedger.nextMonthOpening(disposable: 900_000,
+                                                  carriedIn: 10_000,
+                                                  month: 9)
+        // 2026-09-01은 화요일: 첫 월요일 주간에는 9/1~9/6, 6일만 들어간다.
+        #expect(opening.month == 9)
+        #expect(opening.days.count == 6)
+        #expect(opening.baseAllowance == 180_000)
+        #expect(opening.allowance == 190_000)
+    }
+
+    @Test func movingEventReturnsTargetAndPreservesCalendarIdentity() {
+        let model = onJuly22 { AppModel() }
+        model.addEvent(title: "동기화 테스트", day: 23, amount: 20_000,
+                       category: "외식", basis: nil, calendarEventID: "EK-MOVE")
+        let event = try! #require(model.day(number: 23)?.events.first { $0.title == "동기화 테스트" })
+
+        let target = model.moveEventToNextWeek(event, from: 23)
+
+        #expect(target == 30)
+        #expect(model.day(number: 23)?.events.contains { $0.id == event.id } == false)
+        #expect(model.day(number: 30)?.events.first { $0.id == event.id }?.calendarEventID == "EK-MOVE")
+    }
+
+    @Test @MainActor func augustCalendarDateImportsAsSerialDay() throws {
+        let date = try #require(Calendar(identifier: .gregorian).date(
+            from: DateComponents(year: 2026, month: 8, day: 2, hour: 19, minute: 30)
+        ))
+
+        #expect(CalendarStore.serialDay(of: date) == 33)
+        #expect(DemoClock.dayLabel(of: CalendarStore.serialDay(of: date)) == "8월 2일")
+    }
+
+    // MARK: 외부 AI 개인정보 경계
+
+    @Test func outboundPrivacyRemovesIdentityButKeepsFinancialContext() {
+        let model = onJuly22 { AppModel() }
+        let source = "나는 김성제고 김민수와 카페 갈래. 010-1234-5678 test@example.com 카드 1234-5678-9012-3456 계좌 123-456-789012, 외국인번호 900101-5123456, 여권 M12345678, 주소는 서울시 종로구 세종대로 1이야. 8월 5일 카페 20,000원"
+        let safe = OutboundPrivacy.sanitize(source, model: model)
+
+        #expect(!safe.contains("김성제"))
+        #expect(!safe.contains("김민수"))
+        #expect(!safe.contains("010-1234-5678"))
+        #expect(!safe.contains("test@example.com"))
+        #expect(!safe.contains("1234-5678-9012-3456"))
+        #expect(!safe.contains("123-456-789012"))
+        #expect(!safe.contains("900101-5123456"))
+        #expect(!safe.contains("M12345678"))
+        #expect(!safe.contains("세종대로"))
+        #expect(safe.contains("8월 5일"))
+        #expect(safe.contains("20,000원"))
+    }
+
+    @Test func externalAIReceivesIntentInsteadOfTheOriginalQuestion() {
+        let outbound = OutboundPrivacy.financialIntent(
+            "김민수와 강남에서 7만원짜리 바지를 사도 될까?"
+        )
+
+        #expect(!outbound.contains("김민수"))
+        #expect(!outbound.contains("강남"))
+        #expect(!outbound.contains("바지"))
+        #expect(outbound.contains("새 지출"))
+        #expect(outbound.contains("70000원"))
+    }
+
+    @Test func outboundPrivacyAliasesKnownEventTitleWithoutConsent() {
+        let model = onJuly22 { AppModel() }
+        let safe = OutboundPrivacy.sanitize("와드 일정은 얼마로 잡을까?", model: model)
+
+        #expect(!safe.contains("와드"))
+        #expect(safe.contains("[자기관리 일정]"))
+    }
+
+    @Test @MainActor func finalChatRequestBodyContainsNoRawQuestionIdentityOrEventTitle() throws {
+        let model = onJuly22 { AppModel() }
+        model.addEvent(title: "김민수 PT", day: 23, amount: 20_000,
+                       category: "운동", basis: "테스트")
+        let body = try #require(AgentService.makeChatRequestBody(
+            message: "김민수와 강남에서 PT 2만원 추가해줘",
+            history: [
+                AgentChatTurn(role: "user", content: "박영희와 김민수 PT를 잡았어"),
+                AgentChatTurn(role: "assistant", content: "김민수 PT 일정은 20,000원이에요"),
+            ],
+            model: model
+        ))
+        let data = try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
+        let json = try #require(String(data: data, encoding: .utf8))
+
+        #expect(!json.contains("김민수"))
+        #expect(!json.contains("박영희"))
+        #expect(!json.contains("강남"))
+        #expect(!json.contains("김민수 PT"))
+        #expect(json.contains("20000"))
+        #expect(json.contains("운동"))
     }
 
     @Test func confirmedWardAndFreeMeetingAreSingleSourceOfTruth() {
