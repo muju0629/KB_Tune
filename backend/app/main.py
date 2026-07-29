@@ -5,26 +5,18 @@ LLM 키가 없어도 모든 엔드포인트가 동작한다(엔진 + 템플릿).
 """
 from __future__ import annotations
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from . import baseline, config
 from .config import llm_enabled
-from .data import DAYS_IN_MONTH, PROFILE, TRANSACTIONS_HISTORY
+from .data import PROFILE
 from .engine import build_plan
-from .engine.budget import disposable_month
-from .engine.categorize import categorize_many
-from .engine.estimate import estimate_event_cost
-from .engine.forecast import forecast_next_month
 from .llm.agent import run_agent
 from .llm.chat import chat_stream
-from .llm.extract import extract_from_text
 from .llm.search import search_cost
-from .models import (AgentRequest, AgentResult, CategorizeRequest,
-                     CategorizeResult, ChatRequest,
-                     EstimateRequest, EstimateResult,
-                     ExtractRequest, ExtractResult, ForecastResult,
+from .models import (AgentRequest, AgentResult, ChatRequest,
                      PlanRequest, Profile, SearchCostRequest,
                      SearchCostResult, SearchRequest)
 from . import websearch
@@ -101,18 +93,6 @@ def search_endpoint(req: SearchRequest):
     return result
 
 
-# ---------- AI 기능 ① 일정 → 예상 지출 ----------
-
-@app.post("/api/estimate", response_model=EstimateResult, dependencies=_llm)
-def estimate_endpoint(req: EstimateRequest):
-    """일정 제목만으로 예상 지출을 추정(캘린더의 같은 유형 + 엔진 범위 보정)."""
-    # 제목은 규칙 사전으로도 가치를 낼 수 있는 반면 실명·약속 내용을 포함할
-    # 수 있다. 외부 모델에는 아예 보내지 않고, 루프백 로컬 모델만 선택적으로 쓴다.
-    use_private_llm = config.llm_enabled() and not config.llm_is_external()
-    return estimate_event_cost(req.title, TRANSACTIONS_HISTORY,
-                               use_llm=use_private_llm, age_bucket=req.age_bucket)
-
-
 # ---------- 대화 에이전트 ----------
 
 @app.post("/api/agent", response_model=AgentResult, dependencies=_llm)
@@ -154,41 +134,3 @@ def baseline_endpoint():
     표에는 공개 통계만 있어서 응답에 개인 정보가 없다.
     """
     return baseline.table()
-
-
-# ---------- AI 기능 ② 캡처 → 거래 추출 ----------
-
-@app.post("/api/extract", response_model=ExtractResult, dependencies=_llm)
-def extract_endpoint(req: ExtractRequest):
-    """text=기기 OCR 결과. image_base64 원본은 개인정보 보호를 위해 거절한다."""
-    if req.text:
-        return extract_from_text(req.text)
-    if req.image_base64:
-        # 금융 캡처 원본에는 이름·계좌·잔액이 한 화면에 섞인다. 서버에서 완전한
-        # 비식별화를 보장할 수 없으므로 외부 비전 모델로 보내지 않는다.
-        raise HTTPException(
-            status_code=422,
-            detail="개인정보 보호를 위해 원본 이미지는 외부 AI로 보내지 않아요. 기기에서 OCR한 텍스트를 보내 주세요.",
-        )
-    return ExtractResult(transactions=[], total=0, method="none",
-                         warnings=["text 또는 image_base64 중 하나가 필요해요."])
-
-
-# ---------- AI 기능 ③ 가맹점 → 카테고리 ----------
-
-@app.post("/api/categorize", response_model=CategorizeResult, dependencies=_llm)
-def categorize_endpoint(req: CategorizeRequest):
-    """규칙 사전 우선 → 놓친 것만 LLM(키 있을 때). 카테고리 집합은 엔진이 강제."""
-    # 가맹점 원문은 행동반경·주소를 노출할 수 있어 외부 LLM 전송 금지.
-    use_private_llm = config.llm_enabled() and not config.llm_is_external()
-    results, hit = categorize_many(req.merchants, use_llm=use_private_llm)
-    return CategorizeResult(results=results, rule_hit_rate=hit)
-
-
-# ---------- AI 기능 ④ 다음 달 예측 ----------
-
-@app.post("/api/forecast", response_model=ForecastResult, dependencies=_cheap)
-def forecast_endpoint(req: PlanRequest):
-    """7월 캘린더에서 반복 패턴을 찾아 다음 달 일정·지출을 예측."""
-    p = _profile(req)
-    return forecast_next_month(TRANSACTIONS_HISTORY, disposable_month(p))

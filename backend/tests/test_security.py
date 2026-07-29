@@ -27,18 +27,18 @@ def _reset_limits(monkeypatch):
 def test_키_미설정이면_무인증으로_동작한다(monkeypatch):
     """설정 없이 받아서 바로 실행할 수 있어야 한다 — 기본 동작을 지키는지 확인."""
     monkeypatch.delenv("KB_TUNE_API_KEY", raising=False)
-    assert client.post("/api/forecast", json={}).status_code == 200
+    assert client.get("/api/baseline").status_code == 200
 
 
 def test_키가_설정되면_헤더_없는_요청은_401(monkeypatch):
     monkeypatch.setenv("KB_TUNE_API_KEY", "s3cret")
-    assert client.post("/api/forecast", json={}).status_code == 401
+    assert client.get("/api/baseline").status_code == 401
 
 
 def test_키가_틀리면_401_맞으면_200(monkeypatch):
     monkeypatch.setenv("KB_TUNE_API_KEY", "s3cret")
-    assert client.post("/api/forecast", json={}, headers={"X-API-Key": "wrong"}).status_code == 401
-    assert client.post("/api/forecast", json={}, headers={"X-API-Key": "s3cret"}).status_code == 200
+    assert client.get("/api/baseline", headers={"X-API-Key": "wrong"}).status_code == 401
+    assert client.get("/api/baseline", headers={"X-API-Key": "s3cret"}).status_code == 200
 
 
 def test_헬스체크는_키_없이도_열려_있다(monkeypatch):
@@ -101,9 +101,9 @@ def test_전체_합_한도가_LLM_비용의_상한이_된다(monkeypatch):
     g = security._GLOBAL_LLM
     original, g.limit = g.limit, 1
     try:
-        assert client.post("/api/estimate", json={"title": "친구 생일"}).status_code == 200
+        assert client.post("/api/search", json={"query": "한도 확인"}).status_code == 200
         # 키를 바꿔 다른 클라이언트인 척해도 전체 한도에 걸린다.
-        r = client.post("/api/estimate", json={"title": "친구 생일"},
+        r = client.post("/api/search", json={"query": "한도 확인"},
                         headers={"X-API-Key": "another"})
         assert r.status_code == 429
     finally:
@@ -126,7 +126,7 @@ def test_인증이_꺼진_상태에서는_임의_API키로_한도를_우회할_�
 def test_본문이_너무_크면_413(monkeypatch):
     monkeypatch.delenv("KB_TUNE_API_KEY", raising=False)
     huge = "x" * (security.config.MAX_BODY_BYTES + 1)
-    r = client.post("/api/extract", json={"text": huge})
+    r = client.post("/api/chat", json={"message": huge})
     assert r.status_code == 413
 
 
@@ -134,20 +134,29 @@ def test_필드_상한을_넘으면_422(monkeypatch):
     """Content-Length 를 못 믿는 경우를 대비한 2차 방어선."""
     monkeypatch.delenv("KB_TUNE_API_KEY", raising=False)
     assert client.post("/api/chat", json={"message": "가" * 2_001}).status_code == 422
-    assert client.post("/api/categorize",
-                       json={"merchants": ["가맹점"] * 101}).status_code == 422
-    assert client.post("/api/forecast",
-                       json={"profile": {"monthly_income": -1}}).status_code == 422
+    assert client.post("/api/chat", json={
+        "message": "확인", "upcoming": [{"day": 1, "amount": 1}] * 201,
+    }).status_code == 422
+    assert client.post("/api/chat", json={
+        "message": "확인", "profile": {"monthly_income": -1},
+    }).status_code == 422
     assert client.post("/api/chat", json={
         "message": "카드값 알려줘", "card": {"pay_label": "가" * 41},
     }).status_code == 422
 
 
-def test_원본_금융_이미지는_외부_AI로_보내지_않는다(monkeypatch):
-    monkeypatch.delenv("KB_TUNE_API_KEY", raising=False)
-    r = client.post("/api/extract", json={"image_base64": "aGVsbG8="})
-    assert r.status_code == 422
-    assert "원본 이미지" in r.json()["detail"]
+def test_서버는_이미지도_가맹점_원문도_받는_칸이_없다():
+    """422로 거절하는 것보다 강하다 — 받는 필드 자체를 두지 않는다.
+
+    캡처 원본에는 이름·계좌·잔액이 한 화면에 섞이고, 가맹점 원문은 행동반경을
+    드러낸다. 거절 규칙은 한 군데 빠뜨리면 새지만, 스키마에 칸이 없으면
+    들어올 경로가 없다. 누가 그 칸을 되살리면 이 테스트가 먼저 깨진다.
+    """
+    schemas = client.get("/openapi.json").json()["components"]["schemas"]
+    fields = {name for schema in schemas.values()
+              for name in schema.get("properties", {})}
+    assert "image_base64" not in fields
+    assert "merchants" not in fields
 
 
 def test_대화_이력은_짧고_system_역할을_허용하지_않는다(monkeypatch):
@@ -191,31 +200,6 @@ def test_외부_AI용_금융_의도는_원문을_복사하지_않는다():
     assert "김민수" not in intent
     assert "헬스" not in intent
     assert intent == "금융 의도: 일정 추가와 예상 지출; 지출 유형: 여가; 명시 금액: 20,000원."
-
-
-@pytest.mark.parametrize("backend", ["openai", "remote-local"])
-def test_외부_모델에서_예상과_분류는_결정론_경로만_쓴다(monkeypatch, backend):
-    """실명이 섞인 제목·가맹점은 외부 모델 설정에서도 LLM 공용 통로를 안 탄다."""
-    if backend == "openai":
-        monkeypatch.setattr(security.config, "LLM_BACKEND", "openai")
-        monkeypatch.setenv("OPENAI_API_KEY", "test-only")
-    else:
-        monkeypatch.setattr(security.config, "LLM_BACKEND", "local")
-        monkeypatch.setattr(
-            security.config, "LOCAL_LLM_BASE_URL", "https://models.example/v1",
-        )
-
-    def must_not_call(*_args, **_kwargs):
-        raise AssertionError("외부 LLM에 자유형 제목/가맹점을 보냈습니다")
-
-    monkeypatch.setattr("app.llm.complete.complete_json", must_not_call)
-    estimate = client.post("/api/estimate", json={"title": "김민수 비밀 약속"})
-    categorize = client.post("/api/categorize", json={"merchants": ["김민수집 앞 비밀상점"]})
-
-    assert estimate.status_code == 200
-    assert estimate.json()["method"] == "fallback"
-    assert categorize.status_code == 200
-    assert categorize.json()["results"][0]["method"] == "fallback"
 
 
 def test_비식별화가_날짜와_금액_문맥을_지우지_않는다():

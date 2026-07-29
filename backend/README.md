@@ -69,25 +69,24 @@ OPENAI_MODEL=          # 비우면 config.py 의 기본값
 | POST | `/api/agent` | 대화 한 턴 — 답변 + 앱이 실행할 동작 제안 |
 | POST | `/api/search` · `/api/search/cost` | 웹 검색 답변 · 검색어 하나로 1인 기준 금액 |
 | GET | `/api/baseline` | 공개 통계 기준 금액 표(앱이 통째로 받아 기기에서 조회) |
-| POST | `/api/estimate` | **① 일정 제목 → 예상 지출** (캘린더 유형 개인화 + 엔진 범위 보정) |
-| POST | `/api/extract` | **② OCR 텍스트 → 거래 추출** (`image_base64` 원본은 422로 차단) |
-| POST | `/api/categorize` | **③ 가맹점 → 카테고리** (규칙 사전 → 미스만 LLM, 집합 강제) |
-| POST | `/api/forecast` | **④ 다음 달 일정·지출 예측** (반복 패턴 탐지) |
+
+서버 표면은 이게 전부다. 예상 지출 추정·거래 추출·가맹점 분류·다음 달 예측은
+**기기 안에서** 돈다(`EventEstimator`·`OCRService`·`SpendHistory`). 서버에 같은 걸
+한 벌 더 두면 일정 제목과 가맹점 원문을 받는 칸이 생기는데, 그 칸을 부르는 앱이 없었다.
 
 ### AI를 어디에 쓰는가 — 인식은 AI, 계산은 엔진
 
 | 기능 | AI가 하는 일(비정형→정형) | 엔진이 하는 일(검증) |
 |---|---|---|
-| ① 예상 지출 | 제목의 의미 파악·세상 지식 추정 | 같은 일정 유형 범위로 보정, 500원 단위 정리 |
-| ② 거래 추출 | Apple Vision이 기기 안에서 가맹점·금액 OCR | 서버는 원본 이미지를 거절하고, 결정론 파서가 금액 범위·잔액/합계 줄을 검증 |
-| ③ 분류 | 규칙이 놓친 가맹점 분류 | 허용 카테고리 집합 강제(계약 위반 값 폐기) |
-| ④ 예측 | (선택) 예측 설명 문장 | 반복 주기 탐지·월 합계 산출 전부 결정론 |
+| 대화 | 계획 숫자를 문장으로 | `groundedness`가 인용한 숫자를 허용 명단과 대조 |
+| 동작 제안 | "그 여행 다음 주로" → 구조화된 action | 날짜·금액 범위 강제, 실행은 앱이 |
+| 검색 금액 | 공개 정보에서 1인 기준 금액 | `searchguard`가 검색어에 제목의 낱말이 섞였는지 검사 |
 
-**키가 없어도 4개 모두 동작한다** — 규칙 사전·캘린더 유형·패턴 탐지로 결정론 경로가 항상 존재.
+**키가 없어도 전부 동작한다** — 엔진 + 템플릿으로 결정론 경로가 항상 존재.
 
 예:
 ```bash
-curl -s localhost:8000/api/forecast -X POST -H 'content-type: application/json' -d '{}' | python3 -m json.tool
+curl -s localhost:8000/api/baseline | python3 -m json.tool | head -40
 curl -sN localhost:8000/api/chat -X POST -H 'content-type: application/json' \
      -d '{"message":"이번 주 출근비까지 빼면 얼마 남아?"}'
 ```

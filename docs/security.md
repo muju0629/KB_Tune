@@ -40,9 +40,10 @@
 OCR과 거래 구조화는 Apple Vision·`LocalExtractor`로 **기기 안에서** 돈다
 ([OCRService.swift](../KB_Tune/OCRService.swift)). 이미지 원본과 OCR 원문 모두 서버로 보내지 않는다.
 
-백엔드의 `/api/extract`도 `image_base64` 입력을 거절한다. 앱 구현을 우회해 호출하더라도
-금융 캡처 원본이 외부 비전 모델로 전달되지 않는다. `/api/extract`의 텍스트 파서는
-개발·검증용으로 남아 있지만 iOS 앱은 이 엔드포인트를 호출하지 않는다.
+백엔드에는 이미지를 받는 칸 자체가 없다. 예전에는 `/api/extract`가 `image_base64`를
+422로 거절했지만, 거절 규칙은 한 군데 빠뜨리면 새고 필드는 안 새기 때문에 스키마에서
+없앴다. `test_security.py`가 OpenAPI 스키마 전체를 훑어 `image_base64`·`merchants`
+필드가 되살아나지 않았는지 확인한다.
 
 ## 3. 전송
 

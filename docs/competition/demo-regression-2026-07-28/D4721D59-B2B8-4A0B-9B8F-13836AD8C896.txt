@@ -1,4 +1,0 @@
-Query chain:
- →Find: Target Application 'muju.KB-Tune'
-  ↪︎Find: Descendants matching type StaticText
-    ↪︎Find: Elements matching predicate '"약 60,000원 계산 기준" IN identifiers'
