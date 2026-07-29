@@ -346,8 +346,12 @@ final class AppModel: ObservableObject {
         monthlyIncome - BudgetEngine.fixed - savingsGoal - BudgetEngine.installmentCarryover
     }
 
-    /// 데모 첫 달(7월) 이전에서 넘어온 금액. 8월 장부의 시작값은 여기가 아니라
-    /// 7월 마지막 주 잔액에서 온다 — 아낀 만큼이 다음 달로 넘어가는 게 이 앱의 약속이다.
+    /// 데모 첫 달(7월) 이전에서 넘어온 금액. **달을 넘길 때는 이월하지 않는다** —
+    /// 8월은 8월 몫으로만 시작한다. 이월은 한 달 안의 주차끼리만 한다.
+    ///
+    /// 예전에는 7월 마지막 주 잔액을 8월 첫 주에 얹었는데, 8월도 이미 한 달치
+    /// 가용액을 통째로 받으므로 남은 돈이 두 번 세어졌다. 화면에서도 8월 1주차가
+    /// 왜 이렇게 많은지 설명할 수 없었다.
     @Published var openingRollover = 0
 
     func weekBudgets(of month: Int) -> [WeekBudget] {
@@ -357,9 +361,8 @@ final class AppModel: ObservableObject {
                 .filter { range.contains($0.dayNumber) }
                 .reduce(0) { $0 + $1.spendTotal }
         }
-        let carriedIn = month == DemoClock.firstMonth
-            ? openingRollover
-            : WeekLedger.closingRollover(weekBudgets(of: month - 1))
+        // 달을 넘길 때는 이월하지 않는다. 첫 달만 바깥에서 받은 값으로 시작한다.
+        let carriedIn = month == DemoClock.firstMonth ? openingRollover : 0
         return WeekLedger.build(disposable: monthlyDisposable,
                                 spendByWeek: spendByWeek,
                                 openingRollover: carriedIn,
@@ -376,8 +379,8 @@ final class AppModel: ObservableObject {
     /// 이번 달이 끝나면 다음 달로 넘어갈 금액.
     var closingRollover: Int { WeekLedger.closingRollover(weekBudgets) }
 
-    /// 다음 달 첫 주가 어떻게 시작되는지.
-    /// 고정비·적금은 그대로 두고, 이번 달에 남긴 금액만 얹어서 보여준다.
+    /// 다음 달 첫 주가 어떻게 시작되는지 — **그 달 몫만** 보여준다.
+    /// 이번 달에 남긴 금액은 얹지 않는다(달 간 이월 없음).
     var nextMonthFirstWeek: WeekBudget {
         let next = DemoClock.month(of: todayDayNumber) + 1
         if DemoClock.months.contains(next), let first = weekBudgets(of: next).first {
@@ -385,7 +388,7 @@ final class AppModel: ObservableObject {
         }
         return WeekLedger.nextMonthOpening(
             disposable: monthlyDisposable,
-            carriedIn: closingRollover,
+            carriedIn: 0,
             month: next)
     }
 
