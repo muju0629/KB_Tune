@@ -123,6 +123,47 @@ def test_baseline_endpoint_needs_no_request_body():
     assert body["events"] and body["monthly"]
 
 
+def test_search_request_has_no_field_but_the_query():
+    """받을 칸이 있으면 언젠가 채워 보낸다. 검색어 말고는 칸 자체를 두지 않는다."""
+    from app.models import SearchRequest
+
+    assert set(SearchRequest.model_fields) == {"query"}
+
+
+def test_search_rejects_a_query_long_enough_to_carry_a_title():
+    resp = client.post("/api/search", json={"query": "가" * 200})
+    assert resp.status_code == 422
+
+
+def test_search_is_unavailable_without_an_external_model():
+    """offline 이면 검색 도구가 없다. 없는데 있는 척하지 않고 사용자에게 넘긴다."""
+    resp = client.post("/api/search", json={"query": "국내 3박 여행 1인 평균 경비"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["method"] == "unavailable"
+    assert body["amount"] is None
+
+
+def test_search_drops_an_answer_with_no_sources(monkeypatch):
+    """근거 문서를 못 대는 숫자는 모델이 지어낸 것과 구분할 수 없다."""
+    from app.llm import search
+
+    monkeypatch.setattr(search.config, "llm_backend", lambda: "claude")
+    monkeypatch.setattr(search, "_search",
+                        lambda *_a: ({"amount": 300_000, "basis": "그냥"}, []))
+    assert search.search_cost("국내 3박 여행 1인 평균 경비").method == "unavailable"
+
+
+def test_search_drops_an_amount_outside_a_believable_range(monkeypatch):
+    from app.llm import search
+
+    monkeypatch.setattr(search.config, "llm_backend", lambda: "claude")
+    for absurd in (12, 90_000_000, float("inf"), True, "3만원"):
+        monkeypatch.setattr(search, "_search",
+                            lambda *_a, v=absurd: ({"amount": v, "basis": "x"}, ["출처"]))
+        assert search.search_cost("국내 3박 여행 1인 평균 경비").method == "unavailable"
+
+
 def test_baseline_response_carries_no_personal_data():
     """공개 통계만 나가야 한다. 데모 페르소나의 이름·금액이 섞이면 안 된다."""
     text = client.get("/api/baseline").text

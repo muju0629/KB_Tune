@@ -21,10 +21,12 @@ from .eval.runner import run_eval
 from .llm.chat import chat_stream
 from .llm.coach import coach
 from .llm.extract import extract_from_text
+from .llm.search import search_cost
 from .models import (CategorizeRequest, CategorizeResult, ChatRequest,
                      CoachRequest, EstimateRequest, EstimateResult,
                      ExtractRequest, ExtractResult, ForecastResult,
-                     PlanRequest, PlanResult, Profile)
+                     PlanRequest, PlanResult, Profile, SearchRequest,
+                     SearchResult)
 from .security import BodySizeLimitMiddleware, rate_limit, require_api_key
 
 app = FastAPI(title="KB Tune Agent", version="1.0.0")
@@ -109,6 +111,19 @@ def estimate_endpoint(req: EstimateRequest):
     use_private_llm = config.llm_enabled() and not config.llm_is_external()
     return estimate_event_cost(req.title, TRANSACTIONS_HISTORY,
                                use_llm=use_private_llm, age_bucket=req.age_bucket)
+
+
+# ---------- 웹 검색으로 금액 찾기 ----------
+
+@app.post("/api/search", response_model=SearchResult, dependencies=_llm)
+def search_endpoint(req: SearchRequest):
+    """검색어 하나로 1인 기준 금액을 찾는다. 사용자가 켰을 때만 앱이 부른다.
+
+    이 통로는 질의가 모델 제공자를 거쳐 검색 엔진까지 나간다. 그래서 SearchRequest 에는
+    검색어 말고 아무 필드도 없고, 앱은 코드에 정의된 말로만 조립해서 보낸다
+    (`SearchQuery.make()`). 일정 제목 원문은 여기 도달할 경로가 없다.
+    """
+    return search_cost(req.query)
 
 
 # ---------- 공개 통계 기준 금액 ----------

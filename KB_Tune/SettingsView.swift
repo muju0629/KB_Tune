@@ -16,6 +16,8 @@ struct SettingsView: View {
 
     /// AgentService의 동의 키와 같은 값을 본다 — 여기서 끄면 전송도 즉시 멈춘다.
     @AppStorage(CloudAIConsent.key) private var usesCloudAI = false
+    /// 웹 검색은 나가는 곳이 달라(검색 엔진) 동의를 따로 받는다.
+    @AppStorage(WebSearchConsent.key) private var usesWebSearch = false
 
     private var savingPct: Int {
         model.monthlyIncome > 0
@@ -178,6 +180,22 @@ struct SettingsView: View {
                             .font(.kb(14.5)).foregroundStyle(KB.ink)
                         Text(usesCloudAI ? "질문 원문·실명 없이 필요한 집계값만 전달" : "기기 안의 예산·패턴 엔진만 사용")
                             .font(.kb(11.5)).foregroundStyle(usesCloudAI ? KB.green : KB.muted)
+                    }
+                }
+                .tint(KB.green)
+                .padding(.horizontal, 16).padding(.vertical, 12)
+
+                Divider().padding(.leading, 16)
+
+                Toggle(isOn: $usesWebSearch) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("모르는 일정은 웹에서 찾기")
+                            .font(.kb(14.5)).foregroundStyle(KB.ink)
+                        Text(usesWebSearch
+                             ? "‘국내 3박 여행 1인 평균 경비’처럼 앱이 만든 문장만 검색해요"
+                             : "여행처럼 기준이 없는 일정은 금액을 직접 넣어요")
+                            .font(.kb(11.5)).foregroundStyle(usesWebSearch ? KB.green : KB.muted)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .tint(KB.green)

@@ -22,6 +22,26 @@ enum CloudAIConsent {
     static func set(_ value: Bool) { UserDefaults.standard.set(value, forKey: key) }
 }
 
+/// 웹 검색 동의. 클라우드 AI 동의와 따로 둔다 — 나가는 것도 나가는 곳도 다르다.
+/// 클라우드 AI는 재무 집계값이 모델 제공자까지, 웹 검색은 검색어가 검색 엔진까지 간다.
+enum WebSearchConsent {
+    static let key = "usesWebSearchForCosts"
+
+    static var granted: Bool { UserDefaults.standard.bool(forKey: key) }
+
+    static func set(_ value: Bool) { UserDefaults.standard.set(value, forKey: key) }
+}
+
+/// 백엔드 SearchResult 와 같은 스키마.
+struct SearchCostResult: Codable {
+    let amount: Int?
+    let low: Int?
+    let high: Int?
+    let basis: String
+    let sources: [String]
+    let method: String      // web | unavailable
+}
+
 /// 서버에 보낼 수 있는 짧은 대화 문맥. 화면 모델이나 실행 버튼은 포함하지 않는다.
 struct AgentChatTurn {
     let role: String       // user | assistant
@@ -256,6 +276,19 @@ final class AgentService: ObservableObject {
         guard let (data, resp) = try? await URLSession.shared.data(for: req),
               (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
         return try? JSONDecoder().decode(BaselinePrices.Table.self, from: data)
+    }
+
+    /// 웹 검색으로 금액 찾기. 동의를 안 켰으면 부르지 않는다(호출부가 확인).
+    ///
+    /// 보내는 건 `SearchQuery.make()` 가 코드에 있는 말로만 조립한 검색어 하나뿐이다.
+    /// 일정 제목·이름·금액은 이 요청에 실릴 칸이 아예 없다.
+    static func searchCost(query: String) async -> SearchCostResult? {
+        let req = request("api/search", timeout: 20, body: ["query": query])
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              (resp as? HTTPURLResponse)?.statusCode == 200,
+              let r = try? JSONDecoder().decode(SearchCostResult.self, from: data),
+              r.amount != nil else { return nil }
+        return r
     }
 
     /// 스트리밍 대화. 토큰이 올 때마다 onToken(델타) 호출.
