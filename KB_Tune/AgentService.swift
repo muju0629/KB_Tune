@@ -246,6 +246,18 @@ final class AgentService: ObservableObject {
         }
     }
 
+    /// 공개 통계 기준 금액 표를 통째로 받아온다.
+    ///
+    /// 이 경로로 나가는 게 없다 — 본문 없는 GET 이고, 받아오는 값도 참가격·가계동향조사
+    /// 같은 공표 통계뿐이다. 일정 제목을 서버에 물어보는 대신 표를 받아 기기 안에서
+    /// 조회하려고 이렇게 만들었다. 실패하면 nil — 앱에 넣어 둔 사본을 계속 쓴다.
+    static func fetchBaseline() async -> BaselinePrices.Table? {
+        let req = request("api/baseline", timeout: 5)
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        return try? JSONDecoder().decode(BaselinePrices.Table.self, from: data)
+    }
+
     /// 스트리밍 대화. 토큰이 올 때마다 onToken(델타) 호출.
     /// 반환: true=백엔드 응답 성공, false=실패(호출부가 로컬 폴백).
     func chatStream(_ message: String, history: [AgentChatTurn] = [], model: AppModel,

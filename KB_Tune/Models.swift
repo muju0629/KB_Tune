@@ -238,14 +238,16 @@ final class AppModel: ObservableObject {
     @Published var savingsGoal = 800_000
     // '나한테 더 필요한 소비' — 관계·행사성 취향은 예산을 조정할 때 줄이지 않는다.
     // hobbies 에서 파생하므로 설정에서 취향을 바꾸면 즉시 따라온다.
-    static let protectableTags: Set<String> = ["데이트", "가족", "모임"]
+    static let protectableTags: Set<String> = ["데이트", "가족", "모임", "선물", "반려동물"]
     var protectedTags: Set<String> {
         let p = hobbies.intersection(Self.protectableTags)
-        return p.isEmpty ? ["데이트", "가족"] : p
+        // 관계·행사성 취향을 하나도 안 골랐으면 고른 것 전부를 지킨다.
+        // 기본 선택이 없어진 뒤로는 고르지 않은 걸 지킨다고 말할 수 없다.
+        return p.isEmpty ? hobbies : p
     }
     /// "가족·데이트" 처럼 문장에 끼워 쓰는 목록 문자열
     var protectedList: String { protectedTags.sorted().joined(separator: "·") }
-    @Published var hobbies: Set<String> = ["영화", "전시", "가족", "데이트"]
+    @Published var hobbies: Set<String> = []
 
     /// 취향 → 상품 매칭 태그 변환 (Products.matchTags와 맞춤)
     var interestTags: Set<String> {
@@ -864,7 +866,7 @@ final class AppModel: ObservableObject {
         monthlyIncome = 2_200_000
         savingsGoal = 800_000
         direction = .maintain
-        hobbies = ["영화", "전시", "가족", "데이트"]
+        hobbies = []
         calendarDays = Self.makeCalendar()
         learnedSpendRecords = []
         SpendHistory.replaceLearnedRecords([])
@@ -1012,13 +1014,25 @@ final class AppModel: ObservableObject {
 let keepCandidates: [(tag: String, label: String, symbol: String)] = [
     ("데이트", "데이트", "heart"),
     ("모임", "모임·친구", "person.2"),
-    ("연구", "연구·공부", "laptopcomputer"),
-    ("영화", "영화", "film"),
-    ("카페", "카페", "cup.and.saucer"),
+    ("가족", "가족", "house"),
     ("음식", "맛집·음식", "fork.knife"),
-    ("여행", "여행", "airplane"),
-    ("운동", "운동", "figure.run"),
+    ("카페", "카페", "cup.and.saucer"),
+    ("술", "술·유흥", "wineglass"),
+    ("영화", "영화", "film"),
     ("전시", "전시·공연", "paintpalette"),
     ("게임", "게임", "gamecontroller"),
-    ("가족", "가족", "house"),
+    ("여행", "여행", "airplane"),
+    ("운동", "운동", "figure.run"),
+    ("취미", "취미·덕질", "star"),
+    ("연구", "연구·공부", "laptopcomputer"),
+    ("자기계발", "자기계발", "books.vertical"),
+    ("쇼핑", "쇼핑·패션", "bag"),
+    ("미용", "미용·관리", "scissors"),
+    ("교통", "교통·이동", "car"),
+    ("건강", "건강·의료", "cross.case"),
+    ("구독", "구독·디지털", "play.rectangle"),
+    ("선물", "선물·경조사", "gift"),
+    ("반려동물", "반려동물", "pawprint"),
+    ("생활", "생활·주거", "sofa"),
+    ("기타", "기타", "ellipsis"),
 ]

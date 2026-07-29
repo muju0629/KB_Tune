@@ -8,6 +8,7 @@ __pycache__/
 .env
 
 tests/
+tools/
 README.md
 DEPLOY.md
 run.sh

@@ -220,6 +220,9 @@ class EvalResult(BaseModel):
 class EstimateRequest(BaseModel):
     title: Annotated[str, Field(min_length=1, max_length=80)]
     day: Day | None = None
+    # 공개 통계 기준값에 연령 배수를 적용할 때만 쓴다. 선택 입력이라 비어 오는 게 정상이고,
+    # 저장하지 않는다. 나이 자체보다 좁은 정보를 받으려고 만 나이 대신 10년 단위로 받는다.
+    age_bucket: Literal["20", "30", "40", "50"] | None = None
 
 
 class EstimateResult(BaseModel):
@@ -230,7 +233,7 @@ class EstimateResult(BaseModel):
     high: int            # 같은 일정 유형의 예상 상한
     confidence: float    # 0~1
     basis: str           # 사용자에게 보여줄 근거 한 줄
-    method: str          # rule | history | llm
+    method: str          # rule | history | baseline | llm
     llm_raw: int | None = None   # LLM 원안(엔진 보정 전) — 투명성
 
 

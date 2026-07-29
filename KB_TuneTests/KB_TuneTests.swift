@@ -858,4 +858,59 @@ struct KB_TuneTests {
         #expect(EventEstimator.estimate("와드").amount == 40_000)
     }
 
+    // MARK: 공개 통계 기준 금액
+
+    @Test func bundledBaselineTableIsReadableOffline() {
+        // 서버가 없어도 값이 나와야 한다. 첫 실행·비행기 모드·백엔드 다운 모두 이 경로다.
+        #expect(!BaselinePrices.table.events.isEmpty)
+        #expect(!BaselinePrices.table.items.isEmpty)
+        #expect(BaselinePrices.monthly.total > 0)
+    }
+
+    @Test func everyBaselineRowCarriesItsSource() {
+        // 근거 없는 숫자를 못 넣게 막는다 — 화면에 출처를 그대로 인용하기 때문이다.
+        for event in BaselinePrices.table.events {
+            #expect(!event.source.isEmpty)
+            #expect(event.low <= event.amount && event.amount <= event.high)
+        }
+        for item in BaselinePrices.table.items {
+            #expect(!item.source.isEmpty)
+            #expect(item.low <= item.amount && item.amount <= item.high)
+        }
+    }
+
+    @Test func newUserWithoutHistoryGetsPublicStatisticsNotSomeoneElsesSpending() {
+        // 이력이 빈 사람. 이 기능이 존재하는 이유다.
+        let result = EventEstimator.estimate("친구 저녁", history: [])
+        #expect(result.method == "baseline")
+        #expect(result.amount > 0)
+        #expect(result.basis.contains("출처는"))
+    }
+
+    @Test func personalHistoryStillWinsOverPublicAverage() {
+        // 기기에 같은 카테고리 결제 이력이 있으면 통계 평균이 그걸 덮으면 안 된다.
+        let result = EventEstimator.estimate("친구 저녁")
+        #expect(result.method == "history")
+        #expect(result.amount != BaselinePrices.forCategory("모임")?.amount)
+        #expect(result.basis.contains("기기에 저장된"))
+    }
+
+    @Test func ageBucketOnlyMovesTheStatisticalBaseline() {
+        let plain = BaselinePrices.forCategory("모임")
+        let twenties = BaselinePrices.forCategory("모임", ageBucket: "20")
+        #expect(twenties!.amount < plain!.amount)
+        // 표에 없는 나이대를 넣어도 평균으로 조용히 떨어져야 한다.
+        #expect(BaselinePrices.forCategory("모임", ageBucket: "99")!.amount == plain!.amount)
+    }
+
+    @Test func categoriesWithoutPublicStatisticsStayOnTheOldRules() {
+        // 축의금에 대응하는 공표 통계가 없다. 없으면 없다고 해야 규칙으로 넘어간다.
+        #expect(BaselinePrices.forCategory("경조사") == nil)
+    }
+
+    @Test func itemLookupIsMoreSpecificThanCategoryAverage() {
+        let match = BaselinePrices.forTitle("점심은 자장면")
+        #expect(match?.basis.contains("자장면") == true)
+    }
+
 }
