@@ -11,56 +11,25 @@ import Foundation
 import Combine
 import NaturalLanguage
 
-/// 월수입·청구액·소비 문맥을 외부 LLM 제공자에게 보낼지에 대한 별도 동의.
-/// 기본값은 false이며, 선택 전에는 로컬 엔진 답변만 사용한다.
-enum CloudAIConsent {
+/// AI 기능을 쓸지에 대한 단 하나의 동의.
+///
+/// 예전에는 스위치가 넷이었다(클라우드 AI·대화로 일정 바꾸기·웹 검색·금액 검색).
+/// 나가는 것이 각각 달라 나눴는데, 쓰는 사람은 뭘 켜야 뭐가 되는지 알 수 없었다.
+/// 무엇을 지킬지는 사용자가 고를 일이 아니라 코드가 지킬 일이다.
+///
+/// **켜면 AI 가 다 한다** — 묻고 답하기, 일정 추가·수정·삭제, 기준 금액 조회, 웹 검색.
+/// **켜도 개인정보는 안 나간다** — 이건 스위치가 아니라 규칙이고, 코드가 강제한다.
+///
+///   · 이름·연락처·주소·계좌·저장된 일정 제목 → `OutboundPrivacy.sanitize()` 가 기기에서 가림
+///   · 검색 엔진에는 코드가 만든 문장만 → 서버의 `searchguard` 가 검사
+///   · 모델 제공자는 학습에 쓰지 않고 30일 뒤 지움
+///
+/// 끄면 기기 안의 예산·패턴 엔진만 쓴다. 앱은 그래도 다 돌아간다.
+enum AIConsent {
+    // 예전 키를 그대로 쓴다 — 이미 켜 둔 사람이 다시 켜지 않아도 되게.
     static let key = "usesCloudAIAnalysis"
 
     static var asked: Bool { UserDefaults.standard.object(forKey: key) != nil }
-    static var granted: Bool { UserDefaults.standard.bool(forKey: key) }
-
-    static func set(_ value: Bool) { UserDefaults.standard.set(value, forKey: key) }
-}
-
-/// 웹 검색 동의 — 클라우드 AI 동의와 별개로 받는다.
-///
-/// 클라우드 AI는 질문을 `금융 의도: …; 지출 유형: …; 명시 금액: …` 으로 줄여서 보내지만,
-/// 검색은 "이태원 맛집" 같은 원문을 그대로 보내야 답이 나온다. 경계의 성격이 다르므로
-/// 하나의 동의로 묶지 않는다. 이걸 켜도 예산·일정 데이터는 검색으로 나가지 않는다 —
-/// 나가는 것은 그 질문 한 줄뿐이다.
-enum WebSearchConsent {
-    static let key = "usesWebSearch"
-
-    static var asked: Bool { UserDefaults.standard.object(forKey: key) != nil }
-    static var granted: Bool { UserDefaults.standard.bool(forKey: key) }
-
-    static func set(_ value: Bool) { UserDefaults.standard.set(value, forKey: key) }
-}
-
-/// 대화가 일정을 직접 다루게 할지에 대한 동의.
-///
-/// 이걸 켜면 **방금 친 문장이 가명처리된 채로** 모델까지 간다. 이름·연락처·이미 저장된
-/// 일정 제목은 `sanitize()` 가 기기에서 가리지만, 지금 새로 말한 일정 이름은 나간다 —
-/// 모델이 그걸 알아들어야 일정을 넣고 고칠 수 있기 때문이다.
-///
-/// 끄면 대화는 예전처럼 금융 의도 라벨만 보내고, 일정 변경은 주간 탭에서만 한다.
-enum PlanAgentConsent {
-    static let key = "usesPlanAgent"
-
-    static var asked: Bool { UserDefaults.standard.object(forKey: key) != nil }
-    static var granted: Bool { UserDefaults.standard.bool(forKey: key) }
-
-    static func set(_ value: Bool) { UserDefaults.standard.set(value, forKey: key) }
-}
-
-/// 일정 금액을 웹에서 찾는 동의. 위 WebSearchConsent 와 따로 둔다.
-///
-/// 저쪽은 대화에서 물어본 질문 원문이 나가고, 이쪽은 제목에서 만든 검색어가 나간다.
-/// 나가는 것의 성격이 달라 스위치도 따로다 — 대화 검색을 켰다고 일정 제목에서
-/// 뽑은 말까지 나가면 사용자가 동의한 범위를 넘는다.
-enum CostSearchConsent {
-    static let key = "usesWebSearchForCosts"
-
     static var granted: Bool { UserDefaults.standard.bool(forKey: key) }
 
     static func set(_ value: Bool) { UserDefaults.standard.set(value, forKey: key) }
@@ -266,7 +235,7 @@ final class AgentService: ObservableObject {
     /// 예산·일정·이름은 이 경로에 아예 싣지 않는다. 사용자가 버튼을 눌렀을 때만 호출된다.
     @MainActor
     func search(_ query: String) async -> ChatMessage? {
-        guard WebSearchConsent.granted else { return nil }
+        guard AIConsent.granted else { return nil }
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
@@ -368,19 +337,25 @@ final class AgentService: ObservableObject {
     func agentTurn(_ message: String, model: AppModel, maySearch: Bool,
                    events: [AgentEventRef] = [],
                    history: [AgentChatTurn] = []) async -> AgentTurnResult? {
-        let body: [String: Any] = [
-            "message": OutboundPrivacy.sanitize(message, model: model),
-            "today": DemoClock.today,
-            "may_search": maySearch,
-            // 제목은 안 싣는다 — 번호·날짜·유형·금액이면 모델이 지목할 수 있다.
-            "events": events.map {
-                ["ref": $0.ref, "day": $0.day, "category": $0.category, "amount": $0.amount]
-            },
-            "history": history.suffix(6).map {
-                ["role": $0.role,
-                 "content": OutboundPrivacy.sanitize($0.content, model: model)]
-            },
-        ]
+        // 계획 숫자는 대화 경로가 쓰는 것과 **같은 함수**로 만든다. 여기서 따로 만들면
+        // 화면에 293,410원이 떠 있는데 대화가 204,000원이라고 답하는 일이 생긴다.
+        // 실제로 그렇게 어긋났었다 — 서버가 요청에 프로필이 없으면 데모 페르소나로 계산한다.
+        guard var body = Self.makeChatRequestBody(message: message, history: history,
+                                                  model: model) else { return nil }
+        // 위 함수는 message 를 금융 의도 라벨로 줄여 놓는다(/api/chat 의 경계). 에이전트는
+        // "제주도 여행 넣어줘"를 알아들어야 하므로 문장을 되살린다 — 대신 sanitize 는 거친다.
+        // 이 한 줄이 이 기능과 /api/chat 의 프라이버시 등급을 가르는 지점이다.
+        body["message"] = OutboundPrivacy.sanitize(message, model: model)
+        body["history"] = history.suffix(6).map {
+            ["role": $0.role == "assistant" ? "assistant" : "user",
+             "content": OutboundPrivacy.sanitize($0.content, model: model)]
+        }
+        body["today"] = DemoClock.today
+        body["may_search"] = maySearch
+        // 제목은 안 싣는다 — 번호·날짜·유형·금액이면 모델이 지목할 수 있다.
+        body["events"] = events.map {
+            ["ref": $0.ref, "day": $0.day, "category": $0.category, "amount": $0.amount]
+        }
         let req = Self.request("api/agent", timeout: 45, body: body)
         guard let (data, resp) = try? await URLSession.shared.data(for: req) else {
             backendReachable = false
@@ -402,8 +377,8 @@ final class AgentService: ObservableObject {
         // 만들기 전에 모델 위치를 먼저 확인한다.
         if backendReachable == nil { await ping() }
         guard llmEnabled else { return false }
-        guard !externalLLM || CloudAIConsent.granted else { return false }
-        guard Self.isLoopbackBackend || CloudAIConsent.granted else { return false }
+        guard !externalLLM || AIConsent.granted else { return false }
+        guard Self.isLoopbackBackend || AIConsent.granted else { return false }
         guard let body = Self.makeChatRequestBody(message: message, history: history, model: model)
         else { return false }
         let req = Self.request("api/chat", timeout: 12, body: body)

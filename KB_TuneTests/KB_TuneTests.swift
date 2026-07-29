@@ -959,21 +959,19 @@ struct KB_TuneTests {
 
     @Test func planAgentIsOffUntilTheUserTurnsItOn() {
         // 켜면 방금 친 문장이 모델까지 간다. 기본값이 꺼짐이 아니면 동의 없이 나간다.
-        UserDefaults.standard.removeObject(forKey: PlanAgentConsent.key)
-        #expect(PlanAgentConsent.granted == false)
+        UserDefaults.standard.removeObject(forKey: AIConsent.key)
+        #expect(AIConsent.granted == false)
     }
 
-    @Test func consentsDoNotTurnEachOtherOn() {
-        // 넷 다 나가는 것이 달라 스위치가 따로다. 하나를 켠다고 다른 게 켜지면 안 된다.
-        let keys = [CloudAIConsent.key, WebSearchConsent.key,
-                    PlanAgentConsent.key, CostSearchConsent.key]
-        for key in keys { UserDefaults.standard.removeObject(forKey: key) }
+    @Test func oneSwitchTurnsOnEverythingAndNothingElseIsNeeded() {
+        // 스위치는 하나뿐이다. 켜면 대화·일정 변경·검색이 다 되고, 끄면 다 멈춘다.
+        // 예전에는 넷이어서 "뭘 켜야 뭐가 되는지" 알 수 없었다.
+        AIConsent.set(false)
+        #expect(AIConsent.granted == false)
 
-        PlanAgentConsent.set(true)
-        #expect(CloudAIConsent.granted == false)
-        #expect(WebSearchConsent.granted == false)
-        #expect(CostSearchConsent.granted == false)
-        PlanAgentConsent.set(false)
+        AIConsent.set(true)
+        #expect(AIConsent.granted)
+        AIConsent.set(false)
     }
 
     @Test func agentTurnMasksNamesAndSavedEventTitles() {
@@ -988,15 +986,11 @@ struct KB_TuneTests {
         #expect(!sent.contains("010-1234-5678"))
     }
 
-    @Test func webSearchIsOffUntilTheUserTurnsItOn() {
-        // 기본값이 꺼짐이어야 한다. 켠 적 없는 사람의 검색어가 나가면 안 된다.
-        UserDefaults.standard.removeObject(forKey: CostSearchConsent.key)
-        #expect(CostSearchConsent.granted == false)
-
-        // 대화 검색을 켜도 일정 제목에서 만든 검색어까지 나가면 안 된다 — 스위치가 다르다.
-        WebSearchConsent.set(true)
-        #expect(CostSearchConsent.granted == false)
-        WebSearchConsent.set(false)
+    @Test func nothingLeavesUntilTheUserTurnsAIOn() {
+        // 켠 적 없는 사람에게서는 아무것도 나가면 안 된다. 기본값이 꺼짐이어야 한다.
+        UserDefaults.standard.removeObject(forKey: AIConsent.key)
+        #expect(AIConsent.granted == false)
+        #expect(AIConsent.asked == false)
     }
 
 }

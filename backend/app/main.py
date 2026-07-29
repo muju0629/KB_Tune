@@ -148,7 +148,7 @@ def agent_endpoint(req: AgentRequest):
     """
     plan = build_plan(_profile(req), req.today, req.include_candidate)
     return run_agent(plan, req.message, req.today, req.may_search,
-                     req.history, req.events)
+                     req.history, req.events, req.app_numbers)
 
 
 # ---------- 웹 검색으로 금액 찾기 ----------

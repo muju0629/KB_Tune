@@ -263,7 +263,7 @@ struct ChatbotView: View {
         .task {
             await agent.ping()
             // 외부 모델뿐 아니라 원격 백엔드도 재무 집계값이 기기를 떠나는 경계다.
-            showConsent = agent.requiresOffDeviceConsent && !CloudAIConsent.asked
+            showConsent = agent.requiresOffDeviceConsent && !AIConsent.asked
         }
         .sheet(isPresented: $showConsent) { consentSheet }
         .sheet(item: $pendingSearchQuery) { searchConsentSheet($0) }
@@ -303,12 +303,12 @@ struct ChatbotView: View {
 
                 VStack(spacing: 9) {
                     consentButton("검색할게요", filled: true) {
-                        WebSearchConsent.set(true)
+                        AIConsent.set(true)
                         pendingSearchQuery = nil
                         Task { await runSearch(query) }
                     }
                     consentButton("안 할래요", filled: false) {
-                        WebSearchConsent.set(false)
+                        AIConsent.set(false)
                         pendingSearchQuery = nil
                     }
                 }
@@ -332,7 +332,7 @@ struct ChatbotView: View {
         agentIndex = index
 
         guard let result = await agent.agentTurn(message, model: model,
-                                                 maySearch: WebSearchConsent.granted,
+                                                 maySearch: AIConsent.granted,
                                                  events: index.refs,
                                                  history: history) else {
             messages.append(ChatMessage(
@@ -399,7 +399,7 @@ struct ChatbotView: View {
         }
         // X로 닫거나 쓸어내리면 외부 전송에 동의하지 않은 것으로 본다.
         .onDisappear {
-            if !CloudAIConsent.asked { chooseConsent(cloud: false) }
+            if !AIConsent.asked { chooseConsent(cloud: false) }
         }
     }
 
@@ -432,7 +432,7 @@ struct ChatbotView: View {
     }
 
     private func chooseConsent(cloud: Bool) {
-        CloudAIConsent.set(cloud)
+        AIConsent.set(cloud)
         showConsent = false
     }
 
@@ -480,7 +480,7 @@ struct ChatbotView: View {
     /// 검색은 질문 원문이 그대로 나가므로 가장 강한 표기가 되어야 한다.
     private var privacyBadgeLabel: String {
         if searchingNow { return "검색 사용 중" }
-        guard CloudAIConsent.granted else { return "기기 안에서만" }
+        guard AIConsent.granted else { return "기기 안에서만" }
         return "직접식별자·원문 비공개"
     }
 
@@ -640,7 +640,7 @@ struct ChatbotView: View {
             HStack(spacing: 8) {
                 smallAction("검색해서 알아보기", filled: true) {
                     consumeAction(message.id)
-                    if WebSearchConsent.granted {
+                    if AIConsent.granted {
                         Task { await runSearch(query) }
                     } else {
                         pendingSearchQuery = SearchPrompt(query: query)
@@ -908,7 +908,7 @@ struct ChatbotView: View {
         // 한 경로에서 처리하므로, 예전처럼 모드를 골라 가며 쓰지 않아도 된다.
         // 검색은 에이전트가 필요하다고 판단할 때만 일어나고, 그 전에 서버의 검증기가
         // 검색어를 검사한다.
-        if PlanAgentConsent.granted {
+        if AIConsent.granted {
             withAnimation(.easeOut(duration: 0.25)) { isThinking = true }
             Task { await runAgent(trimmed, history: history) }
             return

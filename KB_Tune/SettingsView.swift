@@ -15,12 +15,7 @@ struct SettingsView: View {
     @State private var showResetConfirm = false
 
     /// AgentService의 동의 키와 같은 값을 본다 — 여기서 끄면 전송도 즉시 멈춘다.
-    @AppStorage(CloudAIConsent.key) private var usesCloudAI = false
-    /// 일정 금액 검색은 대화 검색과 나가는 것이 달라 스위치를 따로 둔다.
-    @AppStorage(CostSearchConsent.key) private var usesCostSearch = false
-    /// 대화가 일정을 직접 바꾸게 할지. 켜면 방금 친 문장이 가명처리된 채로 모델까지 간다.
-    @AppStorage(PlanAgentConsent.key) private var usesPlanAgent = false
-    @AppStorage(WebSearchConsent.key) private var usesWebSearch = false
+    @AppStorage(AIConsent.key) private var usesAI = false
 
     private var savingPct: Int {
         model.monthlyIncome > 0
@@ -176,64 +171,19 @@ struct SettingsView: View {
     private var privacySection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("개인정보").font(.kb(13, .semibold)).foregroundStyle(KB.muted)
+
+            // 스위치는 하나다. 예전에는 넷이었는데, 무엇을 지킬지는 사용자가 고를 일이
+            // 아니라 코드가 지킬 일이라서 합쳤다. 남은 선택은 "AI를 쓸지 말지" 하나뿐이다.
             VStack(spacing: 0) {
-                Toggle(isOn: $usesCloudAI) {
+                Toggle(isOn: $usesAI) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("클라우드 AI 분석")
+                        Text("AI 기능")
                             .font(.kb(14.5)).foregroundStyle(KB.ink)
-                        Text(usesCloudAI ? "질문 원문·실명 없이 필요한 집계값만 전달" : "기기 안의 예산·패턴 엔진만 사용")
-                            .font(.kb(11.5)).foregroundStyle(usesCloudAI ? KB.green : KB.muted)
-                    }
-                }
-                .tint(KB.green)
-                .padding(.horizontal, 16).padding(.vertical, 12)
-
-                rowDivider
-
-                // 이걸 켜야 대화에서 일정을 넣고 고치고 지울 수 있다. 대신 방금 친 문장이
-                // 가명처리된 채로 모델까지 간다 — 새 일정 이름을 알아들어야 하기 때문이다.
-                Toggle(isOn: $usesPlanAgent) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("대화로 일정 바꾸기")
-                            .font(.kb(14.5)).foregroundStyle(KB.ink)
-                        Text(usesPlanAgent
-                             ? "이름·연락처·저장된 일정 제목은 가리고, 방금 말한 일정 이름만 전달"
-                             : "대화는 묻고 답하기만 하고, 일정은 주간 화면에서 바꿈")
+                        Text(usesAI
+                             ? "대화로 묻고, 일정도 넣고 고치고 지울 수 있어요"
+                             : "기기 안의 예산·패턴 엔진만 써요")
                             .font(.kb(11.5))
-                            .foregroundStyle(usesPlanAgent ? KB.caution : KB.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                .tint(KB.green)
-                .padding(.horizontal, 16).padding(.vertical, 12)
-
-                rowDivider
-
-                // 클라우드 AI와 따로 둔다 — 나가는 것의 성격이 다르다.
-                // 클라우드 AI는 질문을 유형·금액으로 줄여 보내지만, 검색은 원문이 그대로 나간다.
-                Toggle(isOn: $usesWebSearch) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("웹 검색")
-                            .font(.kb(14.5)).foregroundStyle(KB.ink)
-                        Text(usesWebSearch ? "물어본 질문 한 줄이 그대로 검색에 전달" : "앱이 모르는 건 모른다고만 답함")
-                            .font(.kb(11.5)).foregroundStyle(usesWebSearch ? KB.caution : KB.muted)
-                    }
-                }
-                .tint(KB.green)
-                .padding(.horizontal, 16).padding(.vertical, 12)
-
-                rowDivider
-
-                // 위 '웹 검색'과 다른 스위치다. 저쪽은 대화에서 물어본 질문 원문이,
-                // 이쪽은 일정 제목에서 앱이 만든 검색어가 나간다.
-                Toggle(isOn: $usesCostSearch) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("모르는 일정은 웹에서 찾기")
-                            .font(.kb(14.5)).foregroundStyle(KB.ink)
-                        Text(usesCostSearch
-                             ? "‘국내 3박 여행 1인 평균 경비’처럼 앱이 만든 문장만 전달"
-                             : "여행처럼 기준이 없는 일정은 금액을 직접 넣음")
-                            .font(.kb(11.5)).foregroundStyle(usesCostSearch ? KB.green : KB.muted)
+                            .foregroundStyle(usesAI ? KB.green : KB.muted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -243,10 +193,53 @@ struct SettingsView: View {
             .background(KB.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
 
-            Text("기본은 ‘기기 안에서만’이에요. 클라우드 AI를 켜도 질문 원문·실명·일정 제목은 보내지 않고, 답변에 필요한 날짜·유형·금액과 재무 집계값만 전달해요. 웹 검색만 예외로 질문 원문이 나가는데, 검색이 필요한 질문에서 한 번 더 물어보고 켤 때만 동작해요. 켜져 있어도 일정·금액·예산은 검색으로 보내지 않아요.")
+            if usesAI { outboundRules }
+
+            Text(usesAI
+                 ? "끄면 곧바로 전송이 멈춰요. 끈 뒤에도 앱은 그대로 돌아가요."
+                 : "켜지 않으면 아무것도 나가지 않아요. 예산 계산과 일정 추가는 켜지 않아도 돼요.")
                 .font(.kb(11)).foregroundStyle(KB.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    /// 켰을 때 무엇이 나가고 무엇이 안 나가는지. 스위치를 없앤 대신 이걸 항상 보여준다.
+    private var outboundRules: some View {
+        VStack(spacing: 0) {
+            ruleRow(ok: false, "이름·연락처·주소·계좌번호",
+                    "기기에서 가린 뒤에 보내요")
+            rowDivider
+            ruleRow(ok: false, "이미 저장된 일정 제목",
+                    "‘[모임 일정]’처럼 유형으로 바꿔서 보내요")
+            rowDivider
+            ruleRow(ok: false, "영수증 사진·음성",
+                    "기기 안에서만 읽어요")
+            rowDivider
+            ruleRow(ok: true, "방금 말한 새 일정 이름",
+                    "AI가 알아들어야 넣을 수 있어서 나가요")
+            rowDivider
+            ruleRow(ok: true, "웹 검색어",
+                    "‘국내 3박 여행 1인 평균 경비’처럼 앱이 만든 문장만 나가요")
+        }
+        .background(KB.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
+    }
+
+    private func ruleRow(ok: Bool, _ title: String, _ detail: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: ok ? "arrow.up.forward" : "lock.fill")
+                .font(.kb(11, .semibold))
+                .foregroundStyle(ok ? KB.caution : KB.green)
+                .frame(width: 16)
+                .padding(.top, 2)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.kb(13, .medium)).foregroundStyle(KB.ink)
+                Text(detail).font(.kb(11)).foregroundStyle(KB.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 10)
     }
 
     // MARK: 앱 정보

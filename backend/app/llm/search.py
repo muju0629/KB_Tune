@@ -11,10 +11,13 @@
 """
 from __future__ import annotations
 
+import logging
 import math
 
 from .. import config
 from ..models import SearchCostResult
+
+log = logging.getLogger(__name__)
 
 # 국내 소비 일정 한 건에 이보다 크거나 작은 금액이 나오면 질의를 잘못 이해한 것으로 본다.
 MIN_AMOUNT = 1_000
@@ -43,7 +46,10 @@ def search_cost(query: str) -> SearchCostResult:
 
     try:
         obj, sources = _search(backend, query)
-    except Exception:
+    except Exception as exc:
+        # 조용히 삼키면 "웹에서 못 찾았어요"만 보이고 원인을 알 수 없다.
+        # 검색어는 코드가 만든 말뿐이라 로그에 남겨도 개인 정보가 아니다.
+        log.warning("검색 실패 (%s): %s — %r", backend, query, exc)
         return UNAVAILABLE
 
     if not isinstance(obj, dict):
@@ -60,6 +66,7 @@ def search_cost(query: str) -> SearchCostResult:
     basis = str(obj.get("basis") or "").strip()[:200] or "웹에서 찾은 평균 비용이에요."
     if not sources:
         # 근거 문서를 못 대면 모델이 지어낸 숫자와 구분할 수 없다.
+        log.warning("검색은 됐지만 출처가 없어 버림: %s (금액 %s)", query, amount)
         return UNAVAILABLE
 
     return SearchCostResult(amount=amount, low=low, high=high, method="web",
