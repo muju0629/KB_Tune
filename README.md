@@ -2,8 +2,6 @@
     
 # KB Tune
 
-### 일정만 넣으면, 이번 주에 얼마 쓸 수 있는지 알려드려요
-
 <br/>
 
 <img src="https://img.shields.io/badge/KB_AI_Challenge-2026-FFCC00?style=flat-square&labelColor=25241F" alt="KB AI Challenge 2026" />
