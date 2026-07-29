@@ -15,10 +15,9 @@ struct SettingsView: View {
     @State private var showResetConfirm = false
 
     /// AgentService의 동의 키와 같은 값을 본다 — 여기서 끄면 전송도 즉시 멈춘다.
-    @AppStorage(CloudAIConsent.key) private var usesCloudAI = false
-    /// 일정 금액 검색은 대화 검색과 나가는 것이 달라 스위치를 따로 둔다.
-    @AppStorage(CostSearchConsent.key) private var usesCostSearch = false
-    @AppStorage(WebSearchConsent.key) private var usesWebSearch = false
+    @AppStorage(AIConsent.key) private var usesAI = false
+    @AppStorage(ConsentItem.sensitive.rawValue) private var usesSensitive = false
+    @State private var showConsentDocument = false
 
     private var savingPct: Int {
         model.monthlyIncome > 0
@@ -46,6 +45,12 @@ struct SettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .sheet(item: $editing) { editSheet($0) }
+        .sheet(isPresented: $showConsentDocument) {
+            // 여기서 고른 값도 그대로 저장된다 — 열람과 철회가 같은 화면이어야
+            // "설정에서 바꿀 수 있다"는 고지가 실제로 성립한다.
+            ConsentView(onFinish: { showConsentDocument = false },
+                        onClose: { showConsentDocument = false })
+        }
     }
 
     // MARK: 프로필
@@ -174,58 +179,116 @@ struct SettingsView: View {
     private var privacySection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("개인정보").font(.kb(13, .semibold)).foregroundStyle(KB.muted)
+
+            // 동의받은 항목과 같은 개수만큼 스위치가 있다. 동의 화면에서 고른 것을 여기서
+            // 되돌릴 수 없으면 '언제든 철회할 수 있다'는 고지가 거짓말이 된다(제37조).
             VStack(spacing: 0) {
-                Toggle(isOn: $usesCloudAI) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("클라우드 AI 분석")
-                            .font(.kb(14.5)).foregroundStyle(KB.ink)
-                        Text(usesCloudAI ? "질문 원문·실명 없이 필요한 집계값만 전달" : "기기 안의 예산·패턴 엔진만 사용")
-                            .font(.kb(11.5)).foregroundStyle(usesCloudAI ? KB.green : KB.muted)
-                    }
-                }
-                .tint(KB.green)
-                .padding(.horizontal, 16).padding(.vertical, 12)
-
+                consentToggle(
+                    .sensitive, isOn: $usesSensitive,
+                    on: "일정 제목을 읽어 소비 유형을 자동으로 분류해요",
+                    off: "제목을 읽지 않아요. 유형은 직접 골라요"
+                )
                 rowDivider
-
-                // 클라우드 AI와 따로 둔다 — 나가는 것의 성격이 다르다.
-                // 클라우드 AI는 질문을 유형·금액으로 줄여 보내지만, 검색은 원문이 그대로 나간다.
-                Toggle(isOn: $usesWebSearch) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("웹 검색")
-                            .font(.kb(14.5)).foregroundStyle(KB.ink)
-                        Text(usesWebSearch ? "물어본 질문 한 줄이 그대로 검색에 전달" : "앱이 모르는 건 모른다고만 답함")
-                            .font(.kb(11.5)).foregroundStyle(usesWebSearch ? KB.caution : KB.muted)
-                    }
-                }
-                .tint(KB.green)
-                .padding(.horizontal, 16).padding(.vertical, 12)
-
-                rowDivider
-
-                // 위 '웹 검색'과 다른 스위치다. 저쪽은 대화에서 물어본 질문 원문이,
-                // 이쪽은 일정 제목에서 앱이 만든 검색어가 나간다.
-                Toggle(isOn: $usesCostSearch) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("모르는 일정은 웹에서 찾기")
-                            .font(.kb(14.5)).foregroundStyle(KB.ink)
-                        Text(usesCostSearch
-                             ? "‘국내 3박 여행 1인 평균 경비’처럼 앱이 만든 문장만 전달"
-                             : "여행처럼 기준이 없는 일정은 금액을 직접 넣음")
-                            .font(.kb(11.5)).foregroundStyle(usesCostSearch ? KB.green : KB.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                .tint(KB.green)
-                .padding(.horizontal, 16).padding(.vertical, 12)
+                consentToggle(
+                    .overseas, isOn: $usesAI,
+                    on: "대화로 묻고, 일정도 넣고 고치고 지울 수 있어요",
+                    off: "기기 안의 예산·패턴 엔진만 써요"
+                )
             }
             .background(KB.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
 
-            Text("기본은 ‘기기 안에서만’이에요. 클라우드 AI를 켜도 질문 원문·실명·일정 제목은 보내지 않고, 답변에 필요한 날짜·유형·금액과 재무 집계값만 전달해요. 웹 검색만 예외로 질문 원문이 나가는데, 검색이 필요한 질문에서 한 번 더 물어보고 켤 때만 동작해요. 켜져 있어도 일정·금액·예산은 검색으로 보내지 않아요.")
+            if usesAI { outboundRules }
+
+            Text(usesAI
+                 ? "끄면 곧바로 전송이 멈춰요. 끈 뒤에도 앱은 그대로 돌아가요."
+                 : "켜지 않으면 아무것도 나가지 않아요. 예산 계산과 일정 추가는 켜지 않아도 돼요.")
                 .font(.kb(11)).foregroundStyle(KB.muted)
                 .fixedSize(horizontal: false, vertical: true)
+
+            Button { showConsentDocument = true } label: {
+                HStack(spacing: 12) {
+                    rowIcon("doc.text")
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("동의서 전문 다시 보기")
+                            .font(.kb(14.5)).foregroundStyle(KB.ink)
+                        Text("무엇에 동의했는지 원문 그대로 볼 수 있어요")
+                            .font(.kb(11.5)).foregroundStyle(KB.muted)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.kb(12, .semibold)).foregroundStyle(KB.muted)
+                }
+                .padding(.horizontal, 16).padding(.vertical, 14)
+                .background(KB.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
         }
+    }
+
+    /// 스위치 하나 = 동의 항목 하나. `@AppStorage` 가 UserDefaults 를 직접 쓰므로,
+    /// 동의 시각까지 남기려면 `ConsentStore` 를 한 번 더 태워야 한다.
+    private func consentToggle(_ item: ConsentItem, isOn: Binding<Bool>,
+                               on: String, off: String) -> some View {
+        Toggle(isOn: Binding(
+            get: { isOn.wrappedValue },
+            set: { ConsentStore.set(item, $0) }
+        )) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(item.title).font(.kb(14.5)).foregroundStyle(KB.ink)
+                    Text("선택").font(.kb(10, .medium)).foregroundStyle(KB.muted)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(KB.line, in: Capsule())
+                }
+                Text(isOn.wrappedValue ? on : off)
+                    .font(.kb(11.5))
+                    .foregroundStyle(isOn.wrappedValue ? KB.green : KB.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .tint(KB.green)
+        .padding(.horizontal, 16).padding(.vertical, 12)
+    }
+
+    /// 켰을 때 무엇이 나가고 무엇이 안 나가는지. 스위치를 없앤 대신 이걸 항상 보여준다.
+    private var outboundRules: some View {
+        VStack(spacing: 0) {
+            ruleRow(ok: false, "이름·연락처·주소·계좌번호",
+                    "기기에서 가린 뒤에 보내요")
+            rowDivider
+            ruleRow(ok: false, "이미 저장된 일정 제목",
+                    "‘[모임 일정]’처럼 유형으로 바꿔서 보내요")
+            rowDivider
+            ruleRow(ok: false, "영수증 사진·음성",
+                    "기기 안에서만 읽어요")
+            rowDivider
+            ruleRow(ok: true, "방금 말한 새 일정 이름",
+                    "AI가 알아들어야 넣을 수 있어서 나가요")
+            rowDivider
+            ruleRow(ok: true, "웹 검색어",
+                    "‘국내 3박 여행 1인 평균 경비’처럼 앱이 만든 문장만 나가요")
+        }
+        .background(KB.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
+    }
+
+    private func ruleRow(ok: Bool, _ title: String, _ detail: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: ok ? "arrow.up.forward" : "lock.fill")
+                .font(.kb(11, .semibold))
+                .foregroundStyle(ok ? KB.caution : KB.green)
+                .frame(width: 16)
+                .padding(.top, 2)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.kb(13, .medium)).foregroundStyle(KB.ink)
+                Text(detail).font(.kb(11)).foregroundStyle(KB.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 10)
     }
 
     // MARK: 앱 정보

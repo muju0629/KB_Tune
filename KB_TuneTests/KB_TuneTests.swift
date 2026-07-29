@@ -908,6 +908,23 @@ struct KB_TuneTests {
         #expect(BaselinePrices.forCategory("경조사") == nil)
     }
 
+    @Test func travelReachesItsPublicBaselineInsteadOfTheGenericFallback() {
+        // 표에 46,234원 행이 있는데 규칙에 '여행' 항목이 없어서 도달을 못 했다.
+        // "제주도 여행"이 기타로 떨어져 근거 없는 20,000원이 나왔다.
+        let result = EventEstimator.estimate("제주도 여행", history: [])
+        #expect(result.category == "여행")
+        #expect(result.method == "baseline")
+        #expect(result.basis.contains("출처는"))
+    }
+
+    @Test func buyingSomethingIsShoppingNotMiscellaneous() {
+        // "구매"만 있고 "구입"이 없어서 한 글자 차이로 기타까지 미끄러졌다.
+        for title in ["맥미니 구입하기", "노트북 장만", "정장 구매"] {
+            #expect(EventEstimator.estimate(title, history: []).category == "쇼핑",
+                    "\(title) 이 쇼핑으로 안 잡힌다")
+        }
+    }
+
     @Test func itemLookupIsMoreSpecificThanCategoryAverage() {
         let match = BaselinePrices.forTitle("점심은 자장면")
         #expect(match?.basis.contains("자장면") == true)
@@ -955,15 +972,102 @@ struct KB_TuneTests {
             .query.contains("1인 평균") == true)
     }
 
-    @Test func webSearchIsOffUntilTheUserTurnsItOn() {
-        // 기본값이 꺼짐이어야 한다. 켠 적 없는 사람의 검색어가 나가면 안 된다.
-        UserDefaults.standard.removeObject(forKey: CostSearchConsent.key)
-        #expect(CostSearchConsent.granted == false)
+    // MARK: 대화 에이전트
 
-        // 대화 검색을 켜도 일정 제목에서 만든 검색어까지 나가면 안 된다 — 스위치가 다르다.
-        WebSearchConsent.set(true)
-        #expect(CostSearchConsent.granted == false)
-        WebSearchConsent.set(false)
+    @Test func planAgentIsOffUntilTheUserTurnsItOn() {
+        // 켜면 방금 친 문장이 모델까지 간다. 기본값이 꺼짐이 아니면 동의 없이 나간다.
+        UserDefaults.standard.removeObject(forKey: AIConsent.key)
+        #expect(AIConsent.granted == false)
+    }
+
+    @Test func oneSwitchTurnsOnEverythingAndNothingElseIsNeeded() {
+        // 스위치는 하나뿐이다. 켜면 대화·일정 변경·검색이 다 되고, 끄면 다 멈춘다.
+        // 예전에는 넷이어서 "뭘 켜야 뭐가 되는지" 알 수 없었다.
+        defer { ConsentStore.reset() }
+
+        ConsentStore.set(.overseas, false)
+        #expect(AIConsent.granted == false)
+
+        ConsentStore.set(.overseas, true)
+        #expect(AIConsent.granted)
+    }
+
+    @Test func turningTransmissionOnAlwaysLeavesAConsentRecord() {
+        // 전송을 켜는 길은 하나여야 한다. 대화 화면의 동의 시트가 AIConsent 만 직접
+        // 켜던 시절에는, 설정에서 철회해도 시트가 되켜서 기록은 '철회'인데 전송은
+        // 이어졌다. 동의 시각이 안 남아 언제 동의했는지 입증도 못 했다.
+        defer { ConsentStore.reset() }
+        ConsentStore.reset()
+
+        ConsentStore.set(.overseas, true)
+        // 전송이 켜졌다면 동의 기록과 시각이 반드시 함께 있어야 한다.
+        #expect(AIConsent.granted)
+        #expect(ConsentStore.granted(.overseas))
+        #expect(ConsentStore.grantedAt(.overseas) != nil)
+
+        ConsentStore.set(.overseas, false)
+        #expect(AIConsent.granted == false)
+        #expect(ConsentStore.granted(.overseas) == false)
+        #expect(ConsentStore.grantedAt(.overseas) == nil)
+    }
+
+    @Test func agentTurnMasksNamesAndSavedEventTitles() {
+        // 에이전트 경로로 나가는 문장. 이름과 이미 저장된 일정 제목은 기기에서 가려야 한다.
+        let model = AppModel()
+        let saved = model.calendarDays.flatMap(\.events).first { !$0.title.isEmpty }
+        let sentence = "\(model.userName)이랑 \(saved?.title ?? "와드") 얘기 좀 하자. 010-1234-5678로 연락함"
+        let sent = OutboundPrivacy.sanitize(sentence, model: model)
+
+        #expect(!sent.contains(model.userName))
+        if let title = saved?.title { #expect(!sent.contains(title)) }
+        #expect(!sent.contains("010-1234-5678"))
+    }
+
+    @Test func nothingLeavesUntilTheUserTurnsAIOn() {
+        // 켠 적 없는 사람에게서는 아무것도 나가면 안 된다. 기본값이 꺼짐이어야 한다.
+        UserDefaults.standard.removeObject(forKey: AIConsent.key)
+        #expect(AIConsent.granted == false)
+        #expect(AIConsent.asked == false)
+    }
+
+    @Test func calendarTitlesNeedTheirOwnConsent() {
+        // 일정 제목은 민감정보(제23조)다. 별도 동의 없이는 앱 안으로도 들어오면 안 된다 —
+        // 가려서 보내는 게 아니라 아예 읽지 않는 것이 이 규칙의 요지다.
+        defer { ConsentStore.reset() }
+
+        ConsentStore.set(.sensitive, false)
+        #expect(CalendarStore.importedTitle("정형외과 진료") == "일정")
+
+        ConsentStore.set(.sensitive, true)
+        #expect(CalendarStore.importedTitle("정형외과 진료") == "정형외과 진료")
+    }
+
+    @Test func consentGateStaysClosedUntilTheRequiredItemIsGranted() {
+        // 필수 항목 없이는 앱에 들어갈 수 없어야 한다. 선택 항목만 눌러도 열리면
+        // '필수/선택 분리'(제22조)가 화면에만 있고 코드에는 없는 것이 된다.
+        defer { ConsentStore.reset() }
+        ConsentStore.reset()
+        #expect(ConsentStore.isComplete == false)
+
+        ConsentStore.set(.sensitive, true)
+        ConsentStore.finish()
+        #expect(ConsentStore.isComplete == false)
+
+        ConsentStore.set(.essential, true)
+        ConsentStore.finish()
+        #expect(ConsentStore.isComplete == true)
+    }
+
+    @Test func withdrawingOverseasConsentStopsTransmission() {
+        // 국외 이전 동의를 끄면 전송 스위치도 같이 꺼져야 한다. 두 값이 어긋나면
+        // 철회했는데도 계속 나가는 사고가 된다.
+        defer { ConsentStore.reset() }
+
+        ConsentStore.set(.overseas, true)
+        #expect(AIConsent.granted == true)
+
+        ConsentStore.set(.overseas, false)
+        #expect(AIConsent.granted == false)
     }
 
 }

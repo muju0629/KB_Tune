@@ -3,7 +3,6 @@
 LLM_BACKEND 로 언어 생성 방식을 고른다. 기본은 'offline' — 유료 API를 절대 호출하지 않는다.
   - offline : 결정론 엔진 + 템플릿 문장 (비용 0, 키 불필요)  ← 기본
   - local   : 로컬 오픈소스 모델(OpenAI 호환: Bonsai/Ollama/llama.cpp) (비용 0)
-  - claude  : Anthropic API (유료) — 명시적으로 켤 때만
   - openai  : OpenAI API — 명시적으로 켤 때만
 """
 import os
@@ -51,13 +50,10 @@ LOCAL_LLM_BASE_URL = _checked_llm_url(
     os.getenv("LOCAL_LLM_BASE_URL", "http://localhost:11434/v1"), "LOCAL_LLM_BASE_URL")
 LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL", "qwen2.5:3b")
 
-# --- Claude(유료, 선택) ---
-CLAUDE_MODEL = os.getenv("KB_TUNE_MODEL", "claude-opus-5")
-
 # --- OpenAI(선택) ---
 OPENAI_BASE_URL = _checked_llm_url(
     os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"), "OPENAI_BASE_URL")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.4")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1")
 
 
 # --- 보안 ---
@@ -79,13 +75,7 @@ TRUST_PROXY = os.getenv("KB_TUNE_TRUST_PROXY", "").lower() in ("1", "true", "yes
 # 속도 제한(분당). LLM 쪽은 비용이 걸려 있어 따로 잡는다.
 RATE_LLM = int(os.getenv("KB_TUNE_RATE_LLM", "20"))              # 클라이언트당 / 60초
 RATE_LLM_GLOBAL = int(os.getenv("KB_TUNE_RATE_LLM_GLOBAL", "200"))  # 전체 합 / 60초
-RATE_EVAL = int(os.getenv("KB_TUNE_RATE_EVAL", "3"))             # 클라이언트당 / 300초
-RATE_EVAL_GLOBAL = int(os.getenv("KB_TUNE_RATE_EVAL_GLOBAL", "20"))  # 전체 합 / 300초
 RATE_CHEAP = int(os.getenv("KB_TUNE_RATE_CHEAP", "120"))         # 클라이언트당 / 60초
-
-
-def api_key() -> str | None:
-    return os.getenv("ANTHROPIC_API_KEY") or None
 
 
 def openai_key() -> str | None:
@@ -95,11 +85,9 @@ def openai_key() -> str | None:
 
 def llm_backend() -> str:
     """유효한 백엔드를 반환. 키가 필요한 백엔드인데 키가 없으면 offline으로 강등."""
-    if LLM_BACKEND == "claude" and api_key() is None:
-        return "offline"
     if LLM_BACKEND == "openai" and openai_key() is None:
         return "offline"
-    if LLM_BACKEND in ("offline", "local", "claude", "openai"):
+    if LLM_BACKEND in ("offline", "local", "openai"):
         return LLM_BACKEND
     return "offline"
 
@@ -116,7 +104,7 @@ def llm_is_external(backend: str | None = None) -> bool:
     외부 전송이므로 동의·비식별화 경계를 똑같이 적용한다.
     """
     selected = backend or llm_backend()
-    if selected in ("claude", "openai"):
+    if selected == "openai":
         return True
     if selected == "local":
         return not _is_loopback_url(LOCAL_LLM_BASE_URL)

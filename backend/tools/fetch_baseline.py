@@ -21,7 +21,9 @@ import os
 import re
 import ssl
 import sys
+import urllib.parse
 import urllib.request
+import urllib.robotparser
 from collections import defaultdict
 from pathlib import Path
 
@@ -41,11 +43,46 @@ _LAX.verify_mode = ssl.CERT_NONE
 UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) KB-Tune-baseline/1.0"}
 
 
-def _get(url: str, lax: bool = False) -> bytes:
+def _fetch(url: str, lax: bool = False) -> bytes:
     req = urllib.request.Request(url, headers=UA)
     ctx = _LAX if lax else None
     with urllib.request.urlopen(req, timeout=60, context=ctx) as r:
         return r.read()
+
+
+# 호스트별 robots.txt 파서. None 은 '읽지 못해 판단 보류'다.
+_ROBOTS: dict[str, urllib.robotparser.RobotFileParser | None] = {}
+
+
+def _robots_allows(url: str, lax: bool = False) -> bool:
+    """로봇배제표준(robots.txt) 확인.
+
+    개인정보보호위원회 「AI 개발·서비스를 위한 공개된 개인정보 처리 안내서」(2024.7)
+    Ⅲ-1-1 이 스크래핑 시 로봇배제표준 준수를 요구한다. 여기서 받아오는 것은 개인이
+    없는 공표 통계라 그 안내서의 적용 대상은 아니지만, 지키는 편이 '공표 통계만
+    가져온다'는 말을 단단하게 한다.
+
+    robots.txt 가 없으면(404) 제한이 없다는 뜻이므로 허용으로 본다. 참가격은 인증서
+    체인이 끊겨 있어 robots.txt 도 같은 완화 설정으로 읽는다.
+    """
+    parts = urllib.parse.urlsplit(url)
+    host = f"{parts.scheme}://{parts.netloc}"
+    if host not in _ROBOTS:
+        parser = urllib.robotparser.RobotFileParser()
+        try:
+            body = _fetch(host + "/robots.txt", lax=lax).decode("utf-8", "replace")
+            parser.parse(body.splitlines())
+        except Exception:
+            parser = None
+        _ROBOTS[host] = parser
+    parser = _ROBOTS[host]
+    return parser is None or parser.can_fetch(UA["User-Agent"], url)
+
+
+def _get(url: str, lax: bool = False) -> bytes:
+    if not _robots_allows(url, lax=lax):
+        raise RuntimeError(f"robots.txt 가 이 경로를 막고 있다: {url}")
+    return _fetch(url, lax=lax)
 
 
 # ---------- 1. 한국소비자원 참가격 ----------

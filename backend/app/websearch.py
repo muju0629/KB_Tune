@@ -38,6 +38,29 @@ def enabled() -> bool:
     return config.openai_key() is not None
 
 
+def responses_call(query: str, instructions: str | None = None,
+                   timeout: float = _TIMEOUT) -> dict[str, Any] | None:
+    """OpenAI Responses API + web_search 를 부르고 원본 응답을 돌려준다. 실패하면 None.
+
+    금액 찾기(`llm/search.py`)도 같은 API 를 같은 도구로 부른다. 호출과 응답 파싱을
+    두 벌 두면 한쪽만 고치게 되므로 여기 한 곳에 둔다 — 갈리는 건 지시문과 대기 시간뿐이다.
+    """
+    payload: dict[str, Any] = {
+        "model": config.OPENAI_MODEL,
+        "input": query,
+        "tools": [{"type": "web_search"}],
+    }
+    if instructions:
+        payload["instructions"] = instructions
+    try:
+        r = httpx.post(config.OPENAI_BASE_URL.rstrip("/") + "/responses",
+                       headers={"Authorization": f"Bearer {config.openai_key()}"},
+                       timeout=timeout, json=payload)
+        return r.json() if r.status_code == 200 else None
+    except Exception:
+        return None
+
+
 def search(query: str) -> dict[str, Any]:
     """검색해서 정리된 한국어 답과 출처를 돌려준다.
 
@@ -46,26 +69,14 @@ def search(query: str) -> dict[str, Any]:
     if not enabled():
         return {"answer": "", "sources": []}
 
-    url = config.OPENAI_BASE_URL.rstrip("/") + "/responses"
-    headers = {"Authorization": f"Bearer {config.openai_key()}"}
-    payload = {
-        "model": config.OPENAI_MODEL,
-        "instructions": _INSTRUCTIONS,
-        "input": query,
-        "tools": [{"type": "web_search"}],
-    }
-    try:
-        r = httpx.post(url, headers=headers, timeout=_TIMEOUT, json=payload)
-        if r.status_code != 200:
-            return {"answer": "", "sources": []}
-        data = r.json()
-    except Exception:
+    data = responses_call(query, _INSTRUCTIONS)
+    if data is None:
         return {"answer": "", "sources": []}
 
-    return {"answer": _answer_of(data), "sources": _sources_of(data)}
+    return {"answer": answer_of(data), "sources": sources_of(data)}
 
 
-def _answer_of(data: dict[str, Any]) -> str:
+def answer_of(data: dict[str, Any]) -> str:
     """모델이 쓴 본문만 뽑는다. 검색 호출 항목은 건너뛴다."""
     text = data.get("output_text")
     if isinstance(text, str) and text.strip():
@@ -98,7 +109,7 @@ def _plain(text: str) -> str:
     return "\n".join(line.rstrip() for line in text.split("\n")).strip()
 
 
-def _sources_of(data: dict[str, Any]) -> list[str]:
+def sources_of(data: dict[str, Any]) -> list[str]:
     """본문에 붙은 인용 링크. 중복은 앞의 것만 남긴다."""
     seen: list[str] = []
     for item in data.get("output", []) or []:

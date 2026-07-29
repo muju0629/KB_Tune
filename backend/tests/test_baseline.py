@@ -148,7 +148,7 @@ def test_search_drops_an_answer_with_no_sources(monkeypatch):
     """근거 문서를 못 대는 숫자는 모델이 지어낸 것과 구분할 수 없다."""
     from app.llm import search
 
-    monkeypatch.setattr(search.config, "llm_backend", lambda: "claude")
+    monkeypatch.setattr(search.config, "llm_backend", lambda: "openai")
     monkeypatch.setattr(search, "_search",
                         lambda *_a: ({"amount": 300_000, "basis": "그냥"}, []))
     assert search.search_cost("국내 3박 여행 1인 평균 경비").method == "unavailable"
@@ -157,7 +157,7 @@ def test_search_drops_an_answer_with_no_sources(monkeypatch):
 def test_search_drops_an_amount_outside_a_believable_range(monkeypatch):
     from app.llm import search
 
-    monkeypatch.setattr(search.config, "llm_backend", lambda: "claude")
+    monkeypatch.setattr(search.config, "llm_backend", lambda: "openai")
     for absurd in (12, 90_000_000, float("inf"), True, "3만원"):
         monkeypatch.setattr(search, "_search",
                             lambda *_a, v=absurd: ({"amount": v, "basis": "x"}, ["출처"]))

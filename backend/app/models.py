@@ -117,10 +117,6 @@ class PlanRequest(BaseModel):
     app_numbers: Optional[AppNumbers] = None
 
 
-class CoachRequest(PlanRequest):
-    pass
-
-
 class ChatHistoryItem(BaseModel):
     """사용자가 선택해 보낸 짧은 대화 문맥.
 
@@ -142,6 +138,62 @@ class SearchRequest(BaseModel):
     계획·카드·일정 필드를 일부러 넣지 않았다. 이 경로로는 재무 데이터가 나갈 수 없다.
     """
     query: Annotated[str, Field(min_length=1, max_length=200)]
+
+
+# ---------- 대화 에이전트 ----------
+
+class AgentEventRef(BaseModel):
+    """이미 잡혀 있는 일정 한 건 — **제목 없이** 번호로만 가리킨다.
+
+    옮기고 지우는 데 제목이 필요 없다. 번호와 날짜·유형만 있으면 모델이 "그 여행"을
+    지목할 수 있고, 제목은 기기 밖으로 나갈 이유가 사라진다. 제목으로 맞추던 방식은
+    비식별화가 '카페 약속'을 '[이름] 약속'으로 바꿔 놓으면 앱에서 못 찾는 문제도 있었다.
+    """
+    ref: Annotated[int, Field(ge=1, le=99)]
+    day: Day
+    category: str
+    amount: Won
+
+
+class AgentRequest(ChatRequest):
+    """대화 한 턴. message 는 앱이 기기에서 가명처리한 문장이다.
+
+    이름·연락처·저장된 일정 제목은 `AgentService.sanitize()` 가 앱에서 이미 가렸다.
+    서버는 그걸 되돌릴 수 없고, 되돌리려 하지도 않는다.
+    """
+    # 앱이 웹 검색 동의를 받았는지. 없으면 검색 도구를 아예 안 준다.
+    may_search: bool = False
+    # 오늘 통산일 — 상대 날짜("모레")를 절대 날짜로 바꾸는 데 쓴다.
+    today: Day = 22
+    # 이미 잡혀 있는 일정. 제목은 안 싣는다 — 번호로 가리키면 되기 때문이다.
+    events: Annotated[list[AgentEventRef], Field(max_length=40)] = Field(default_factory=list)
+
+
+class AgentAction(BaseModel):
+    """모델이 제안한 동작. 실행은 앱이 하고, 사용자가 버튼을 눌러야 일어난다.
+
+    서버는 사용자 데이터를 갖고 있지 않아서 실행할 수도 없다. 여기 담기는 건
+    '이렇게 하자'는 제안뿐이다.
+    """
+    kind: Literal["add_event", "move_event", "update_amount", "delete_event"]
+    day: Day
+    # add_event 에만 쓴다. 나머지는 ref 로 기존 일정을 가리킨다.
+    title: Annotated[str, Field(max_length=40)] = ""
+    # 옮기기·금액 고치기·지우기가 대상으로 삼는 기존 일정 번호.
+    ref: Annotated[int, Field(ge=1, le=99)] | None = None
+    category: str | None = None
+    amount: Won | None = None      # 비우면 앱이 기기 안의 기준 금액 표에서 채운다
+    to_day: Day | None = None      # move_event 전용
+    label: Annotated[str, Field(max_length=30)]   # 버튼에 쓸 말
+
+
+class AgentResult(BaseModel):
+    reply: str
+    actions: list[AgentAction] = Field(default_factory=list)
+    # 검색을 실제로 했다면 나간 질의와 출처를 그대로 보여준다 — 무엇이 나갔는지 감출 이유가 없다.
+    searched_query: str | None = None
+    sources: list[str] = Field(default_factory=list)
+    method: str = "llm"            # llm | llm+web | template
 
 
 # ---------- 엔진 출력(결정론적) ----------
@@ -202,25 +254,6 @@ class PlanResult(BaseModel):
     adjustments: list[Adjustment]
     # LLM/평가가 인용해도 되는 숫자 화이트리스트
     grounded_numbers: list[int]
-
-
-# ---------- LLM 출력(언어) ----------
-
-class CoachResponse(BaseModel):
-    direction: Direction
-    headline: str        # 결론 한 줄
-    reason: str          # 이유(반영한 데이터)
-    impact: str          # 영향(전/후)
-    recommendation: str  # 다음 행동 제안
-    grounded: bool = True
-    used_llm: bool = True
-
-
-class EvalResult(BaseModel):
-    engine_tests_passed: int
-    engine_tests_total: int
-    groundedness_rate: float
-    details: list[str]
 
 
 # ---------- AI 기능 1: 일정 → 예상 지출 추정 ----------

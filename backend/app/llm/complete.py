@@ -1,8 +1,8 @@
 """한 번 호출해 JSON 하나를 받아오는 공용 경로.
 
 대화는 스트리밍이지만 금액 추정처럼 '값 하나'만 필요한 곳은 스트리밍이 필요 없다.
-백엔드(claude·openai·local)마다 호출 방식이 달라서 여기 한곳에 모은다 —
-안 그러면 기능을 하나 늘릴 때마다 세 갈래를 다시 쓰게 되고,
+백엔드(openai·local)마다 주소와 토큰 상한 이름이 달라서 여기 한곳에 모은다 —
+안 그러면 기능을 하나 늘릴 때마다 갈래마다 다시 쓰게 되고,
 실제로 그렇게 두는 바람에 openai 를 쓰는 동안 추정에는 LLM 이 아예 안 붙어 있었다.
 """
 from __future__ import annotations
@@ -31,14 +31,6 @@ def _complete(backend: str, prompt: str, max_tokens: int) -> str:
     # 모델 이름이 local이어도 URL이 원격이면 외부 전송이다.
     if config.llm_is_external(backend):
         prompt = redact_personal_data(prompt)
-
-    if backend == "claude":
-        import anthropic
-        r = anthropic.Anthropic().messages.create(
-            model=config.CLAUDE_MODEL, max_tokens=max_tokens,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return "".join(b.text for b in r.content if b.type == "text")
 
     import httpx
     if backend == "openai":

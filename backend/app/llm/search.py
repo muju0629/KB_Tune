@@ -11,10 +11,13 @@
 """
 from __future__ import annotations
 
+import logging
 import math
 
 from .. import config
 from ..models import SearchCostResult
+
+log = logging.getLogger(__name__)
 
 # 국내 소비 일정 한 건에 이보다 크거나 작은 금액이 나오면 질의를 잘못 이해한 것으로 본다.
 MIN_AMOUNT = 1_000
@@ -42,8 +45,11 @@ def search_cost(query: str) -> SearchCostResult:
         return UNAVAILABLE
 
     try:
-        obj, sources = _search(backend, query)
-    except Exception:
+        obj, sources = _search(query)
+    except Exception as exc:
+        # 조용히 삼키면 "웹에서 못 찾았어요"만 보이고 원인을 알 수 없다.
+        # 검색어는 코드가 만든 말뿐이라 로그에 남겨도 개인 정보가 아니다.
+        log.warning("검색 실패 (%s): %s — %r", backend, query, exc)
         return UNAVAILABLE
 
     if not isinstance(obj, dict):
@@ -60,6 +66,7 @@ def search_cost(query: str) -> SearchCostResult:
     basis = str(obj.get("basis") or "").strip()[:200] or "웹에서 찾은 평균 비용이에요."
     if not sources:
         # 근거 문서를 못 대면 모델이 지어낸 숫자와 구분할 수 없다.
+        log.warning("검색은 됐지만 출처가 없어 버림: %s (금액 %s)", query, amount)
         return UNAVAILABLE
 
     return SearchCostResult(amount=amount, low=low, high=high, method="web",
@@ -75,46 +82,16 @@ def _valid_won(value: object) -> int | None:
     return amount if MIN_AMOUNT <= amount <= MAX_AMOUNT else None
 
 
-def _search(backend: str, query: str) -> tuple[object, list[str]]:
-    """(파싱한 JSON, 출처 목록). 제공자마다 웹 검색 도구 이름이 달라 여기서 흡수한다."""
+def _search(query: str) -> tuple[object, list[str]]:
+    """(파싱한 JSON, 출처 목록). Responses API 의 web_search 도구를 쓴다.
+
+    호출·파싱은 websearch 와 같은 것을 쓴다 — 두 벌 두면 한쪽만 고치게 된다.
+    """
+    from .. import websearch
     from .complete import _first_json_object
 
     prompt = PROMPT.replace("{query}", query)
-
-    if backend == "claude":
-        import anthropic
-        r = anthropic.Anthropic().messages.create(
-            model=config.CLAUDE_MODEL, max_tokens=1_000,
-            tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 3}],
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = "".join(b.text for b in r.content if b.type == "text")
-        sources = [
-            c.get("title") or c.get("url", "")
-            for b in r.content if b.type == "text"
-            for c in (getattr(b, "citations", None) or [])
-            if isinstance(c, dict)
-        ]
-        return _first_json_object(text), [s for s in sources if s]
-
-    # openai — Responses API 의 web_search 도구
-    import httpx
-    r = httpx.post(
-        config.OPENAI_BASE_URL.rstrip("/") + "/responses",
-        headers={"Authorization": f"Bearer {config.openai_key()}"},
-        timeout=45,
-        json={"model": config.OPENAI_MODEL, "input": prompt,
-              "tools": [{"type": "web_search"}]},
-    )
-    r.raise_for_status()
-    payload = r.json()
-
-    text, sources = "", []
-    for item in payload.get("output", []):
-        for part in item.get("content", []) or []:
-            text += part.get("text", "")
-            for ann in part.get("annotations", []) or []:
-                url = ann.get("url") or ann.get("title")
-                if url:
-                    sources.append(url)
-    return _first_json_object(text), sources
+    payload = websearch.responses_call(prompt, timeout=45)
+    if payload is None:
+        raise RuntimeError("Responses API 호출 실패")
+    return _first_json_object(websearch.answer_of(payload)), websearch.sources_of(payload)

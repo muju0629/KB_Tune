@@ -9,27 +9,7 @@
 
 import SwiftUI
 
-// MARK: - 진입점 (시트 / 탭)
-
-struct ProductsSheet: View {
-    @EnvironmentObject private var model: AppModel
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            ProductsHome()
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button { dismiss() } label: {
-                            Image(systemName: "xmark").font(.system(size: 14, weight: .semibold)).foregroundStyle(KB.muted)
-                        }
-                    }
-                }
-        }
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
-    }
-}
+// MARK: - 진입점 (탭)
 
 struct ProductsTabView: View {
     var body: some View {

@@ -11,43 +11,33 @@ import Foundation
 import Combine
 import NaturalLanguage
 
-/// 월수입·청구액·소비 문맥을 외부 LLM 제공자에게 보낼지에 대한 별도 동의.
-/// 기본값은 false이며, 선택 전에는 로컬 엔진 답변만 사용한다.
-enum CloudAIConsent {
-    static let key = "usesCloudAIAnalysis"
+/// AI 기능을 쓸지에 대한 단 하나의 동의.
+///
+/// 예전에는 스위치가 넷이었다(클라우드 AI·대화로 일정 바꾸기·웹 검색·금액 검색).
+/// 나가는 것이 각각 달라 나눴는데, 쓰는 사람은 뭘 켜야 뭐가 되는지 알 수 없었다.
+/// 무엇을 지킬지는 사용자가 고를 일이 아니라 코드가 지킬 일이다.
+///
+/// **켜면 AI 가 다 한다** — 묻고 답하기, 일정 추가·수정·삭제, 기준 금액 조회, 웹 검색.
+/// **켜도 개인정보는 안 나간다** — 이건 스위치가 아니라 규칙이고, 코드가 강제한다.
+///
+///   · 이름·연락처·주소·계좌·저장된 일정 제목 → `OutboundPrivacy.sanitize()` 가 기기에서 가림
+///   · 검색 엔진에는 코드가 만든 문장만 → 서버의 `searchguard` 가 검사
+///   · 모델 제공자는 학습에 쓰지 않고 30일 뒤 지움
+///
+/// 끄면 기기 안의 예산·패턴 엔진만 쓴다. 앱은 그래도 다 돌아간다.
+///
+/// **여기에는 읽기만 있다.** 켜고 끄는 것은 `ConsentStore.set(.overseas,)` 뿐이다 —
+/// 이 값은 국외 이전 동의(제28조의8)와 같은 뜻이라, 여기서 따로 쓰면 동의 기록과
+/// 실제 전송이 어긋난다. 실제로 그런 적이 있다: 설정에서 철회해도 대화 화면의
+/// 동의 시트가 이 값만 되켜서, 기록은 '철회'인데 전송은 이어졌다. 동의 시각도
+/// 안 남아 입증이 안 됐다. 진입점을 하나로 묶어 구조적으로 막는다.
+nonisolated enum AIConsent {
+    /// 국외 이전 동의와 **같은 칸**을 읽는다. 예전에는 전송 스위치용 키를 따로 두고
+    /// `ConsentStore.set` 이 손으로 맞춰 줬는데, 맞춰 주는 줄을 빠뜨리면 그대로 사고였다.
+    static let key = ConsentItem.overseas.rawValue
 
     static var asked: Bool { UserDefaults.standard.object(forKey: key) != nil }
     static var granted: Bool { UserDefaults.standard.bool(forKey: key) }
-
-    static func set(_ value: Bool) { UserDefaults.standard.set(value, forKey: key) }
-}
-
-/// 웹 검색 동의 — 클라우드 AI 동의와 별개로 받는다.
-///
-/// 클라우드 AI는 질문을 `금융 의도: …; 지출 유형: …; 명시 금액: …` 으로 줄여서 보내지만,
-/// 검색은 "이태원 맛집" 같은 원문을 그대로 보내야 답이 나온다. 경계의 성격이 다르므로
-/// 하나의 동의로 묶지 않는다. 이걸 켜도 예산·일정 데이터는 검색으로 나가지 않는다 —
-/// 나가는 것은 그 질문 한 줄뿐이다.
-enum WebSearchConsent {
-    static let key = "usesWebSearch"
-
-    static var asked: Bool { UserDefaults.standard.object(forKey: key) != nil }
-    static var granted: Bool { UserDefaults.standard.bool(forKey: key) }
-
-    static func set(_ value: Bool) { UserDefaults.standard.set(value, forKey: key) }
-}
-
-/// 일정 금액을 웹에서 찾는 동의. 위 WebSearchConsent 와 따로 둔다.
-///
-/// 저쪽은 대화에서 물어본 질문 원문이 나가고, 이쪽은 제목에서 만든 검색어가 나간다.
-/// 나가는 것의 성격이 달라 스위치도 따로다 — 대화 검색을 켰다고 일정 제목에서
-/// 뽑은 말까지 나가면 사용자가 동의한 범위를 넘는다.
-enum CostSearchConsent {
-    static let key = "usesWebSearchForCosts"
-
-    static var granted: Bool { UserDefaults.standard.bool(forKey: key) }
-
-    static func set(_ value: Bool) { UserDefaults.standard.set(value, forKey: key) }
 }
 
 /// 백엔드 SearchCostResult 와 같은 스키마.
@@ -250,7 +240,7 @@ final class AgentService: ObservableObject {
     /// 예산·일정·이름은 이 경로에 아예 싣지 않는다. 사용자가 버튼을 눌렀을 때만 호출된다.
     @MainActor
     func search(_ query: String) async -> ChatMessage? {
-        guard WebSearchConsent.granted else { return nil }
+        guard AIConsent.granted else { return nil }
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
@@ -341,6 +331,45 @@ final class AgentService: ObservableObject {
         return r
     }
 
+    /// 대화 한 턴 — 답변과 '실행할 동작'을 함께 받는다.
+    ///
+    /// 보내는 문장은 `sanitize()` 를 거친다. 이름·연락처·이미 저장된 일정 제목은 기기에서
+    /// 가려지고, 방금 새로 말한 일정 이름만 남는다. 그게 나가야 모델이 "제주도 여행
+    /// 넣어줘"를 알아듣는다. 동의를 안 켰으면 호출부가 이 함수를 부르지 않는다.
+    ///
+    /// 검색은 서버가 알아서 하지 않는다 — `maySearch` 가 참일 때만 도구를 쥐여 주고,
+    /// 그마저도 서버의 검증기가 검색어를 검사한 뒤에야 실제로 나간다.
+    func agentTurn(_ message: String, model: AppModel, maySearch: Bool,
+                   events: [AgentEventRef] = [],
+                   history: [AgentChatTurn] = []) async -> AgentTurnResult? {
+        // 계획 숫자는 대화 경로가 쓰는 것과 **같은 함수**로 만든다. 여기서 따로 만들면
+        // 화면에 293,410원이 떠 있는데 대화가 204,000원이라고 답하는 일이 생긴다.
+        // 실제로 그렇게 어긋났었다 — 서버가 요청에 프로필이 없으면 데모 페르소나로 계산한다.
+        guard var body = Self.makeChatRequestBody(message: message, history: history,
+                                                  model: model) else { return nil }
+        // 위 함수는 message 를 금융 의도 라벨로 줄여 놓는다(/api/chat 의 경계). 에이전트는
+        // "제주도 여행 넣어줘"를 알아들어야 하므로 문장을 되살린다 — 대신 sanitize 는 거친다.
+        // 이 한 줄이 이 기능과 /api/chat 의 프라이버시 등급을 가르는 지점이다.
+        body["message"] = OutboundPrivacy.sanitize(message, model: model)
+        body["history"] = history.suffix(6).map {
+            ["role": $0.role == "assistant" ? "assistant" : "user",
+             "content": OutboundPrivacy.sanitize($0.content, model: model)]
+        }
+        body["today"] = DemoClock.today
+        body["may_search"] = maySearch
+        // 제목은 안 싣는다 — 번호·날짜·유형·금액이면 모델이 지목할 수 있다.
+        body["events"] = events.map {
+            ["ref": $0.ref, "day": $0.day, "category": $0.category, "amount": $0.amount]
+        }
+        let req = Self.request("api/agent", timeout: 45, body: body)
+        guard let (data, resp) = try? await URLSession.shared.data(for: req) else {
+            backendReachable = false
+            return nil
+        }
+        guard accept(resp) else { return nil }
+        return try? JSONDecoder().decode(AgentTurnResult.self, from: data)
+    }
+
     /// 스트리밍 대화. 토큰이 올 때마다 onToken(델타) 호출.
     /// 반환: true=백엔드 응답 성공, false=실패(호출부가 로컬 폴백).
     func chatStream(_ message: String, history: [AgentChatTurn] = [], model: AppModel,
@@ -353,8 +382,8 @@ final class AgentService: ObservableObject {
         // 만들기 전에 모델 위치를 먼저 확인한다.
         if backendReachable == nil { await ping() }
         guard llmEnabled else { return false }
-        guard !externalLLM || CloudAIConsent.granted else { return false }
-        guard Self.isLoopbackBackend || CloudAIConsent.granted else { return false }
+        guard !externalLLM || AIConsent.granted else { return false }
+        guard Self.isLoopbackBackend || AIConsent.granted else { return false }
         guard let body = Self.makeChatRequestBody(message: message, history: history, model: model)
         else { return false }
         let req = Self.request("api/chat", timeout: 12, body: body)

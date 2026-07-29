@@ -521,7 +521,7 @@ struct AddEventView: View {
     /// 보내는 건 `SearchQuery.make()` 가 코드에 있는 말로만 조립한 문장이다.
     private func searchIfTooVague(_ title: String,
                                   _ current: EstimateResponse) async -> EstimateResponse? {
-        guard CostSearchConsent.granted,
+        guard AIConsent.granted,
               current.method == "local" || current.method == "rule",
               let built = SearchQuery.make(title: title, category: current.category),
               let found = await AgentService.searchCost(query: built.query),

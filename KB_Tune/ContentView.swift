@@ -14,7 +14,7 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var model: AppModel
 
-    enum Phase { case splash, onboarding, main }
+    enum Phase { case splash, consent, onboarding, main }
     @State private var phase: Phase
 
     init() {
@@ -65,12 +65,26 @@ struct ContentView: View {
                 .zIndex(1)
             }
 
+            // 동의는 온보딩보다 앞이다. 온보딩 첫 단계가 캘린더 연결이라, 동의를 뒤에 두면
+            // 일정 제목을 이미 읽은 다음에 민감정보 동의를 묻게 된다.
+            if phase == .consent {
+                ConsentView(onFinish: {
+                    phase = model.hasOnboarded ? .main : .onboarding
+                })
+                .transition(.opacity)
+                .zIndex(2)
+            }
+
             if phase == .splash {
                 SplashView {
+                    guard ConsentStore.isComplete else {
+                        phase = .consent
+                        return
+                    }
                     phase = model.hasOnboarded ? .main : .onboarding
                 }
                 .transition(.opacity)
-                .zIndex(2)
+                .zIndex(3)
             }
         }
         .animation(.smooth(duration: 0.5), value: phase)

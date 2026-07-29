@@ -179,7 +179,7 @@ final class CalendarStore: ObservableObject {
                 let components = Calendar.current.dateComponents([.hour, .minute], from: ek.startDate)
                 let startHour = Double(components.hour ?? 19) + Double(components.minute ?? 0) / 60
                 return PlanEvent(
-                    title: ek.title ?? "일정",
+                    title: Self.importedTitle(ek.title),
                     amount: 0,
                     symbol: "calendar",
                     dayLabel: formatter.string(from: ek.startDate),
@@ -189,6 +189,16 @@ final class CalendarStore: ObservableObject {
                 )
             }
         didFetch = true
+    }
+
+    /// 기기 캘린더에서 가져올 제목.
+    ///
+    /// 제목에는 병원명·종교시설처럼 개인정보 보호법 제23조의 민감정보가 들어온다. 그래서
+    /// 별도 동의를 받지 않았으면 **읽어오지 않는다** — 가려서 보내는 게 아니라 애초에
+    /// 앱 안으로 들이지 않는다. 날짜·시간만으로도 예산 계산은 그대로 된다.
+    nonisolated static func importedTitle(_ raw: String?) -> String {
+        guard ConsentStore.granted(.sensitive) else { return "일정" }
+        return raw ?? "일정"
     }
 
     /// 기기 캘린더의 실제 날짜를 앱이 쓰는 통산일로 옮긴다. 데모 기간 밖이면 0.
@@ -220,7 +230,7 @@ final class CalendarStore: ObservableObject {
             .sorted { $0.startDate < $1.startDate }
             .map { ek in
                 PlanEvent(
-                    title: ek.title ?? "일정",
+                    title: Self.importedTitle(ek.title),
                     amount: 0, // 예상 지출은 사용자가 지정 (또는 에이전트가 추정)
                     symbol: "calendar",
                     dayLabel: formatter.string(from: ek.startDate),
