@@ -25,14 +25,18 @@ import NaturalLanguage
 ///   · 모델 제공자는 학습에 쓰지 않고 30일 뒤 지움
 ///
 /// 끄면 기기 안의 예산·패턴 엔진만 쓴다. 앱은 그래도 다 돌아간다.
-enum AIConsent {
+///
+/// **여기에는 읽기만 있다.** 켜고 끄는 것은 `ConsentStore.set(.overseas,)` 뿐이다 —
+/// 이 값은 국외 이전 동의(제28조의8)와 같은 뜻이라, 여기서 따로 쓰면 동의 기록과
+/// 실제 전송이 어긋난다. 실제로 그런 적이 있다: 설정에서 철회해도 대화 화면의
+/// 동의 시트가 이 값만 되켜서, 기록은 '철회'인데 전송은 이어졌다. 동의 시각도
+/// 안 남아 입증이 안 됐다. 진입점을 하나로 묶어 구조적으로 막는다.
+nonisolated enum AIConsent {
     // 예전 키를 그대로 쓴다 — 이미 켜 둔 사람이 다시 켜지 않아도 되게.
     static let key = "usesCloudAIAnalysis"
 
     static var asked: Bool { UserDefaults.standard.object(forKey: key) != nil }
     static var granted: Bool { UserDefaults.standard.bool(forKey: key) }
-
-    static func set(_ value: Bool) { UserDefaults.standard.set(value, forKey: key) }
 }
 
 /// 백엔드 SearchCostResult 와 같은 스키마.

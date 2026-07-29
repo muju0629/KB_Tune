@@ -16,6 +16,8 @@ struct SettingsView: View {
 
     /// AgentService의 동의 키와 같은 값을 본다 — 여기서 끄면 전송도 즉시 멈춘다.
     @AppStorage(AIConsent.key) private var usesAI = false
+    @AppStorage(ConsentItem.sensitive.rawValue) private var usesSensitive = false
+    @State private var showConsentDocument = false
 
     private var savingPct: Int {
         model.monthlyIncome > 0
@@ -43,6 +45,12 @@ struct SettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .sheet(item: $editing) { editSheet($0) }
+        .sheet(isPresented: $showConsentDocument) {
+            // 여기서 고른 값도 그대로 저장된다 — 열람과 철회가 같은 화면이어야
+            // "설정에서 바꿀 수 있다"는 고지가 실제로 성립한다.
+            ConsentView(onFinish: { showConsentDocument = false },
+                        onClose: { showConsentDocument = false })
+        }
     }
 
     // MARK: 프로필
@@ -172,23 +180,20 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("개인정보").font(.kb(13, .semibold)).foregroundStyle(KB.muted)
 
-            // 스위치는 하나다. 예전에는 넷이었는데, 무엇을 지킬지는 사용자가 고를 일이
-            // 아니라 코드가 지킬 일이라서 합쳤다. 남은 선택은 "AI를 쓸지 말지" 하나뿐이다.
+            // 동의받은 항목과 같은 개수만큼 스위치가 있다. 동의 화면에서 고른 것을 여기서
+            // 되돌릴 수 없으면 '언제든 철회할 수 있다'는 고지가 거짓말이 된다(제37조).
             VStack(spacing: 0) {
-                Toggle(isOn: $usesAI) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("AI 기능")
-                            .font(.kb(14.5)).foregroundStyle(KB.ink)
-                        Text(usesAI
-                             ? "대화로 묻고, 일정도 넣고 고치고 지울 수 있어요"
-                             : "기기 안의 예산·패턴 엔진만 써요")
-                            .font(.kb(11.5))
-                            .foregroundStyle(usesAI ? KB.green : KB.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                .tint(KB.green)
-                .padding(.horizontal, 16).padding(.vertical, 12)
+                consentToggle(
+                    .sensitive, isOn: $usesSensitive,
+                    on: "일정 제목을 읽어 소비 유형을 자동으로 분류해요",
+                    off: "제목을 읽지 않아요. 유형은 직접 골라요"
+                )
+                rowDivider
+                consentToggle(
+                    .overseas, isOn: $usesAI,
+                    on: "대화로 묻고, 일정도 넣고 고치고 지울 수 있어요",
+                    off: "기기 안의 예산·패턴 엔진만 써요"
+                )
             }
             .background(KB.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
@@ -200,7 +205,51 @@ struct SettingsView: View {
                  : "켜지 않으면 아무것도 나가지 않아요. 예산 계산과 일정 추가는 켜지 않아도 돼요.")
                 .font(.kb(11)).foregroundStyle(KB.muted)
                 .fixedSize(horizontal: false, vertical: true)
+
+            Button { showConsentDocument = true } label: {
+                HStack(spacing: 12) {
+                    rowIcon("doc.text")
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("동의서 전문 다시 보기")
+                            .font(.kb(14.5)).foregroundStyle(KB.ink)
+                        Text("무엇에 동의했는지 원문 그대로 볼 수 있어요")
+                            .font(.kb(11.5)).foregroundStyle(KB.muted)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.kb(12, .semibold)).foregroundStyle(KB.muted)
+                }
+                .padding(.horizontal, 16).padding(.vertical, 14)
+                .background(KB.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
         }
+    }
+
+    /// 스위치 하나 = 동의 항목 하나. `@AppStorage` 가 UserDefaults 를 직접 쓰므로,
+    /// 동의 시각까지 남기려면 `ConsentStore` 를 한 번 더 태워야 한다.
+    private func consentToggle(_ item: ConsentItem, isOn: Binding<Bool>,
+                               on: String, off: String) -> some View {
+        Toggle(isOn: Binding(
+            get: { isOn.wrappedValue },
+            set: { ConsentStore.set(item, $0) }
+        )) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(item.title).font(.kb(14.5)).foregroundStyle(KB.ink)
+                    Text("선택").font(.kb(10, .medium)).foregroundStyle(KB.muted)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(KB.line, in: Capsule())
+                }
+                Text(isOn.wrappedValue ? on : off)
+                    .font(.kb(11.5))
+                    .foregroundStyle(isOn.wrappedValue ? KB.green : KB.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .tint(KB.green)
+        .padding(.horizontal, 16).padding(.vertical, 12)
     }
 
     /// 켰을 때 무엇이 나가고 무엇이 안 나가는지. 스위치를 없앤 대신 이걸 항상 보여준다.

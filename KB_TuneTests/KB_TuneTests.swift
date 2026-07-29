@@ -966,12 +966,32 @@ struct KB_TuneTests {
     @Test func oneSwitchTurnsOnEverythingAndNothingElseIsNeeded() {
         // 스위치는 하나뿐이다. 켜면 대화·일정 변경·검색이 다 되고, 끄면 다 멈춘다.
         // 예전에는 넷이어서 "뭘 켜야 뭐가 되는지" 알 수 없었다.
-        AIConsent.set(false)
+        defer { ConsentStore.reset() }
+
+        ConsentStore.set(.overseas, false)
         #expect(AIConsent.granted == false)
 
-        AIConsent.set(true)
+        ConsentStore.set(.overseas, true)
         #expect(AIConsent.granted)
-        AIConsent.set(false)
+    }
+
+    @Test func turningTransmissionOnAlwaysLeavesAConsentRecord() {
+        // 전송을 켜는 길은 하나여야 한다. 대화 화면의 동의 시트가 AIConsent 만 직접
+        // 켜던 시절에는, 설정에서 철회해도 시트가 되켜서 기록은 '철회'인데 전송은
+        // 이어졌다. 동의 시각이 안 남아 언제 동의했는지 입증도 못 했다.
+        defer { ConsentStore.reset() }
+        ConsentStore.reset()
+
+        ConsentStore.set(.overseas, true)
+        // 전송이 켜졌다면 동의 기록과 시각이 반드시 함께 있어야 한다.
+        #expect(AIConsent.granted)
+        #expect(ConsentStore.granted(.overseas))
+        #expect(ConsentStore.grantedAt(.overseas) != nil)
+
+        ConsentStore.set(.overseas, false)
+        #expect(AIConsent.granted == false)
+        #expect(ConsentStore.granted(.overseas) == false)
+        #expect(ConsentStore.grantedAt(.overseas) == nil)
     }
 
     @Test func agentTurnMasksNamesAndSavedEventTitles() {
@@ -991,6 +1011,46 @@ struct KB_TuneTests {
         UserDefaults.standard.removeObject(forKey: AIConsent.key)
         #expect(AIConsent.granted == false)
         #expect(AIConsent.asked == false)
+    }
+
+    @Test func calendarTitlesNeedTheirOwnConsent() {
+        // 일정 제목은 민감정보(제23조)다. 별도 동의 없이는 앱 안으로도 들어오면 안 된다 —
+        // 가려서 보내는 게 아니라 아예 읽지 않는 것이 이 규칙의 요지다.
+        defer { ConsentStore.reset() }
+
+        ConsentStore.set(.sensitive, false)
+        #expect(CalendarStore.importedTitle("정형외과 진료") == "일정")
+
+        ConsentStore.set(.sensitive, true)
+        #expect(CalendarStore.importedTitle("정형외과 진료") == "정형외과 진료")
+    }
+
+    @Test func consentGateStaysClosedUntilTheRequiredItemIsGranted() {
+        // 필수 항목 없이는 앱에 들어갈 수 없어야 한다. 선택 항목만 눌러도 열리면
+        // '필수/선택 분리'(제22조)가 화면에만 있고 코드에는 없는 것이 된다.
+        defer { ConsentStore.reset() }
+        ConsentStore.reset()
+        #expect(ConsentStore.isComplete == false)
+
+        ConsentStore.set(.sensitive, true)
+        ConsentStore.finish()
+        #expect(ConsentStore.isComplete == false)
+
+        ConsentStore.set(.essential, true)
+        ConsentStore.finish()
+        #expect(ConsentStore.isComplete == true)
+    }
+
+    @Test func withdrawingOverseasConsentStopsTransmission() {
+        // 국외 이전 동의를 끄면 전송 스위치도 같이 꺼져야 한다. 두 값이 어긋나면
+        // 철회했는데도 계속 나가는 사고가 된다.
+        defer { ConsentStore.reset() }
+
+        ConsentStore.set(.overseas, true)
+        #expect(AIConsent.granted == true)
+
+        ConsentStore.set(.overseas, false)
+        #expect(AIConsent.granted == false)
     }
 
 }

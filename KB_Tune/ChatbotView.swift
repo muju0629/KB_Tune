@@ -303,12 +303,12 @@ struct ChatbotView: View {
 
                 VStack(spacing: 9) {
                     consentButton("검색할게요", filled: true) {
-                        AIConsent.set(true)
+                        ConsentStore.set(.overseas, true)
                         pendingSearchQuery = nil
                         Task { await runSearch(query) }
                     }
                     consentButton("안 할래요", filled: false) {
-                        AIConsent.set(false)
+                        ConsentStore.set(.overseas, false)
                         pendingSearchQuery = nil
                     }
                 }
@@ -432,7 +432,8 @@ struct ChatbotView: View {
     }
 
     private func chooseConsent(cloud: Bool) {
-        AIConsent.set(cloud)
+        // 국외 이전 동의와 같은 값이다. 여기서 AIConsent 를 직접 쓰면 동의 기록이 안 남는다.
+        ConsentStore.set(.overseas, cloud)
         showConsent = false
     }
 
