@@ -18,6 +18,8 @@ struct SettingsView: View {
     @AppStorage(CloudAIConsent.key) private var usesCloudAI = false
     /// 일정 금액 검색은 대화 검색과 나가는 것이 달라 스위치를 따로 둔다.
     @AppStorage(CostSearchConsent.key) private var usesCostSearch = false
+    /// 대화가 일정을 직접 바꾸게 할지. 켜면 방금 친 문장이 가명처리된 채로 모델까지 간다.
+    @AppStorage(PlanAgentConsent.key) private var usesPlanAgent = false
     @AppStorage(WebSearchConsent.key) private var usesWebSearch = false
 
     private var savingPct: Int {
@@ -181,6 +183,25 @@ struct SettingsView: View {
                             .font(.kb(14.5)).foregroundStyle(KB.ink)
                         Text(usesCloudAI ? "질문 원문·실명 없이 필요한 집계값만 전달" : "기기 안의 예산·패턴 엔진만 사용")
                             .font(.kb(11.5)).foregroundStyle(usesCloudAI ? KB.green : KB.muted)
+                    }
+                }
+                .tint(KB.green)
+                .padding(.horizontal, 16).padding(.vertical, 12)
+
+                rowDivider
+
+                // 이걸 켜야 대화에서 일정을 넣고 고치고 지울 수 있다. 대신 방금 친 문장이
+                // 가명처리된 채로 모델까지 간다 — 새 일정 이름을 알아들어야 하기 때문이다.
+                Toggle(isOn: $usesPlanAgent) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("대화로 일정 바꾸기")
+                            .font(.kb(14.5)).foregroundStyle(KB.ink)
+                        Text(usesPlanAgent
+                             ? "이름·연락처·저장된 일정 제목은 가리고, 방금 말한 일정 이름만 전달"
+                             : "대화는 묻고 답하기만 하고, 일정은 주간 화면에서 바꿈")
+                            .font(.kb(11.5))
+                            .foregroundStyle(usesPlanAgent ? KB.caution : KB.muted)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .tint(KB.green)

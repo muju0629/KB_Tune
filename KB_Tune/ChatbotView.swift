@@ -31,6 +31,9 @@ struct ChatMessage: Identifiable {
         case choices([String])
         /// 앱 데이터로는 답할 수 없는 질문. 누르면 그때 질문 원문이 검색으로 나간다.
         case searchWeb(String)
+        /// 대화 에이전트가 제안한 계획 변경. 누를 때까지 아무것도 바뀌지 않는다 —
+        /// 모델이 혼자 일정을 넣거나 지우는 일은 없다.
+        case planChanges([AgentAction])
     }
     let role: Role
     var conclusion: String                 // 결론(본문)
@@ -46,8 +49,6 @@ struct ChatMessage: Identifiable {
 private struct SearchPrompt: Identifiable {
     let id = UUID()
     let query: String
-    /// true면 이 질문 하나를 검색하는 게 아니라 입력줄의 검색 스위치를 켜는 자리다.
-    var turnsOnMode = false
 }
 
 /// 모델이 보내온 자유 문장을 읽기 좋게 그린다.
@@ -184,7 +185,6 @@ struct ChatbotView: View {
     @State private var searchingNow = false
     /// 입력줄의 검색 스위치. 켜 두면 보내는 말이 예산 계산이 아니라 웹 검색으로 간다.
     /// 언제 원문이 나가는지를 앱이 눈치로 정하지 않고 사용자가 직접 정하게 하는 자리다.
-    @State private var searchMode = false
     @FocusState private var inputFocused: Bool
 
     // 데모 흐름 순서대로 — 소비 질문 → 절감 지점 → 패턴 → 다음 달 방향 → 적금
@@ -273,9 +273,9 @@ struct ChatbotView: View {
     /// 무엇이 나가는지 사용자가 눈앞의 질문으로 확인할 수 있을 때 물어야 판단이 된다.
     private func searchConsentSheet(_ prompt: SearchPrompt) -> some View {
         let query = prompt.query.trimmingCharacters(in: .whitespaces)
-        return SheetContainer(title: prompt.turnsOnMode ? "웹 검색을 켤까요?" : "검색해서 알아볼까요?") {
+        return SheetContainer(title: "검색해서 알아볼까요?") {
             VStack(alignment: .leading, spacing: 16) {
-                Text(prompt.turnsOnMode
+                Text(false
                      ? "켜 두는 동안 보내는 말이 그대로 검색에 나가요. 예산 계산은 하지 않아요."
                      : "이 질문 한 줄이 그대로 검색에 나가요.")
                     .font(.kb(14)).foregroundStyle(KB.ink)
@@ -291,24 +291,19 @@ struct ChatbotView: View {
                 }
 
                 consentRow(icon: "magnifyingglass", tint: KB.caution, title: "나가는 것",
-                           detail: prompt.turnsOnMode ? "검색이 켜져 있을 때 보내는 문장이에요."
-                                                      : "위 질문 문장 하나예요.")
+                           detail: "위 질문 문장 하나예요.")
                 consentRow(icon: "lock", tint: KB.green, title: "나가지 않는 것",
                            detail: "일정 제목, 금액, 예산, 카드 내역, 이름은 검색으로 보내지 않아요.")
 
-                Text("검색을 쓰는 동안에는 위쪽 배지가 ‘검색 사용 중’으로 바뀌어요. 입력줄의 돋보기를 다시 누르면 꺼지고, 설정에서도 끌 수 있어요.")
+                Text("검색하는 동안에는 위쪽 배지가 ‘검색 사용 중’으로 바뀌어요. 설정에서 언제든 끌 수 있어요.")
                     .font(.kb(11.5)).foregroundStyle(KB.muted)
                     .fixedSize(horizontal: false, vertical: true)
 
                 VStack(spacing: 9) {
-                    consentButton(prompt.turnsOnMode ? "켤게요" : "검색할게요", filled: true) {
+                    consentButton("검색할게요", filled: true) {
                         WebSearchConsent.set(true)
                         pendingSearchQuery = nil
-                        if prompt.turnsOnMode {
-                            searchMode = true
-                        } else {
-                            Task { await runSearch(query) }
-                        }
+                        Task { await runSearch(query) }
                     }
                     consentButton("안 할래요", filled: false) {
                         WebSearchConsent.set(false)
@@ -322,6 +317,34 @@ struct ChatbotView: View {
     /// 질문 원문을 검색에 보내고 결과를 답변으로 붙인다.
     /// 이 함수가 도는 동안에만 배지가 '검색 사용 중'이 된다.
     @MainActor
+    /// 계획 에이전트 한 턴. 답변과 '실행할 동작'을 함께 받아 버튼으로 보여준다.
+    ///
+    /// 동작은 여기서 실행하지 않는다 — 사용자가 버튼을 눌러야 계획이 바뀐다.
+    /// 검색이 실제로 일어났으면 나간 검색어를 그대로 화면에 적는다. 무엇이 나갔는지
+    /// 사용자가 나중에라도 확인할 수 있어야 한다.
+    private func runAgent(_ message: String, history: [AgentChatTurn]) async {
+        defer { isThinking = false }
+
+        guard let result = await agent.agentTurn(message, model: model,
+                                                 maySearch: WebSearchConsent.granted,
+                                                 history: history) else {
+            messages.append(ChatMessage(
+                role: .agent,
+                conclusion: "지금은 서버에 닿지 않아요. 잠시 뒤에 다시 말씀해 주세요."))
+            return
+        }
+
+        var reply = ChatMessage(role: .agent, conclusion: result.reply, isStream: true)
+        if !result.actions.isEmpty {
+            reply.actions = .planChanges(result.actions)
+        }
+        if let query = result.searchedQuery {
+            reply.basis = "웹에 보낸 검색어: ‘\(query)’"
+                + (result.sources.isEmpty ? "" : "\n출처: " + result.sources.joined(separator: "\n"))
+        }
+        messages.append(reply)
+    }
+
     private func runSearch(_ query: String) async {
         searchingNow = true
         isThinking = true
@@ -449,7 +472,7 @@ struct ChatbotView: View {
     /// 지금 이 대화에서 무엇이 기기 밖으로 나가는지 한 줄로 알린다.
     /// 검색은 질문 원문이 그대로 나가므로 가장 강한 표기가 되어야 한다.
     private var privacyBadgeLabel: String {
-        if searchingNow || searchMode { return "검색 사용 중" }
+        if searchingNow { return "검색 사용 중" }
         guard CloudAIConsent.granted else { return "기기 안에서만" }
         return "직접식별자·원문 비공개"
     }
@@ -622,6 +645,22 @@ struct ChatbotView: View {
             }
             .padding(.top, 2)
 
+        case .planChanges(let actions):
+            // 모델이 제안한 계획 변경. 누르는 순간에만 실제로 바뀐다.
+            FlowLayout(spacing: 8) {
+                ForEach(actions) { action in
+                    smallAction(action.label, filled: action.kind == .addEvent) {
+                        consumeAction(message.id)
+                        let outcome = AgentActionRunner.run(action, on: model)
+                        flash(outcome.message)
+                    }
+                }
+                smallAction("그냥 둘래요", filled: false) {
+                    consumeAction(message.id)
+                }
+            }
+            .padding(.top, 4)
+
         case .openProducts:
             HStack(spacing: 8) {
                 // 카드 질문에도 쓰이는 버튼이라 상품을 특정하지 않는다.
@@ -779,14 +818,12 @@ struct ChatbotView: View {
 
     private var inputRow: some View {
         HStack(spacing: 10) {
-            searchToggle
 
-            TextField(searchMode ? "웹에서 찾아볼 내용을 적어 주세요" : "편하게 말해 주세요", text: $input)
+            TextField("편하게 말해 주세요", text: $input)
                 .font(.kb(14))
                 .padding(.horizontal, 16).padding(.vertical, 12)
                 .background(KB.surface, in: Capsule())
-                .overlay(Capsule().stroke(searchMode ? KB.caution : KB.line,
-                                          lineWidth: searchMode ? 1.5 : 1))
+                .overlay(Capsule().stroke(KB.line, lineWidth: 1))
                 .submitLabel(.send)
                 .onSubmit { send(input) }
                 .focused($inputFocused)
@@ -820,29 +857,6 @@ struct ChatbotView: View {
         }
     }
 
-    /// 검색 스위치. 켜는 순간이 곧 동의를 묻는 자리다 — 무엇이 나가는지
-    /// 눈앞의 질문으로 확인할 수 있을 때 물어야 판단이 된다.
-    private var searchToggle: some View {
-        Button {
-            if searchMode {
-                searchMode = false
-            } else if WebSearchConsent.granted {
-                searchMode = true
-            } else {
-                pendingSearchQuery = SearchPrompt(query: input, turnsOnMode: true)
-            }
-        } label: {
-            Image(systemName: "magnifyingglass")
-                .font(.kb(16, .bold))
-                .foregroundStyle(searchMode ? KB.onYellow : KB.muted)
-                .frame(width: 44, height: 44)
-                .background(searchMode ? KB.yellow : KB.surface, in: Circle())
-                .overlay(Circle().stroke(searchMode ? .clear : KB.line, lineWidth: 1))
-        }
-        .disabled(isThinking)
-        .accessibilityLabel(searchMode ? "웹 검색 켜짐. 누르면 끕니다" : "웹 검색 켜기")
-        .accessibilityAddTraits(searchMode ? .isSelected : [])
-    }
 
     /// 녹음 시작/정지. 멈출 때 알아들은 문장을 입력창으로 옮긴다.
     private func toggleRecording() async {
@@ -882,10 +896,13 @@ struct ChatbotView: View {
         inputFocused = false
         thinkingStep = 0
 
-        // 검색 스위치가 켜져 있으면 예산 규칙도 LLM도 거치지 않고 곧장 검색으로 간다.
-        // 사용자가 켜 둔 동안에는 무엇이 나가는지가 화면 위 배지로 계속 보인다.
-        if searchMode {
-            Task { await runSearch(trimmed) }
+        // 계획 에이전트를 켰으면 여기로 다 보낸다. 일정 추가·수정·삭제·가격 조회·웹 검색을
+        // 한 경로에서 처리하므로, 예전처럼 모드를 골라 가며 쓰지 않아도 된다.
+        // 검색은 에이전트가 필요하다고 판단할 때만 일어나고, 그 전에 서버의 검증기가
+        // 검색어를 검사한다.
+        if PlanAgentConsent.granted {
+            withAnimation(.easeOut(duration: 0.25)) { isThinking = true }
+            Task { await runAgent(trimmed, history: history) }
             return
         }
 
