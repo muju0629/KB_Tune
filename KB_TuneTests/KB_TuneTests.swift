@@ -858,4 +858,112 @@ struct KB_TuneTests {
         #expect(EventEstimator.estimate("와드").amount == 40_000)
     }
 
+    // MARK: 공개 통계 기준 금액
+
+    @Test func bundledBaselineTableIsReadableOffline() {
+        // 서버가 없어도 값이 나와야 한다. 첫 실행·비행기 모드·백엔드 다운 모두 이 경로다.
+        #expect(!BaselinePrices.table.events.isEmpty)
+        #expect(!BaselinePrices.table.items.isEmpty)
+        #expect(BaselinePrices.monthly.total > 0)
+    }
+
+    @Test func everyBaselineRowCarriesItsSource() {
+        // 근거 없는 숫자를 못 넣게 막는다 — 화면에 출처를 그대로 인용하기 때문이다.
+        for event in BaselinePrices.table.events {
+            #expect(!event.source.isEmpty)
+            #expect(event.low <= event.amount && event.amount <= event.high)
+        }
+        for item in BaselinePrices.table.items {
+            #expect(!item.source.isEmpty)
+            #expect(item.low <= item.amount && item.amount <= item.high)
+        }
+    }
+
+    @Test func newUserWithoutHistoryGetsPublicStatisticsNotSomeoneElsesSpending() {
+        // 이력이 빈 사람. 이 기능이 존재하는 이유다.
+        let result = EventEstimator.estimate("친구 저녁", history: [])
+        #expect(result.method == "baseline")
+        #expect(result.amount > 0)
+        #expect(result.basis.contains("출처는"))
+    }
+
+    @Test func personalHistoryStillWinsOverPublicAverage() {
+        // 기기에 같은 카테고리 결제 이력이 있으면 통계 평균이 그걸 덮으면 안 된다.
+        let result = EventEstimator.estimate("친구 저녁")
+        #expect(result.method == "history")
+        #expect(result.amount != BaselinePrices.forCategory("모임")?.amount)
+        #expect(result.basis.contains("기기에 저장된"))
+    }
+
+    @Test func ageBucketOnlyMovesTheStatisticalBaseline() {
+        let plain = BaselinePrices.forCategory("모임")
+        let twenties = BaselinePrices.forCategory("모임", ageBucket: "20")
+        #expect(twenties!.amount < plain!.amount)
+        // 표에 없는 나이대를 넣어도 평균으로 조용히 떨어져야 한다.
+        #expect(BaselinePrices.forCategory("모임", ageBucket: "99")!.amount == plain!.amount)
+    }
+
+    @Test func categoriesWithoutPublicStatisticsStayOnTheOldRules() {
+        // 축의금에 대응하는 공표 통계가 없다. 없으면 없다고 해야 규칙으로 넘어간다.
+        #expect(BaselinePrices.forCategory("경조사") == nil)
+    }
+
+    @Test func itemLookupIsMoreSpecificThanCategoryAverage() {
+        let match = BaselinePrices.forTitle("점심은 자장면")
+        #expect(match?.basis.contains("자장면") == true)
+    }
+
+    // MARK: 웹 검색 — 제목이 검색어로 새지 않는가
+
+    @Test func searchQueryNeverCopiesWordsFromTheTitle() {
+        // 이 기능의 안전성 전부가 여기 걸려 있다. 검색어는 코드에 있는 말로만 조립되고
+        // 제목의 낱말은 하나도 복사되지 않아야 한다.
+        let secrets = ["제주도", "성심병원", "김민수", "성당", "강남", "롯데월드"]
+        let titles = [
+            "제주도 3박4일 여행", "성심병원 정기검진 여행", "김민수랑 여행",
+            "성당 모임 여행", "강남 여행 2명", "롯데월드 여행",
+        ]
+        for title in titles {
+            guard let built = SearchQuery.make(title: title, category: "여행") else { continue }
+            for secret in secrets {
+                #expect(!built.query.contains(secret), "‘\(secret)’이 검색어에 남음: \(built.query)")
+            }
+        }
+    }
+
+    @Test func searchQueryKeepsOnlyStructuralSignals() {
+        let built = SearchQuery.make(title: "제주도 3박4일 여행", category: "여행")
+        #expect(built?.query == "국내 3박 여행 1인 평균 경비")
+
+        let overseas = SearchQuery.make(title: "일본 2박 여행", category: "여행")
+        #expect(overseas?.query == "해외 2박 여행 1인 평균 경비")
+    }
+
+    @Test func categoriesWithGoodBaselinesAreNotSearched() {
+        // 공개 통계나 개인 이력으로 답이 나오는 건 검색하지 않는다.
+        for category in ["외식", "카페", "모임", "데이트", "자기관리", "쇼핑"] {
+            #expect(SearchQuery.make(title: "무엇이든", category: category) == nil)
+        }
+    }
+
+    @Test func headcountIsAppliedByTheAppNotTheSearch() {
+        // 검색은 늘 1인 기준으로 묻고, 인원 곱하기는 기기에서 한다.
+        #expect(SearchQuery.headcount(in: "여행 4명") == 4)
+        #expect(SearchQuery.headcount(in: "여행") == 1)
+        #expect(SearchQuery.headcount(in: "여행 99명") == 1)   // 말이 안 되는 값은 무시
+        #expect(SearchQuery.make(title: "여행 4명", category: "여행")?
+            .query.contains("1인 평균") == true)
+    }
+
+    @Test func webSearchIsOffUntilTheUserTurnsItOn() {
+        // 기본값이 꺼짐이어야 한다. 켠 적 없는 사람의 검색어가 나가면 안 된다.
+        UserDefaults.standard.removeObject(forKey: CostSearchConsent.key)
+        #expect(CostSearchConsent.granted == false)
+
+        // 대화 검색을 켜도 일정 제목에서 만든 검색어까지 나가면 안 된다 — 스위치가 다르다.
+        WebSearchConsent.set(true)
+        #expect(CostSearchConsent.granted == false)
+        WebSearchConsent.set(false)
+    }
+
 }

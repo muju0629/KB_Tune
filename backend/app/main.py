@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
-from . import config
+from . import baseline, config
 from .config import llm_enabled
 from .data import DAYS_IN_MONTH, PROFILE, TRANSACTIONS_HISTORY
 from .engine import build_plan
@@ -21,10 +21,12 @@ from .eval.runner import run_eval
 from .llm.chat import chat_stream
 from .llm.coach import coach
 from .llm.extract import extract_from_text
+from .llm.search import search_cost
 from .models import (CategorizeRequest, CategorizeResult, ChatRequest,
                      CoachRequest, EstimateRequest, EstimateResult,
                      ExtractRequest, ExtractResult, ForecastResult,
-                     PlanRequest, PlanResult, Profile, SearchRequest)
+                     PlanRequest, PlanResult, Profile, SearchCostRequest,
+                     SearchCostResult, SearchRequest)
 from . import websearch
 from .security import BodySizeLimitMiddleware, rate_limit, require_api_key
 
@@ -127,7 +129,33 @@ def estimate_endpoint(req: EstimateRequest):
     # 수 있다. 외부 모델에는 아예 보내지 않고, 루프백 로컬 모델만 선택적으로 쓴다.
     use_private_llm = config.llm_enabled() and not config.llm_is_external()
     return estimate_event_cost(req.title, TRANSACTIONS_HISTORY,
-                               use_llm=use_private_llm)
+                               use_llm=use_private_llm, age_bucket=req.age_bucket)
+
+
+# ---------- 웹 검색으로 금액 찾기 ----------
+
+@app.post("/api/search/cost", response_model=SearchCostResult, dependencies=_llm)
+def search_cost_endpoint(req: SearchCostRequest):
+    """검색어 하나로 1인 기준 금액을 찾는다. 사용자가 켰을 때만 앱이 부른다.
+
+    이 통로는 질의가 모델 제공자를 거쳐 검색 엔진까지 나간다. 그래서 SearchRequest 에는
+    검색어 말고 아무 필드도 없고, 앱은 코드에 정의된 말로만 조립해서 보낸다
+    (`SearchQuery.make()`). 일정 제목 원문은 여기 도달할 경로가 없다.
+    """
+    return search_cost(req.query)
+
+
+# ---------- 공개 통계 기준 금액 ----------
+
+@app.get("/api/baseline", dependencies=_cheap)
+def baseline_endpoint():
+    """공개 통계 기준 금액 표 전체.
+
+    앱은 이걸 통째로 받아 기기에 캐시하고 조회는 기기 안에서 한다. 일정 제목을
+    서버로 보내지 않기 위해서다 — 제목당 한 번 물어보는 방식이면 제목이 나간다.
+    표에는 공개 통계만 있어서 응답에 개인 정보가 없다.
+    """
+    return baseline.table()
 
 
 # ---------- AI 기능 ② 캡처 → 거래 추출 ----------

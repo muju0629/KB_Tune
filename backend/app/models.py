@@ -228,6 +228,9 @@ class EvalResult(BaseModel):
 class EstimateRequest(BaseModel):
     title: Annotated[str, Field(min_length=1, max_length=80)]
     day: Day | None = None
+    # 공개 통계 기준값에 연령 배수를 적용할 때만 쓴다. 선택 입력이라 비어 오는 게 정상이고,
+    # 저장하지 않는다. 나이 자체보다 좁은 정보를 받으려고 만 나이 대신 10년 단위로 받는다.
+    age_bucket: Literal["20", "30", "40", "50"] | None = None
 
 
 class EstimateResult(BaseModel):
@@ -238,8 +241,29 @@ class EstimateResult(BaseModel):
     high: int            # 같은 일정 유형의 예상 상한
     confidence: float    # 0~1
     basis: str           # 사용자에게 보여줄 근거 한 줄
-    method: str          # rule | history | llm
+    method: str          # rule | history | baseline | llm
     llm_raw: int | None = None   # LLM 원안(엔진 보정 전) — 투명성
+
+
+# ---------- 웹 검색으로 금액 찾기 (동의했을 때만) ----------
+
+class SearchCostRequest(BaseModel):
+    """검색어 하나뿐이다. 계획·카드·일정 필드를 **일부러** 두지 않았다.
+
+    이 통로는 질의가 검색 엔진까지 나간다. 받을 칸이 있으면 언젠가 채워 보내게 되므로
+    칸 자체를 만들지 않는다. 앱은 `SearchQuery.make()` 로 코드에 있는 말만 조립해
+    보내고, 일정 제목 원문은 여기 도달할 방법이 없다.
+    """
+    query: Annotated[str, Field(min_length=2, max_length=60)]
+
+
+class SearchCostResult(BaseModel):
+    amount: int | None       # 1인 기준. 못 찾으면 None
+    low: int | None
+    high: int | None
+    basis: str               # 사용자에게 보여줄 근거 한 줄
+    sources: list[str] = Field(default_factory=list)   # 참고한 문서 제목·주소
+    method: str              # web | unavailable
 
 
 # ---------- AI 기능 2: 캡처 이미지 → 거래 추출 ----------

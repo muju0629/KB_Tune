@@ -503,7 +503,8 @@ struct AddEventView: View {
         guard !t.isEmpty else { return }
         isEstimating = true
         Task { @MainActor in
-            let result = EventEstimator.estimate(t)
+            var result = EventEstimator.estimate(t)
+            if let searched = await searchIfTooVague(t, result) { result = searched }
             estimate = result
             // 사용자가 직접 적은 금액이 있으면 그 값이 우선, 없으면 추정치.
             let typed = Int(amountText.filter(\.isNumber)) ?? 0
@@ -511,6 +512,32 @@ struct AddEventView: View {
             isEstimating = false
             withAnimation(spring) { step = .result }
         }
+    }
+
+    /// 규칙 기본값밖에 못 낸 일정만 웹에서 찾아본다.
+    ///
+    /// 개인 이력이나 공개 통계로 답이 나온 건 검색하지 않는다 — 그쪽이 더 정확하고,
+    /// 검색은 검색어가 기기 밖으로 나가는 유일한 추정 경로라 필요한 만큼만 쓴다.
+    /// 보내는 건 `SearchQuery.make()` 가 코드에 있는 말로만 조립한 문장이다.
+    private func searchIfTooVague(_ title: String,
+                                  _ current: EstimateResponse) async -> EstimateResponse? {
+        guard CostSearchConsent.granted,
+              current.method == "local" || current.method == "rule",
+              let built = SearchQuery.make(title: title, category: current.category),
+              let found = await AgentService.searchCost(query: built.query),
+              let amount = found.amount else { return nil }
+
+        // 검색은 1인 기준으로 물어본다. 제목에 인원이 적혀 있으면 여기서 곱한다.
+        let people = SearchQuery.headcount(in: title)
+        let source = found.sources.first.map { " 참고: \($0)" } ?? ""
+        return EstimateResponse(
+            title: title, category: current.category,
+            amount: amount * people,
+            low: (found.low ?? amount) * people, high: (found.high ?? amount) * people,
+            confidence: 0.4,
+            basis: "‘\(built.query)’로 웹에서 찾았어요. \(found.basis)\(source)",
+            method: "web"
+        )
     }
 }
 

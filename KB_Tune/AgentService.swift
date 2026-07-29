@@ -37,6 +37,29 @@ enum WebSearchConsent {
     static func set(_ value: Bool) { UserDefaults.standard.set(value, forKey: key) }
 }
 
+/// 일정 금액을 웹에서 찾는 동의. 위 WebSearchConsent 와 따로 둔다.
+///
+/// 저쪽은 대화에서 물어본 질문 원문이 나가고, 이쪽은 제목에서 만든 검색어가 나간다.
+/// 나가는 것의 성격이 달라 스위치도 따로다 — 대화 검색을 켰다고 일정 제목에서
+/// 뽑은 말까지 나가면 사용자가 동의한 범위를 넘는다.
+enum CostSearchConsent {
+    static let key = "usesWebSearchForCosts"
+
+    static var granted: Bool { UserDefaults.standard.bool(forKey: key) }
+
+    static func set(_ value: Bool) { UserDefaults.standard.set(value, forKey: key) }
+}
+
+/// 백엔드 SearchCostResult 와 같은 스키마.
+struct SearchCostResult: Codable {
+    let amount: Int?
+    let low: Int?
+    let high: Int?
+    let basis: String
+    let sources: [String]
+    let method: String      // web | unavailable
+}
+
 /// 서버에 보낼 수 있는 짧은 대화 문맥. 화면 모델이나 실행 버튼은 포함하지 않는다.
 struct AgentChatTurn {
     let role: String       // user | assistant
@@ -291,6 +314,31 @@ final class AgentService: ObservableObject {
             llmEnabled = false
             externalLLM = false
         }
+    }
+
+    /// 공개 통계 기준 금액 표를 통째로 받아온다.
+    ///
+    /// 이 경로로 나가는 게 없다 — 본문 없는 GET 이고, 받아오는 값도 참가격·가계동향조사
+    /// 같은 공표 통계뿐이다. 일정 제목을 서버에 물어보는 대신 표를 받아 기기 안에서
+    /// 조회하려고 이렇게 만들었다. 실패하면 nil — 앱에 넣어 둔 사본을 계속 쓴다.
+    static func fetchBaseline() async -> BaselinePrices.Table? {
+        let req = request("api/baseline", timeout: 5)
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        return try? JSONDecoder().decode(BaselinePrices.Table.self, from: data)
+    }
+
+    /// 웹 검색으로 금액 찾기. 동의를 안 켰으면 부르지 않는다(호출부가 확인).
+    ///
+    /// 보내는 건 `SearchQuery.make()` 가 코드에 있는 말로만 조립한 검색어 하나뿐이다.
+    /// 일정 제목·이름·금액은 이 요청에 실릴 칸이 아예 없다.
+    static func searchCost(query: String) async -> SearchCostResult? {
+        let req = request("api/search/cost", timeout: 20, body: ["query": query])
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              (resp as? HTTPURLResponse)?.statusCode == 200,
+              let r = try? JSONDecoder().decode(SearchCostResult.self, from: data),
+              r.amount != nil else { return nil }
+        return r
     }
 
     /// 스트리밍 대화. 토큰이 올 때마다 onToken(델타) 호출.

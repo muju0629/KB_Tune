@@ -16,6 +16,8 @@ struct SettingsView: View {
 
     /// AgentService의 동의 키와 같은 값을 본다 — 여기서 끄면 전송도 즉시 멈춘다.
     @AppStorage(CloudAIConsent.key) private var usesCloudAI = false
+    /// 일정 금액 검색은 대화 검색과 나가는 것이 달라 스위치를 따로 둔다.
+    @AppStorage(CostSearchConsent.key) private var usesCostSearch = false
     @AppStorage(WebSearchConsent.key) private var usesWebSearch = false
 
     private var savingPct: Int {
@@ -194,6 +196,24 @@ struct SettingsView: View {
                             .font(.kb(14.5)).foregroundStyle(KB.ink)
                         Text(usesWebSearch ? "물어본 질문 한 줄이 그대로 검색에 전달" : "앱이 모르는 건 모른다고만 답함")
                             .font(.kb(11.5)).foregroundStyle(usesWebSearch ? KB.caution : KB.muted)
+                    }
+                }
+                .tint(KB.green)
+                .padding(.horizontal, 16).padding(.vertical, 12)
+
+                rowDivider
+
+                // 위 '웹 검색'과 다른 스위치다. 저쪽은 대화에서 물어본 질문 원문이,
+                // 이쪽은 일정 제목에서 앱이 만든 검색어가 나간다.
+                Toggle(isOn: $usesCostSearch) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("모르는 일정은 웹에서 찾기")
+                            .font(.kb(14.5)).foregroundStyle(KB.ink)
+                        Text(usesCostSearch
+                             ? "‘국내 3박 여행 1인 평균 경비’처럼 앱이 만든 문장만 전달"
+                             : "여행처럼 기준이 없는 일정은 금액을 직접 넣음")
+                            .font(.kb(11.5)).foregroundStyle(usesCostSearch ? KB.green : KB.muted)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .tint(KB.green)
