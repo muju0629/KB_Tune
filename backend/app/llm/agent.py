@@ -109,7 +109,7 @@ def _event_list(events: list | None) -> str:
 def run_agent(plan: PlanResult, message: str, today: int, may_search: bool,
               history: list | None = None, events: list | None = None,
               app=None) -> AgentResult:
-    from .complete import complete_json
+    from .complete import complete_json_with_text
 
     turns = "\n".join(f"{h.role}: {safe_text(h.content, 300)}" for h in (history or [])[-6:])
     prompt = (
@@ -121,8 +121,14 @@ def run_agent(plan: PlanResult, message: str, today: int, may_search: bool,
         f"사용자: {safe_text(message, 500)}"
     )
 
-    obj = complete_json(prompt, max_tokens=900)
+    obj, raw = complete_json_with_text(prompt, max_tokens=900, force_object=True)
     if not isinstance(obj, dict):
+        # 모델이 JSON 을 안 지키고 문장으로 답하는 일이 있다. 그 문장은 대개 멀쩡한
+        # 답이라, 버리고 "못 만들었어요"를 띄우는 건 있는 답을 없애는 짓이다.
+        # 중괄호가 섞여 있으면 깨진 JSON 이므로 그대로 보여주지 않는다.
+        text = (raw or "").strip()
+        if text and "{" not in text and "}" not in text:
+            return AgentResult(reply=text[:600], method="llm")
         return AgentResult(
             reply="지금은 답을 만들지 못했어요. 다시 한번 말씀해 주시겠어요?",
             method="template",

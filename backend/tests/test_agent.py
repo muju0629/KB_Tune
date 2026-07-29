@@ -59,10 +59,10 @@ def test_unsafe_query_is_never_searched(monkeypatch):
     """검증기가 막으면 search_cost 를 부르지도 않아야 한다."""
     called = []
     monkeypatch.setattr(agent, "search_cost", lambda q: called.append(q))
-    monkeypatch.setattr(agent, "complete_json", None, raising=False)
-    monkeypatch.setattr("app.llm.complete.complete_json", lambda *_a, **_k: {
+    monkeypatch.setattr("app.llm.complete.complete_json_with_text",
+                        lambda *_a, **_k: ({
         "reply": "네", "actions": [], "search_query": "제주도 3박4일 여행 경비",
-    })
+    }, ""))
     result = agent.run_agent(_plan(), "제주도 여행 얼마야", 22, may_search=True)
     assert called == []
     assert result.searched_query is None
@@ -73,9 +73,10 @@ def test_search_is_not_offered_without_consent(monkeypatch):
     """동의를 안 받았으면 안전한 질의여도 검색하지 않는다."""
     called = []
     monkeypatch.setattr(agent, "search_cost", lambda q: called.append(q))
-    monkeypatch.setattr("app.llm.complete.complete_json", lambda *_a, **_k: {
+    monkeypatch.setattr("app.llm.complete.complete_json_with_text",
+                        lambda *_a, **_k: ({
         "reply": "네", "actions": [], "search_query": "국내 3박 여행 1인 평균 경비",
-    })
+    }, ""))
     result = agent.run_agent(_plan(), "여행 얼마야", 22, may_search=False)
     assert called == []
     assert result.searched_query is None
@@ -88,12 +89,13 @@ def test_safe_query_reaches_search(monkeypatch):
         amount=286_000, low=185_000, high=317_000, method="web",
         basis="공표 자료 기준이에요.", sources=["https://example.kr"],
     ))
-    monkeypatch.setattr("app.llm.complete.complete_json", lambda *_a, **_k: {
+    monkeypatch.setattr("app.llm.complete.complete_json_with_text",
+                        lambda *_a, **_k: ({
         "reply": "여행이군요.",
         "actions": [{"kind": "add_event", "day": 45, "title": "여행",
                      "category": "여행", "amount": None, "label": "일정 추가"}],
         "search_query": "국내 3박 여행 1인 평균 경비",
-    })
+    }, ""))
     result = agent.run_agent(_plan(), "여행 얼마야", 22, may_search=True)
     assert result.searched_query == "국내 3박 여행 1인 평균 경비"
     assert result.method == "llm+web"
@@ -104,7 +106,8 @@ def test_safe_query_reaches_search(monkeypatch):
 # ---------- 동작 스키마 ----------
 
 def test_malformed_actions_are_dropped_not_crashed(monkeypatch):
-    monkeypatch.setattr("app.llm.complete.complete_json", lambda *_a, **_k: {
+    monkeypatch.setattr("app.llm.complete.complete_json_with_text",
+                        lambda *_a, **_k: ({
         "reply": "네",
         "actions": [
             {"kind": "존재하지않는동작", "day": 45, "title": "x", "label": "y"},
@@ -113,14 +116,39 @@ def test_malformed_actions_are_dropped_not_crashed(monkeypatch):
             {"kind": "add_event", "day": 45, "title": "여행", "label": "일정 추가"},
         ],
         "search_query": None,
-    })
+    }, ""))
     result = agent.run_agent(_plan(), "뭐든", 22, may_search=False)
     assert len(result.actions) == 1
     assert result.actions[0].title == "여행"
 
 
+def test_prose_answer_is_kept_not_thrown_away(monkeypatch):
+    """모델이 JSON 을 안 지키고 문장으로 답해도 그 답을 보여준다.
+
+    gpt-4.1 에서 5회 중 1회 관측된 실패다. 답 자체는 멀쩡한데 중괄호가 없다는 이유로
+    버리고 '답을 만들지 못했어요'를 띄우면, 있는 답을 없애는 셈이 된다.
+    """
+    prose = "이번 달은 외식과 모임에 지출이 몰려 있어요. 데이트 일정은 그대로 지키고 있고요."
+    monkeypatch.setattr("app.llm.complete.complete_json_with_text",
+                        lambda *_a, **_k: (None, prose))
+    result = agent.run_agent(_plan(), "내 소비패턴은 어때?", 22, may_search=False)
+    assert result.reply == prose
+    assert result.method == "llm"
+    assert result.actions == []
+
+
+def test_broken_json_is_not_shown_raw(monkeypatch):
+    """중괄호가 섞인 건 깨진 JSON 이다. 사용자에게 그대로 보이면 안 된다."""
+    monkeypatch.setattr("app.llm.complete.complete_json_with_text",
+                        lambda *_a, **_k: (None, '{"reply": "여기서 잘림'))
+    result = agent.run_agent(_plan(), "뭐든", 22, may_search=False)
+    assert result.method == "template"
+    assert "{" not in result.reply
+
+
 def test_agent_survives_a_model_that_returns_nothing(monkeypatch):
-    monkeypatch.setattr("app.llm.complete.complete_json", lambda *_a, **_k: None)
+    monkeypatch.setattr("app.llm.complete.complete_json_with_text",
+                        lambda *_a, **_k: (None, ""))
     result = agent.run_agent(_plan(), "뭐든", 22, may_search=False)
     assert result.method == "template"
     assert result.reply
