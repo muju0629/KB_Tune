@@ -908,6 +908,23 @@ struct KB_TuneTests {
         #expect(BaselinePrices.forCategory("경조사") == nil)
     }
 
+    @Test func travelReachesItsPublicBaselineInsteadOfTheGenericFallback() {
+        // 표에 46,234원 행이 있는데 규칙에 '여행' 항목이 없어서 도달을 못 했다.
+        // "제주도 여행"이 기타로 떨어져 근거 없는 20,000원이 나왔다.
+        let result = EventEstimator.estimate("제주도 여행", history: [])
+        #expect(result.category == "여행")
+        #expect(result.method == "baseline")
+        #expect(result.basis.contains("출처는"))
+    }
+
+    @Test func buyingSomethingIsShoppingNotMiscellaneous() {
+        // "구매"만 있고 "구입"이 없어서 한 글자 차이로 기타까지 미끄러졌다.
+        for title in ["맥미니 구입하기", "노트북 장만", "정장 구매"] {
+            #expect(EventEstimator.estimate(title, history: []).category == "쇼핑",
+                    "\(title) 이 쇼핑으로 안 잡힌다")
+        }
+    }
+
     @Test func itemLookupIsMoreSpecificThanCategoryAverage() {
         let match = BaselinePrices.forTitle("점심은 자장면")
         #expect(match?.basis.contains("자장면") == true)
