@@ -283,7 +283,7 @@ final class AgentService: ObservableObject {
     /// 보내는 건 `SearchQuery.make()` 가 코드에 있는 말로만 조립한 검색어 하나뿐이다.
     /// 일정 제목·이름·금액은 이 요청에 실릴 칸이 아예 없다.
     static func searchCost(query: String) async -> SearchCostResult? {
-        let req = request("api/search", timeout: 20, body: ["query": query])
+        let req = request("api/search/cost", timeout: 20, body: ["query": query])
         guard let (data, resp) = try? await URLSession.shared.data(for: req),
               (resp as? HTTPURLResponse)?.statusCode == 200,
               let r = try? JSONDecoder().decode(SearchCostResult.self, from: data),

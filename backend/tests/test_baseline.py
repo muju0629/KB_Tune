@@ -125,19 +125,19 @@ def test_baseline_endpoint_needs_no_request_body():
 
 def test_search_request_has_no_field_but_the_query():
     """받을 칸이 있으면 언젠가 채워 보낸다. 검색어 말고는 칸 자체를 두지 않는다."""
-    from app.models import SearchRequest
+    from app.models import SearchCostRequest
 
-    assert set(SearchRequest.model_fields) == {"query"}
+    assert set(SearchCostRequest.model_fields) == {"query"}
 
 
 def test_search_rejects_a_query_long_enough_to_carry_a_title():
-    resp = client.post("/api/search", json={"query": "가" * 200})
+    resp = client.post("/api/search/cost", json={"query": "가" * 200})
     assert resp.status_code == 422
 
 
 def test_search_is_unavailable_without_an_external_model():
     """offline 이면 검색 도구가 없다. 없는데 있는 척하지 않고 사용자에게 넘긴다."""
-    resp = client.post("/api/search", json={"query": "국내 3박 여행 1인 평균 경비"})
+    resp = client.post("/api/search/cost", json={"query": "국내 3박 여행 1인 평균 경비"})
     assert resp.status_code == 200
     body = resp.json()
     assert body["method"] == "unavailable"

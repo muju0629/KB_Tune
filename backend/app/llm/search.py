@@ -14,13 +14,13 @@ from __future__ import annotations
 import math
 
 from .. import config
-from ..models import SearchResult
+from ..models import SearchCostResult
 
 # 국내 소비 일정 한 건에 이보다 크거나 작은 금액이 나오면 질의를 잘못 이해한 것으로 본다.
 MIN_AMOUNT = 1_000
 MAX_AMOUNT = 5_000_000
 
-UNAVAILABLE = SearchResult(
+UNAVAILABLE = SearchCostResult(
     amount=None, low=None, high=None, method="unavailable",
     basis="지금은 웹에서 찾지 못했어요. 금액을 직접 넣어 주세요.",
 )
@@ -34,7 +34,7 @@ PROMPT = (
 )
 
 
-def search_cost(query: str) -> SearchResult:
+def search_cost(query: str) -> SearchCostResult:
     """검색어 → 1인 기준 금액. 실패하면 method='unavailable'."""
     backend = config.llm_backend()
     if backend in ("offline", "local"):
@@ -62,7 +62,7 @@ def search_cost(query: str) -> SearchResult:
         # 근거 문서를 못 대면 모델이 지어낸 숫자와 구분할 수 없다.
         return UNAVAILABLE
 
-    return SearchResult(amount=amount, low=low, high=high, method="web",
+    return SearchCostResult(amount=amount, low=low, high=high, method="web",
                         basis=basis, sources=sources[:3])
 
 

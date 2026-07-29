@@ -239,7 +239,7 @@ class EstimateResult(BaseModel):
 
 # ---------- 웹 검색으로 금액 찾기 (동의했을 때만) ----------
 
-class SearchRequest(BaseModel):
+class SearchCostRequest(BaseModel):
     """검색어 하나뿐이다. 계획·카드·일정 필드를 **일부러** 두지 않았다.
 
     이 통로는 질의가 검색 엔진까지 나간다. 받을 칸이 있으면 언젠가 채워 보내게 되므로
@@ -249,7 +249,7 @@ class SearchRequest(BaseModel):
     query: Annotated[str, Field(min_length=2, max_length=60)]
 
 
-class SearchResult(BaseModel):
+class SearchCostResult(BaseModel):
     amount: int | None       # 1인 기준. 못 찾으면 None
     low: int | None
     high: int | None
