@@ -22,9 +22,27 @@ enum CloudAIConsent {
     static func set(_ value: Bool) { UserDefaults.standard.set(value, forKey: key) }
 }
 
-/// 웹 검색 동의. 클라우드 AI 동의와 따로 둔다 — 나가는 것도 나가는 곳도 다르다.
-/// 클라우드 AI는 재무 집계값이 모델 제공자까지, 웹 검색은 검색어가 검색 엔진까지 간다.
+/// 웹 검색 동의 — 클라우드 AI 동의와 별개로 받는다.
+///
+/// 클라우드 AI는 질문을 `금융 의도: …; 지출 유형: …; 명시 금액: …` 으로 줄여서 보내지만,
+/// 검색은 "이태원 맛집" 같은 원문을 그대로 보내야 답이 나온다. 경계의 성격이 다르므로
+/// 하나의 동의로 묶지 않는다. 이걸 켜도 예산·일정 데이터는 검색으로 나가지 않는다 —
+/// 나가는 것은 그 질문 한 줄뿐이다.
 enum WebSearchConsent {
+    static let key = "usesWebSearch"
+
+    static var asked: Bool { UserDefaults.standard.object(forKey: key) != nil }
+    static var granted: Bool { UserDefaults.standard.bool(forKey: key) }
+
+    static func set(_ value: Bool) { UserDefaults.standard.set(value, forKey: key) }
+}
+
+/// 일정 금액을 웹에서 찾는 동의. 위 WebSearchConsent 와 따로 둔다.
+///
+/// 저쪽은 대화에서 물어본 질문 원문이 나가고, 이쪽은 제목에서 만든 검색어가 나간다.
+/// 나가는 것의 성격이 달라 스위치도 따로다 — 대화 검색을 켰다고 일정 제목에서
+/// 뽑은 말까지 나가면 사용자가 동의한 범위를 넘는다.
+enum CostSearchConsent {
     static let key = "usesWebSearchForCosts"
 
     static var granted: Bool { UserDefaults.standard.bool(forKey: key) }
@@ -32,7 +50,7 @@ enum WebSearchConsent {
     static func set(_ value: Bool) { UserDefaults.standard.set(value, forKey: key) }
 }
 
-/// 백엔드 SearchResult 와 같은 스키마.
+/// 백엔드 SearchCostResult 와 같은 스키마.
 struct SearchCostResult: Codable {
     let amount: Int?
     let low: Int?
@@ -223,6 +241,38 @@ final class AgentService: ObservableObject {
     /// 동의 화면은 '외부 모델인가'가 아니라 실제 데이터 경계를 기준으로 띄운다.
     var requiresOffDeviceConsent: Bool {
         llmEnabled && (externalLLM || !Self.isLoopbackBackend)
+    }
+
+    /// 웹 검색 — 질문 원문을 그대로 백엔드에 넘긴다.
+    ///
+    /// 다른 요청과 달리 `OutboundPrivacy.sanitize`를 태우지 않는다. "이태원 맛집"에서
+    /// 장소를 지우면 검색할 게 남지 않기 때문이다. 대신 나가는 것을 질문 한 줄로 묶고,
+    /// 예산·일정·이름은 이 경로에 아예 싣지 않는다. 사용자가 버튼을 눌렀을 때만 호출된다.
+    @MainActor
+    func search(_ query: String) async -> ChatMessage? {
+        guard WebSearchConsent.granted else { return nil }
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        // 검색은 모델이 웹을 읽고 문장까지 만들어 오므로 다른 호출보다 오래 걸린다.
+        let req = Self.request("api/search", timeout: 45, body: ["query": String(trimmed.prefix(200))])
+        do {
+            let (data, resp) = try await URLSession.shared.data(for: req)
+            guard accept(resp),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let answer = json["answer"] as? String, !answer.isEmpty
+            else { return nil }
+            let sources = (json["sources"] as? [String]) ?? []
+            return ChatMessage(
+                role: .agent,
+                conclusion: answer,
+                reason: nil,
+                impact: nil,
+                basis: sources.isEmpty ? "웹 검색 결과" : "웹 검색 · " + sources.prefix(3).joined(separator: " · ")
+            )
+        } catch {
+            return nil
+        }
     }
 
     private var lastPingAttempt: Date?

@@ -302,7 +302,7 @@ struct OnboardingView: View {
         }
         .padding(.horizontal, 10).padding(.vertical, 14)
         .frame(maxWidth: .infinity)
-        .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(KB.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
     }
 
@@ -353,7 +353,7 @@ struct OnboardingView: View {
                 Circle().fill(KB.yellow).frame(width: 76, height: 76)
                 Image(systemName: "sparkles")
                     .font(.kb(32, .medium))
-                    .foregroundStyle(KB.ink)
+                    .foregroundStyle(KB.onYellow)
             }
 
             Text("7월 계획을\n계산하고 있어요")
@@ -405,7 +405,7 @@ struct OnboardingView: View {
             }
             .padding(18)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(KB.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KB.line, lineWidth: 1))
             .padding(.horizontal, 24)
             .padding(.top, 22)
@@ -454,7 +454,7 @@ struct FlowChips: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 13)
-                    .background(isOn ? KB.yellowSoft : .white,
+                    .background(isOn ? KB.yellowSoft : KB.surface,
                                 in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .stroke(isOn ? KB.yellow : KB.line, lineWidth: 1.5))

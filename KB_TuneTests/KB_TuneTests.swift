@@ -957,8 +957,13 @@ struct KB_TuneTests {
 
     @Test func webSearchIsOffUntilTheUserTurnsItOn() {
         // 기본값이 꺼짐이어야 한다. 켠 적 없는 사람의 검색어가 나가면 안 된다.
-        UserDefaults.standard.removeObject(forKey: WebSearchConsent.key)
-        #expect(WebSearchConsent.granted == false)
+        UserDefaults.standard.removeObject(forKey: CostSearchConsent.key)
+        #expect(CostSearchConsent.granted == false)
+
+        // 대화 검색을 켜도 일정 제목에서 만든 검색어까지 나가면 안 된다 — 스위치가 다르다.
+        WebSearchConsent.set(true)
+        #expect(CostSearchConsent.granted == false)
+        WebSearchConsent.set(false)
     }
 
 }

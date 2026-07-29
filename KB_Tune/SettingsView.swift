@@ -16,7 +16,8 @@ struct SettingsView: View {
 
     /// AgentService의 동의 키와 같은 값을 본다 — 여기서 끄면 전송도 즉시 멈춘다.
     @AppStorage(CloudAIConsent.key) private var usesCloudAI = false
-    /// 웹 검색은 나가는 곳이 달라(검색 엔진) 동의를 따로 받는다.
+    /// 일정 금액 검색은 대화 검색과 나가는 것이 달라 스위치를 따로 둔다.
+    @AppStorage(CostSearchConsent.key) private var usesCostSearch = false
     @AppStorage(WebSearchConsent.key) private var usesWebSearch = false
 
     private var savingPct: Int {
@@ -74,7 +75,7 @@ struct SettingsView: View {
             ZStack {
                 Circle().fill(KB.yellow).frame(width: 56, height: 56)
                 Text(String(model.userName.prefix(1)))
-                    .font(.kb(22, .bold)).foregroundStyle(KB.ink)
+                    .font(.kb(22, .bold)).foregroundStyle(KB.onYellow)
             }
             VStack(alignment: .leading, spacing: 3) {
                 Text("\(model.userName)님").font(.kb(18, .bold)).foregroundStyle(KB.ink)
@@ -84,7 +85,7 @@ struct SettingsView: View {
             Spacer()
         }
         .padding(16)
-        .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(KB.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KB.line, lineWidth: 1))
     }
 
@@ -148,7 +149,7 @@ struct SettingsView: View {
                 rowDivider
                 basisRow(icon: "wonsign.circle", title: "일정별 예상 금액", detail: "제목과 일정 유형으로 계산")
             }
-            .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(KB.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
 
             Text("실제 결제액이 아닌 예상값이에요. 수입과 일정 금액을 수정하면 계획도 다시 계산돼요.")
@@ -185,26 +186,43 @@ struct SettingsView: View {
                 .tint(KB.green)
                 .padding(.horizontal, 16).padding(.vertical, 12)
 
-                Divider().padding(.leading, 16)
+                rowDivider
 
+                // 클라우드 AI와 따로 둔다 — 나가는 것의 성격이 다르다.
+                // 클라우드 AI는 질문을 유형·금액으로 줄여 보내지만, 검색은 원문이 그대로 나간다.
                 Toggle(isOn: $usesWebSearch) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("웹 검색")
+                            .font(.kb(14.5)).foregroundStyle(KB.ink)
+                        Text(usesWebSearch ? "물어본 질문 한 줄이 그대로 검색에 전달" : "앱이 모르는 건 모른다고만 답함")
+                            .font(.kb(11.5)).foregroundStyle(usesWebSearch ? KB.caution : KB.muted)
+                    }
+                }
+                .tint(KB.green)
+                .padding(.horizontal, 16).padding(.vertical, 12)
+
+                rowDivider
+
+                // 위 '웹 검색'과 다른 스위치다. 저쪽은 대화에서 물어본 질문 원문이,
+                // 이쪽은 일정 제목에서 앱이 만든 검색어가 나간다.
+                Toggle(isOn: $usesCostSearch) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("모르는 일정은 웹에서 찾기")
                             .font(.kb(14.5)).foregroundStyle(KB.ink)
-                        Text(usesWebSearch
-                             ? "‘국내 3박 여행 1인 평균 경비’처럼 앱이 만든 문장만 검색해요"
-                             : "여행처럼 기준이 없는 일정은 금액을 직접 넣어요")
-                            .font(.kb(11.5)).foregroundStyle(usesWebSearch ? KB.green : KB.muted)
+                        Text(usesCostSearch
+                             ? "‘국내 3박 여행 1인 평균 경비’처럼 앱이 만든 문장만 전달"
+                             : "여행처럼 기준이 없는 일정은 금액을 직접 넣음")
+                            .font(.kb(11.5)).foregroundStyle(usesCostSearch ? KB.green : KB.muted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .tint(KB.green)
                 .padding(.horizontal, 16).padding(.vertical, 12)
             }
-            .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(KB.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
 
-            Text("기본은 ‘기기 안에서만’이에요. 클라우드 AI를 켜도 질문 원문·실명·일정 제목은 보내지 않고, 답변에 필요한 날짜·유형·금액과 재무 집계값만 전달해요.")
+            Text("기본은 ‘기기 안에서만’이에요. 클라우드 AI를 켜도 질문 원문·실명·일정 제목은 보내지 않고, 답변에 필요한 날짜·유형·금액과 재무 집계값만 전달해요. 웹 검색만 예외로 질문 원문이 나가는데, 검색이 필요한 질문에서 한 번 더 물어보고 켤 때만 동작해요. 켜져 있어도 일정·금액·예산은 검색으로 보내지 않아요.")
                 .font(.kb(11)).foregroundStyle(KB.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -240,7 +258,7 @@ struct SettingsView: View {
                     Spacer()
                 }
                 .padding(.horizontal, 16).padding(.vertical, 14)
-                .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(KB.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
             }
             Text("넣은 일정과 바꾼 설정을 지우고 처음 상태로 돌아가요. 기기 캘린더의 일정은 그대로예요.")
@@ -281,7 +299,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title).font(.kb(13, .semibold)).foregroundStyle(KB.muted)
             VStack(spacing: 0) { content() }
-                .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(KB.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(KB.line, lineWidth: 1))
         }
     }

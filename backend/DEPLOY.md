@@ -106,10 +106,22 @@ xcodebuild ... \
 curl -s -o /dev/null -w '%{http_code}\n' \
   -H "X-API-Key: <키>" https://<주소>/api/health          # 200
 
+# 대화에서 물어본 질문을 그대로 검색 — answer 에 문장이 오면 정상
 curl -s -X POST https://<주소>/api/search \
   -H "X-API-Key: <키>" -H "Content-Type: application/json" \
-  -d '{"query":"이태원 맛집"}'                              # answer 에 문장이 오면 정상
+  -d '{"query":"이태원 맛집"}'
+
+# 일정 금액을 검색 — amount 에 숫자가 오면 정상. 앱이 만든 문장만 들어온다.
+curl -s -X POST https://<주소>/api/search/cost \
+  -H "X-API-Key: <키>" -H "Content-Type: application/json" \
+  -d '{"query":"국내 3박 여행 1인 평균 경비"}'
+
+# 공개 통계 기준 금액 표 — 앱이 통째로 받아 캐시한다
+curl -s -H "X-API-Key: <키>" https://<주소>/api/baseline
 ```
+
+검색 두 경로는 `LLM_BACKEND` 가 `openai`·`claude` 일 때만 동작한다. 로컬 모델에는
+웹 검색 도구가 없어서 `offline`·`local` 이면 못 한다고 분명히 답한다.
 
 키 없이 부르면 401 이 나와야 한다. 200 이 나오면 `KB_TUNE_API_KEY` 가 안 걸린 것이다.
 
