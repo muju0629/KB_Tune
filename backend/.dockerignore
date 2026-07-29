@@ -1,0 +1,13 @@
+# 로컬 전용. 이미지에 들어가면 안 되거나 들어갈 이유가 없는 것들.
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# 키가 든 파일과 로컬 경로. 값은 Cloud Run 환경변수로 넣는다.
+.env
+
+tests/
+README.md
+DEPLOY.md
+run.sh

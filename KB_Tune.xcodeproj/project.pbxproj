@@ -27,6 +27,7 @@
 		A0750EF9300EF8F2000891D2 /* KB_Tune.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = KB_Tune.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A0750F06300EF8F3000891D2 /* KB_TuneTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KB_TuneTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A0750F10300EF8F3000891D2 /* KB_TuneUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KB_TuneUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A0750F90300EF8F3000891D2 /* Local.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Local.xcconfig; path = Config/Local.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -389,6 +390,7 @@
 			name = Release;
 		};
 		A0750F1B300EF8F3000891D2 /* Debug */ = {
+			baseConfigurationReference = A0750F90300EF8F3000891D2 /* Local.xcconfig */;
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -422,6 +424,7 @@
 			name = Debug;
 		};
 		A0750F1C300EF8F3000891D2 /* Release */ = {
+			baseConfigurationReference = A0750F90300EF8F3000891D2 /* Local.xcconfig */;
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;

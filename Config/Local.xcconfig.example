@@ -1,0 +1,7 @@
+// Config/Local.xcconfig 로 복사한 뒤 값을 채운다. 복사본은 저장소에 올리지 않는다.
+//
+// xcconfig 는 // 를 주석으로 보기 때문에 URL 의 // 를 그대로 쓰면 잘린다.
+// https:/$()/ 처럼 빈 변수를 끼워 넣어 피한다.
+
+KB_TUNE_API_BASE_URL = https:/$()/<Cloud Run 주소>
+KB_TUNE_API_KEY = <배포에 쓴 것과 같은 키>
