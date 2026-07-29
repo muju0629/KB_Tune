@@ -8,8 +8,16 @@
 <img src="https://img.shields.io/badge/KB_AI_Challenge-2026-FFCC00?style=flat-square&labelColor=25241F" alt="KB AI Challenge 2026" />
 <img src="https://img.shields.io/badge/iOS-26.5-FFCC00?style=flat-square&labelColor=25241F&logo=apple&logoColor=white" alt="iOS 26.5" />
 <img src="https://img.shields.io/badge/Swift-SwiftUI-FFCC00?style=flat-square&labelColor=25241F&logo=swift&logoColor=white" alt="Swift SwiftUI" />
+<img src="https://img.shields.io/badge/EventKit-Calendar-FFCC00?style=flat-square&labelColor=25241F&logo=apple&logoColor=white" alt="EventKit" />
+<img src="https://img.shields.io/badge/On--Device-Vision_Speech_NL-FFCC00?style=flat-square&labelColor=25241F&logo=apple&logoColor=white" alt="On-device Vision, Speech, NaturalLanguage" />
+<img src="https://img.shields.io/badge/Swift_Testing-XCTest-FFCC00?style=flat-square&labelColor=25241F&logo=swift&logoColor=white" alt="Swift Testing" />
 <img src="https://img.shields.io/badge/FastAPI-Python-FFCC00?style=flat-square&labelColor=25241F&logo=fastapi&logoColor=white" alt="FastAPI Python" />
 <img src="https://img.shields.io/badge/LLM-OpenAI-FFCC00?style=flat-square&labelColor=25241F&logo=openai&logoColor=white" alt="OpenAI" />
+<img src="https://img.shields.io/badge/Python-3.12-FFCC00?style=flat-square&labelColor=25241F&logo=python&logoColor=white" alt="Python 3.12" />
+<img src="https://img.shields.io/badge/Pydantic-v2-FFCC00?style=flat-square&labelColor=25241F&logo=pydantic&logoColor=white" alt="Pydantic v2" />
+<img src="https://img.shields.io/badge/Google_Cloud-Run-FFCC00?style=flat-square&labelColor=25241F&logo=googlecloud&logoColor=white" alt="Google Cloud Run" />
+<img src="https://img.shields.io/badge/Firestore-read__only-FFCC00?style=flat-square&labelColor=25241F&logo=firebase&logoColor=white" alt="Firestore read-only" />
+<img src="https://img.shields.io/badge/Docker-Cloud_Build-FFCC00?style=flat-square&labelColor=25241F&logo=docker&logoColor=white" alt="Docker" />
 
 <br/><br/>
 
