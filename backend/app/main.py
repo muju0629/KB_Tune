@@ -17,17 +17,15 @@ from .engine.budget import disposable_month
 from .engine.categorize import categorize_many
 from .engine.estimate import estimate_event_cost
 from .engine.forecast import forecast_next_month
-from .eval.runner import run_eval
 from .llm.agent import run_agent
 from .llm.chat import chat_stream
-from .llm.coach import coach
 from .llm.extract import extract_from_text
 from .llm.search import search_cost
 from .models import (AgentRequest, AgentResult, CategorizeRequest,
                      CategorizeResult, ChatRequest,
-                     CoachRequest, EstimateRequest, EstimateResult,
+                     EstimateRequest, EstimateResult,
                      ExtractRequest, ExtractResult, ForecastResult,
-                     PlanRequest, PlanResult, Profile, SearchCostRequest,
+                     PlanRequest, Profile, SearchCostRequest,
                      SearchCostResult, SearchRequest)
 from . import websearch
 from .security import BodySizeLimitMiddleware, rate_limit, require_api_key
@@ -74,19 +72,6 @@ def health():
     }
 
 
-@app.post("/api/plan", response_model=PlanResult, dependencies=_cheap)
-def plan(req: PlanRequest):
-    """순수 엔진 결과(숫자). LLM 미사용 — 알고리즘 단독으로 동작함을 보여줌."""
-    return build_plan(_profile(req), req.today, req.include_candidate)
-
-
-@app.post("/api/coach", dependencies=_llm)
-def coach_endpoint(req: CoachRequest):
-    """엔진 계획 + 접지된 LLM 코칭(키 없으면 템플릿)."""
-    p = build_plan(_profile(req), req.today, req.include_candidate)
-    return {"plan": p, "coach": coach(p)}
-
-
 @app.post("/api/chat", dependencies=_llm)
 def chat_endpoint(req: ChatRequest):
     """계획을 바꾸는 대화 — 텍스트 스트리밍."""
@@ -114,12 +99,6 @@ def search_endpoint(req: SearchRequest):
     if not result["answer"]:
         return {"answer": "검색해 봤는데 마땅한 결과가 없었어요.", "sources": []}
     return result
-
-
-@app.get("/api/eval", dependencies=_auth + [Depends(rate_limit("eval"))])
-def eval_endpoint():
-    """평가 리포트 — 엔진 골든 테스트 + LLM groundedness."""
-    return run_eval()
 
 
 # ---------- AI 기능 ① 일정 → 예상 지출 ----------

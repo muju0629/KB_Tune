@@ -79,8 +79,6 @@ TRUST_PROXY = os.getenv("KB_TUNE_TRUST_PROXY", "").lower() in ("1", "true", "yes
 # 속도 제한(분당). LLM 쪽은 비용이 걸려 있어 따로 잡는다.
 RATE_LLM = int(os.getenv("KB_TUNE_RATE_LLM", "20"))              # 클라이언트당 / 60초
 RATE_LLM_GLOBAL = int(os.getenv("KB_TUNE_RATE_LLM_GLOBAL", "200"))  # 전체 합 / 60초
-RATE_EVAL = int(os.getenv("KB_TUNE_RATE_EVAL", "3"))             # 클라이언트당 / 300초
-RATE_EVAL_GLOBAL = int(os.getenv("KB_TUNE_RATE_EVAL_GLOBAL", "20"))  # 전체 합 / 300초
 RATE_CHEAP = int(os.getenv("KB_TUNE_RATE_CHEAP", "120"))         # 클라이언트당 / 60초
 
 

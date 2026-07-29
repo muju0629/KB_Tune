@@ -8,13 +8,25 @@ from app.engine import build_plan
 from app.engine.budget import remaining_weeks
 from app.engine.probability import (SPEND_SIGMA, expected_remaining_spend,
                                     probability_analytic)
-from app.eval.golden import run_golden
 from app.eval.groundedness import check, extract_amounts
+
+# 골든 케이스 — (방향, 후보반영, 기대 사용가능액, 기대 확률).
+# 시드 고정 몬테카를로라 실행마다 같은 값이 나온다. 숫자가 바뀌면 회귀로 잡힌다.
+GOLDEN = [
+    ("reduce", False, 47_720, 88),
+    ("maintain", False, 62_000, 81),
+    ("increase", False, 80_360, 74),
+    ("maintain", True, 62_000, 81),  # 미확정 후보가 없어 결과가 같아야 함
+]
 
 
 def test_golden_all_pass():
-    passed, total, details = run_golden()
-    assert passed == total, "\n" + "\n".join(details)
+    for direction, include, exp_avail, exp_prob in GOLDEN:
+        p = PROFILE.model_copy(update={"direction": direction})
+        r = build_plan(p, today=22, include_candidate=include)
+        tag = f"{direction}{'+후보' if include else ''}"
+        assert r.weekly_available == exp_avail, f"{tag}: 가용 {r.weekly_available:,}"
+        assert r.probability == exp_prob, f"{tag}: 확률 {r.probability}%"
 
 
 def test_weekly_available_and_probability():

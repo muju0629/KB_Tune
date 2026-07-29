@@ -33,12 +33,9 @@ app/
 │  └─ plan.py         #   오케스트레이션 → PlanResult(숫자 단일 출처)
 ├─ llm/               # Claude 레이어 (설명·판단만)
 │  ├─ prompts.py      #   엔진 숫자에 접지된 프롬프트
-│  ├─ coach.py        #   구조화 출력 + groundedness 폴백
 │  └─ chat.py         #   스트리밍 대화
 ├─ eval/              # 평가
-│  ├─ golden.py       #   엔진 정합성 골든 케이스
-│  ├─ groundedness.py #   LLM이 엔진 숫자만 쓰는지 검사
-│  └─ runner.py       #   /api/eval
+│  └─ groundedness.py #   LLM이 엔진 숫자만 쓰는지 검사
 ├─ data.py            # 성제의 2026년 7월 캘린더 기반 데모 입력
 ├─ models.py          # Pydantic 스키마
 └─ main.py            # FastAPI 라우트
@@ -66,10 +63,10 @@ ANTHROPIC_API_KEY=sk-ant-...
 | 메서드 | 경로 | 설명 |
 |---|---|---|
 | GET | `/api/health` | 상태 + LLM 사용 여부 |
-| POST | `/api/plan` | **순수 엔진** 결과(숫자) — 알고리즘 단독 동작 |
-| POST | `/api/coach` | 엔진 계획 + 접지된 LLM 코칭 |
 | POST | `/api/chat` | 계획을 바꾸는 대화(텍스트 스트리밍) |
-| GET | `/api/eval` | 평가 리포트(골든 + groundedness) |
+| POST | `/api/agent` | 대화 한 턴 — 답변 + 앱이 실행할 동작 제안 |
+| POST | `/api/search` · `/api/search/cost` | 웹 검색 답변 · 검색어 하나로 1인 기준 금액 |
+| GET | `/api/baseline` | 공개 통계 기준 금액 표(앱이 통째로 받아 기기에서 조회) |
 | POST | `/api/estimate` | **① 일정 제목 → 예상 지출** (캘린더 유형 개인화 + 엔진 범위 보정) |
 | POST | `/api/extract` | **② OCR 텍스트 → 거래 추출** (`image_base64` 원본은 422로 차단) |
 | POST | `/api/categorize` | **③ 가맹점 → 카테고리** (규칙 사전 → 미스만 LLM, 집합 강제) |
@@ -88,8 +85,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 예:
 ```bash
-curl -s localhost:8000/api/plan -X POST -H 'content-type: application/json' -d '{}' | python3 -m json.tool
-curl -s localhost:8000/api/eval | python3 -m json.tool
+curl -s localhost:8000/api/forecast -X POST -H 'content-type: application/json' -d '{}' | python3 -m json.tool
 curl -sN localhost:8000/api/chat -X POST -H 'content-type: application/json' \
      -d '{"message":"이번 주 출근비까지 빼면 얼마 남아?"}'
 ```
@@ -98,7 +94,6 @@ curl -sN localhost:8000/api/chat -X POST -H 'content-type: application/json' \
 
 ```bash
 ./.venv/bin/pytest -q          # 엔진 골든·MC 정합성·groundedness
-curl -s localhost:8000/api/eval
 ```
 
 성제의 2026년 7월 캘린더 기준 엔진 출력(시드 고정 → 항상 동일):

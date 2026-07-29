@@ -74,13 +74,11 @@ class _Window:
 # 엔드포인트 묶음별 한도. LLM을 부르는 쪽이 비싸므로 따로 잡는다.
 _BUCKETS = {
     "llm": _Window(config.RATE_LLM, 60),        # /chat /extract /categorize /estimate
-    "eval": _Window(config.RATE_EVAL, 300),     # /eval — 골든셋 + groundedness 전량 실행
-    "cheap": _Window(config.RATE_CHEAP, 60),    # /plan /health — 엔진만, 비용 0
+    "cheap": _Window(config.RATE_CHEAP, 60),    # /health /baseline /forecast — 엔진만, 비용 0
 }
 
 # 클라이언트를 아무리 나눠도 총량은 못 넘게 — API 청구액의 실질 상한.
 _GLOBAL_LLM = _Window(config.RATE_LLM_GLOBAL, 60)
-_GLOBAL_EVAL = _Window(config.RATE_EVAL_GLOBAL, 300)
 
 
 def _client_key(request: Request) -> str:
@@ -111,8 +109,6 @@ def rate_limit(bucket: str):
         wait = window.check(_client_key(request))
         if wait <= 0 and bucket == "llm":
             wait = _GLOBAL_LLM.check("*")
-        if wait <= 0 and bucket == "eval":
-            wait = _GLOBAL_EVAL.check("*")
         if wait > 0:
             raise HTTPException(
                 status_code=429,

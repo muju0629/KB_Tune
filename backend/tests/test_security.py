@@ -15,10 +15,10 @@ def _reset_limits(monkeypatch):
     """테스트끼리 한도를 물려주지 않게 카운터를 비운다."""
     # 개발자 로컬 .env에 유료 모델이 켜져 있어도 단위 테스트는 네트워크를 쓰지 않는다.
     monkeypatch.setattr(security.config, "LLM_BACKEND", "offline")
-    for w in list(security._BUCKETS.values()) + [security._GLOBAL_LLM, security._GLOBAL_EVAL]:
+    for w in list(security._BUCKETS.values()) + [security._GLOBAL_LLM]:
         w._hits.clear()
     yield
-    for w in list(security._BUCKETS.values()) + [security._GLOBAL_LLM, security._GLOBAL_EVAL]:
+    for w in list(security._BUCKETS.values()) + [security._GLOBAL_LLM]:
         w._hits.clear()
 
 
@@ -27,18 +27,18 @@ def _reset_limits(monkeypatch):
 def test_키_미설정이면_무인증으로_동작한다(monkeypatch):
     """설정 없이 받아서 바로 실행할 수 있어야 한다 — 기본 동작을 지키는지 확인."""
     monkeypatch.delenv("KB_TUNE_API_KEY", raising=False)
-    assert client.post("/api/plan", json={}).status_code == 200
+    assert client.post("/api/forecast", json={}).status_code == 200
 
 
 def test_키가_설정되면_헤더_없는_요청은_401(monkeypatch):
     monkeypatch.setenv("KB_TUNE_API_KEY", "s3cret")
-    assert client.post("/api/plan", json={}).status_code == 401
+    assert client.post("/api/forecast", json={}).status_code == 401
 
 
 def test_키가_틀리면_401_맞으면_200(monkeypatch):
     monkeypatch.setenv("KB_TUNE_API_KEY", "s3cret")
-    assert client.post("/api/plan", json={}, headers={"X-API-Key": "wrong"}).status_code == 401
-    assert client.post("/api/plan", json={}, headers={"X-API-Key": "s3cret"}).status_code == 200
+    assert client.post("/api/forecast", json={}, headers={"X-API-Key": "wrong"}).status_code == 401
+    assert client.post("/api/forecast", json={}, headers={"X-API-Key": "s3cret"}).status_code == 200
 
 
 def test_헬스체크는_키_없이도_열려_있다(monkeypatch):
@@ -121,20 +121,6 @@ def test_인증이_꺼진_상태에서는_임의_API키로_한도를_우회할_�
         cheap.limit = original
 
 
-def test_eval에도_전체_합_한도가_있다(monkeypatch):
-    monkeypatch.delenv("KB_TUNE_API_KEY", raising=False)
-    monkeypatch.setattr(security.config, "LLM_BACKEND", "offline")
-    per_client = security._BUCKETS["eval"]
-    global_eval = security._GLOBAL_EVAL
-    old_client, old_global = per_client.limit, global_eval.limit
-    per_client.limit, global_eval.limit = 10, 1
-    try:
-        assert client.get("/api/eval").status_code == 200
-        assert client.get("/api/eval").status_code == 429
-    finally:
-        per_client.limit, global_eval.limit = old_client, old_global
-
-
 # ---------- 크기 제한 ----------
 
 def test_본문이_너무_크면_413(monkeypatch):
@@ -150,7 +136,7 @@ def test_필드_상한을_넘으면_422(monkeypatch):
     assert client.post("/api/chat", json={"message": "가" * 2_001}).status_code == 422
     assert client.post("/api/categorize",
                        json={"merchants": ["가맹점"] * 101}).status_code == 422
-    assert client.post("/api/plan",
+    assert client.post("/api/forecast",
                        json={"profile": {"monthly_income": -1}}).status_code == 422
     assert client.post("/api/chat", json={
         "message": "카드값 알려줘", "card": {"pay_label": "가" * 41},

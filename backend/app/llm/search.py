@@ -104,24 +104,9 @@ def _search(backend: str, query: str) -> tuple[object, list[str]]:
         ]
         return _first_json_object(text), [s for s in sources if s]
 
-    # openai — Responses API 의 web_search 도구
-    import httpx
-    r = httpx.post(
-        config.OPENAI_BASE_URL.rstrip("/") + "/responses",
-        headers={"Authorization": f"Bearer {config.openai_key()}"},
-        timeout=45,
-        json={"model": config.OPENAI_MODEL, "input": prompt,
-              "tools": [{"type": "web_search"}]},
-    )
-    r.raise_for_status()
-    payload = r.json()
-
-    text, sources = "", []
-    for item in payload.get("output", []):
-        for part in item.get("content", []) or []:
-            text += part.get("text", "")
-            for ann in part.get("annotations", []) or []:
-                url = ann.get("url") or ann.get("title")
-                if url:
-                    sources.append(url)
-    return _first_json_object(text), sources
+    # openai — Responses API 의 web_search 도구. 호출·파싱은 websearch 와 같은 것을 쓴다.
+    from .. import websearch
+    payload = websearch.responses_call(prompt, timeout=45)
+    if payload is None:
+        raise RuntimeError("Responses API 호출 실패")
+    return _first_json_object(websearch.answer_of(payload)), websearch.sources_of(payload)

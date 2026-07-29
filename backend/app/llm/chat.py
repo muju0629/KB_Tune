@@ -103,12 +103,9 @@ def chat_reply(plan: PlanResult, message: str, card=None, upcoming=None, app=Non
     try:
         if backend == "claude":
             chunks = _claude_stream(plan, message, card, upcoming, app, history, past)
-        elif backend == "local":
-            chunks = _local_stream(plan, message, card, upcoming, app, history, past)
-        elif backend == "openai":
-            chunks = _openai_stream(plan, message, card, upcoming, app, history, past)
-        else:
-            chunks = ()
+        else:                       # openai · local — 같은 OpenAI 호환 스키마
+            chunks = _openai_compatible_stream(
+                backend, plan, message, card, upcoming, app, history, past)
         text = "".join(chunks).strip()
         if not text:
             raise ValueError("empty model response")
@@ -190,22 +187,36 @@ def _sse_deltas(response) -> Iterator[str]:
             yield delta
 
 
-def _openai_stream(plan: PlanResult, message: str, card=None, upcoming=None, app=None,
-                   history=None, past=None) -> Iterator[str]:
-    """OpenAI /v1/chat/completions 스트리밍. 로컬 서버와 응답 형식이 같아 파싱을 공유한다."""
+def _openai_compatible_stream(backend: str, plan: PlanResult, message: str, card=None,
+                              upcoming=None, app=None, history=None,
+                              past=None) -> Iterator[str]:
+    """/v1/chat/completions 스트리밍 — openai 와 local(Bonsai·Ollama·llama.cpp) 공용.
+
+    두 백엔드는 같은 스키마를 쓴다. 갈리는 건 주소·인증 헤더·모델 이름과, 로컬 서버가
+    요구하는 max_tokens 뿐이다. 예전에는 함수를 따로 뒀는데, 한쪽만 고치는 일이 반복됐다.
+    """
     import httpx
-    url = config.OPENAI_BASE_URL.rstrip("/") + "/chat/completions"
+    if backend == "openai":
+        base, model = config.OPENAI_BASE_URL, config.OPENAI_MODEL
+        headers = {"Authorization": f"Bearer {config.openai_key()}"}
+        limits, external = {}, True
+    else:
+        base, model = config.LOCAL_LLM_BASE_URL, config.LOCAL_LLM_MODEL
+        headers = {}
+        limits, external = {"max_tokens": 512}, config.llm_is_external("local")
+
     payload = {
-        "model": config.OPENAI_MODEL,
+        "model": model,
         "stream": True,
+        **limits,
         "messages": [
             {"role": "system", "content": _system(
-                plan, card, upcoming, app, external=True, past=past)},
-            *_conversation(message, history, external=True),
+                plan, card, upcoming, app, external=external, past=past)},
+            *_conversation(message, history, external=external),
         ],
     }
-    headers = {"Authorization": f"Bearer {config.openai_key()}"}
-    with httpx.stream("POST", url, json=payload, headers=headers, timeout=60) as r:
+    with httpx.stream("POST", base.rstrip("/") + "/chat/completions",
+                      json=payload, headers=headers, timeout=60) as r:
         r.raise_for_status()
         yield from _sse_deltas(r)
 
@@ -221,27 +232,6 @@ def _claude_stream(plan: PlanResult, message: str, card=None, upcoming=None, app
     ) as stream:
         for text in stream.text_stream:
             yield text
-
-
-def _local_stream(plan: PlanResult, message: str, card=None, upcoming=None, app=None,
-                  history=None, past=None) -> Iterator[str]:
-    """OpenAI 호환 로컬 서버(/v1/chat/completions) 스트리밍. Bonsai/Ollama/llama.cpp 공용."""
-    import httpx
-    url = config.LOCAL_LLM_BASE_URL.rstrip("/") + "/chat/completions"
-    external = config.llm_is_external("local")
-    system = _system(plan, card, upcoming, app, external=external, past=past)
-    payload = {
-        "model": config.LOCAL_LLM_MODEL,
-        "stream": True,
-        "max_tokens": 512,
-        "messages": [
-            {"role": "system", "content": system},
-            *_conversation(message, history, external=external),
-        ],
-    }
-    with httpx.stream("POST", url, json=payload, timeout=60) as r:
-        r.raise_for_status()
-        yield from _sse_deltas(r)
 
 
 # ---------- 오프라인 템플릿(비용 0) ----------
@@ -271,8 +261,3 @@ def _template_reply(plan: PlanResult, message: str, card=None, app=None) -> str:
     return (f"이번 주에는 약 {weekly:,}원까지 쓸 수 있어요. "
             f"이번 달 일정 예상액은 {plan.month_estimate_low:,}~{plan.month_estimate_high:,}원으로 예상해요. "
             "확인하고 싶은 일정을 말해 주세요.")
-
-
-def _template_stream(plan: PlanResult, message: str, card=None, app=None) -> Iterator[str]:
-    for token in _template_reply(plan, message, card, app).split(" "):
-        yield token + " "

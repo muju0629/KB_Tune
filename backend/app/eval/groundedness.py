@@ -58,13 +58,13 @@ def expand_roundings(allowed: set[int]) -> set[int]:
     return out
 
 
-def check(text: str, allowed: set[int], tol: int = 0) -> tuple[bool, list[int]]:
+def check(text: str, allowed: set[int]) -> tuple[bool, list[int]]:
     found = extract_amounts(text)
-    ungrounded = sorted(n for n in found if not _grounded(n, allowed, tol))
+    ungrounded = sorted(n for n in found if n not in allowed)
     return (len(ungrounded) == 0, ungrounded)
 
 
-def annotate(text: str, allowed: set[int], tol: int = 0,
+def annotate(text: str, allowed: set[int],
              marker: str = "(확인 필요)") -> tuple[str, list[int]]:
     """근거 없는 숫자 뒤에만 표시를 붙인 문장을 돌려준다.
 
@@ -73,15 +73,9 @@ def annotate(text: str, allowed: set[int], tol: int = 0,
     """
     bad: list[int] = []
     # 뒤에서부터 끼워 넣어야 앞쪽 위치가 밀리지 않는다.
-    for start, end, value in sorted(_spans(text), key=lambda s: s[0], reverse=True):
-        if _grounded(value, allowed, tol):
+    for _start, end, value in sorted(_spans(text), key=lambda s: s[0], reverse=True):
+        if value in allowed:
             continue
         bad.append(value)
         text = f"{text[:end]} {marker}{text[end:]}"
     return text, sorted(set(bad))
-
-
-def _grounded(value: int, allowed: set[int], tol: int) -> bool:
-    if value in allowed:
-        return True
-    return any(abs(value - a) <= tol for a in allowed) if tol else False
