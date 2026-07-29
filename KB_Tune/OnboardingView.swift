@@ -16,10 +16,11 @@ struct OnboardingView: View {
     var onFinish: () -> Void
     var onBack: (() -> Void)? = nil   // 첫 화면에서 뒤로 = 시작화면으로
 
-    /// 0~2 = 질문 단계, 3 = 에이전트 빌드 연출, 4 = 완료
+    /// 0~2 = 질문 단계, 3 = 계산 중, 4 = 완료
     @State private var step = 0
     @State private var forward = true
-    @State private var buildStep = 0
+    /// 선택 입력이라 빈 문자열이 '안 고름'이다. EventEstimator 가 같은 키를 읽는다.
+    @AppStorage("kbTuneAgeBucket") private var ageBucket = ""
     @State private var showKBPayConsent = false
     @StateObject private var calendar = CalendarStore()
 
@@ -233,6 +234,10 @@ struct OnboardingView: View {
             .padding(.horizontal, 24)
             .padding(.top, 14)
 
+            ageBucketRow
+                .padding(.horizontal, 24)
+                .padding(.top, 16)
+
             Spacer()
 
             Button { next() } label: { Text("다음") }
@@ -241,6 +246,52 @@ struct OnboardingView: View {
                 .padding(.bottom, 8)
 
             agentHint("수입에 맞춰 이번 주 금액을 계산해요")
+        }
+    }
+
+    /// 나이대(선택). 일정 이력이 없을 때 쓰는 공개 통계 기준 금액에만 반영한다 —
+    /// 같은 업종이라도 20대와 50대의 결제 금액이 꽤 다르기 때문이다.
+    /// 고르지 않아도 전 연령 평균으로 계산되므로 넘어가도 된다.
+    private var ageBucketRow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Text("나이대")
+                    .font(.kb(13, .semibold))
+                    .foregroundStyle(KB.ink)
+                Text("선택")
+                    .font(.kb(11, .medium))
+                    .foregroundStyle(KB.muted)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(KB.line.opacity(0.5), in: Capsule())
+            }
+
+            HStack(spacing: 6) {
+                ForEach(["20", "30", "40", "50"], id: \.self) { bucket in
+                    let picked = ageBucket == bucket
+                    Button {
+                        ageBucket = picked ? "" : bucket   // 다시 누르면 선택 해제
+                    } label: {
+                        Text("\(bucket)대")
+                            .font(.kb(13, picked ? .semibold : .regular))
+                            .foregroundStyle(picked ? KB.ink : KB.muted)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 9)
+                            .background(picked ? KB.yellow : .white,
+                                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(picked ? .clear : KB.line, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            Text(ageBucket.isEmpty
+                 ? "고르면 일정 금액을 그 나이대 기준으로 잡아요. 안 고르면 전 연령 평균이에요."
+                 : "\(ageBucket)대 기준으로 잡을게요. 이 값은 기기에만 있고 서버로 보내지 않아요.")
+                .font(.kb(11.5))
+                .foregroundStyle(KB.muted)
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -261,12 +312,14 @@ struct OnboardingView: View {
         VStack(spacing: 0) {
             header("나한테 더 필요한 소비를\n골라주세요", "좋아하는 걸 고르면 돼요. 예산을 조정할 때도 줄이지 않고 남겨둘게요.")
 
-            FlowChips(items: keepCandidates.map { (tag: $0.tag, label: $0.label, symbol: $0.symbol) },
-                      selected: $model.hobbies)
-                .padding(.horizontal, 24)
-                .padding(.top, 24)
-
-            Spacer()
+            // 후보가 한 화면에 다 들어가지 않으므로 칩만 스크롤한다.
+            ScrollView {
+                FlowChips(items: keepCandidates.map { (tag: $0.tag, label: $0.label, symbol: $0.symbol) },
+                          selected: $model.hobbies)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 24)
+                    .padding(.bottom, 12)
+            }
 
             // 더 필요한 소비(protectedTags)는 hobbies에서 자동 파생 — 별도 저장 없음
             Button { next() } label: { Text("7월 계획 계산하기") }
@@ -274,28 +327,22 @@ struct OnboardingView: View {
                 .disabled(model.hobbies.isEmpty)
                 .opacity(model.hobbies.isEmpty ? 0.5 : 1)
                 .padding(.horizontal, 24)
+                .padding(.top, 8)
                 .padding(.bottom, 8)
 
             agentHint(model.hobbies.isEmpty
                       ? "고른 소비는 예산을 조정할 때 줄이지 않아요"
-                      : "\(model.hobbies.sorted().joined(separator: "·")) — 더 필요한 소비로 기억할게요")
+                      : "\(selectedKeepSummary) — 더 필요한 소비로 기억할게요")
         }
     }
 
-    // MARK: 에이전트 빌드 연출
+    // MARK: 계산 중
 
-    private var buildRows: [String] {
-        let hobbyText = model.hobbies.isEmpty
-            ? "취향 프로필 반영"
-            : "\(model.hobbies.sorted().prefix(3).joined(separator: "·")) 취향 반영"
-        return [
-            "7월 인턴 출근 22일 반영",
-            "일정별 예상 금액 범위 계산",
-            hobbyText,
-            "수입 \(formatWon(model.monthlyIncome)) · 저축 \(formatWon(model.savingsGoal)) 반영",
-            "\(model.protectedList) 소비는 줄이지 않게 설정",
-            "목표 확률로 이번 달 소비 방향 결정",
-        ]
+    /// 고른 게 많아도 힌트 한 줄을 넘기지 않게 줄여 쓴다.
+    private var selectedKeepSummary: String {
+        let sorted = model.hobbies.sorted()
+        let head = sorted.prefix(3).joined(separator: "·")
+        return sorted.count > 3 ? "\(head) 외 \(sorted.count - 3)개" : head
     }
 
     private var stepBuilding: some View {
@@ -308,8 +355,6 @@ struct OnboardingView: View {
                     .font(.kb(32, .medium))
                     .foregroundStyle(KB.ink)
             }
-            .scaleEffect(buildStep % 2 == 0 ? 1.0 : 1.08)
-            .animation(.easeInOut(duration: 0.5), value: buildStep)
 
             Text("7월 계획을\n계산하고 있어요")
                 .font(.kb(24, .bold))
@@ -318,46 +363,16 @@ struct OnboardingView: View {
                 .lineSpacing(4)
                 .padding(.top, 22)
 
-            VStack(alignment: .leading, spacing: 14) {
-                ForEach(Array(buildRows.enumerated()), id: \.offset) { i, row in
-                    HStack(spacing: 10) {
-                        if buildStep > i {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.kb(18))
-                                .foregroundStyle(KB.green)
-                                .transition(.scale.combined(with: .opacity))
-                        } else if buildStep == i {
-                            ProgressView().tint(KB.muted).scaleEffect(0.8)
-                                .frame(width: 18, height: 18)
-                        } else {
-                            Circle().stroke(KB.line, lineWidth: 1.5).frame(width: 16, height: 16)
-                                .padding(1)
-                        }
-                        Text(row)
-                            .font(.kb(14, buildStep >= i ? .medium : .regular))
-                            .foregroundStyle(buildStep >= i ? KB.ink : KB.muted)
-                    }
-                }
-            }
-            .padding(20)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KB.line, lineWidth: 1))
-            .padding(.horizontal, 24)
-            .padding(.top, 28)
+            ProgressView()
+                .tint(KB.muted)
+                .padding(.top, 20)
 
             Spacer()
             Spacer()
         }
-        .sensoryFeedback(.impact(weight: .light), trigger: buildStep)
         .task {
-            for i in 1...buildRows.count {
-                try? await Task.sleep(nanoseconds: 550_000_000)
-                // 마지막 줄에 맞춰 방향을 정한다 — 연출과 실제 계산이 어긋나지 않게.
-                if i == buildRows.count { model.decideDirection() }
-                withAnimation(.spring(response: 0.3)) { buildStep = i }
-            }
-            try? await Task.sleep(nanoseconds: 650_000_000)
+            model.decideDirection()
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
             forward = true
             withAnimation(stepSpring) { step = questionCount + 2 }
         }
@@ -381,8 +396,6 @@ struct OnboardingView: View {
                 .padding(.top, 18)
 
             VStack(alignment: .leading, spacing: 12) {
-                summaryRow(symbol: "heart",
-                           text: model.userRole)
                 summaryRow(symbol: "shield",
                            text: "\(model.protectedList) 소비는 더 필요한 소비라 줄이지 않아요")
                 summaryRow(symbol: "banknote",

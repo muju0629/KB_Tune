@@ -17,6 +17,9 @@ import pytest
 @pytest.fixture(autouse=True, scope="session")
 def _force_offline_backend() -> None:
     os.environ["LLM_BACKEND"] = "offline"
+    # 기준 금액도 같은 이유로 Firestore 를 보지 않는다. 자격증명이 있는 개발 기기에서만
+    # 통과하는 테스트가 되면 CI·심사자 환경에서 결과가 달라진다.
+    os.environ["KB_TUNE_BASELINE_SOURCE"] = "bundled"
 
     from app import config
 

@@ -57,7 +57,8 @@ def test_estimate_uses_history():
 
 def test_estimate_unknown_category_falls_back():
     r = estimate_event_cost("우주여행 티켓 발권", TRANSACTIONS_HISTORY)
-    assert r.method in ("fallback", "rule", "llm")
+    # 개인 이력을 근거로 내세우지만 않으면 된다. baseline 은 '여행' 규칙에 걸렸을 때 나온다.
+    assert r.method in ("fallback", "rule", "baseline", "llm")
     assert r.amount > 0
 
 

@@ -3,7 +3,13 @@
 //  KB_Tune
 //
 //  일정 제목 → 예상 지출 범위 추정.
-//  과거 이력과 같은 유형의 7월 일정 기준으로 기기 안에서 계산한다.
+//  기기 안에서만 계산한다 — 제목은 어떤 경로로도 서버에 나가지 않는다.
+//
+//  값을 고르는 순서는 '이 사람에게 얼마나 가까운가'다.
+//    1. 이 사람이 같은 일정에 실제로 쓴 금액
+//    2. 이 사람의 같은 카테고리 결제 이력(2건 이상)
+//    3. 공개 통계 기준 금액(BaselinePrices) — 이력이 없는 사람도 여기서 값을 받는다
+//    4. 규칙에 박아 둔 최후 기본값
 //
 
 import Foundation
@@ -17,7 +23,7 @@ struct EstimateResponse: Codable {
     let high: Int
     let confidence: Double
     let basis: String
-    let method: String      // rule | history | llm | local
+    let method: String      // rule | history | baseline | llm | local
 }
 
 enum EventEstimator {
@@ -28,7 +34,8 @@ enum EventEstimator {
         ("경조사", ["결혼", "축의", "장례", "부의", "청첩"], 70_000),
         ("데이트", ["데이트", "200일", "기념일"], 65_000),
         ("가족", ["가족식사", "가족모임"], 20_000),
-        ("자기관리", ["레이저", "제모", "병원", "한의원", "의원"], 25_000),
+        ("자기관리", ["레이저", "제모", "병원", "한의원", "의원", "치과", "네일",
+                      "피부관리", "약국", "안경", "진료", "미용실"], 25_000),
         ("여가", ["영화", "공연", "전시", "미술관", "콘서트"], 20_000),
         ("모임", ["회식", "술", "뒤풀이", "동아리", "모임", "저녁"], 25_000),
         ("카페", ["카페", "커피", "스터디", "팀플", "연구"], 8_000),
@@ -37,19 +44,21 @@ enum EventEstimator {
         ("교통", ["이동", "택시", "기차", "버스"], 10_000),
     ]
 
-    /// 제공된 7월 캘린더의 같은 유형 일정으로 잡은 건당 기준값.
+    /// 공개 통계에 대응하는 업종이 없어 BaselinePrices 가 답을 못 주는 카테고리들.
+    /// 여기 값은 성제의 7월 캘린더에서 온 것이라 남에게 그대로 쓰면 근거가 없다 —
+    /// 그래서 표에 있는 카테고리는 항상 표를 먼저 본다.
     private static let calendarEstimate: [String: (avg: Int, low: Int, high: Int)] = [
         "출근": (0, 0, 0),
         "경조사": (70_000, 70_000, 70_000),
-        "데이트": (65_000, 30_000, 100_000),
-        "가족": (20_000, 20_000, 20_000),
-        "자기관리": (35_000, 20_000, 50_000),
-        "여가": (20_000, 8_000, 50_000),
-        "모임": (25_000, 5_000, 50_000),
-        "카페": (8_000, 5_000, 10_000),
-        "외식": (20_000, 15_000, 30_000),
         "교통": (10_000, 5_000, 15_000),
     ]
+
+    /// 온보딩에서 받은 나이대("20"·"30"·"40"·"50"). 선택 입력이라 비어 있는 게 정상이다.
+    /// 기기 밖으로 내보내지 않고 기준 금액에 배수를 곱하는 데에만 쓴다.
+    static var ageBucket: String? {
+        let v = UserDefaults.standard.string(forKey: "kbTuneAgeBucket") ?? ""
+        return v.isEmpty ? nil : v      // 온보딩에서 안 고르면 빈 문자열로 남는다
+    }
 
     static func estimate(_ title: String, history: [SpendRecord]? = nil) -> EstimateResponse {
         let t = title.replacingOccurrences(of: " ", with: "")
@@ -140,11 +149,22 @@ enum EventEstimator {
             )
         }
 
+        // 개인 이력이 없는 사람. 임의의 숫자 대신 공개 통계에서 가져오고 출처를 같이 보여준다.
+        if let base = BaselinePrices.forTitle(title)
+            ?? BaselinePrices.forCategory(category, ageBucket: ageBucket) {
+            return EstimateResponse(
+                title: title, category: category, amount: base.amount,
+                low: base.low, high: base.high, confidence: 0.55,
+                basis: "\(base.basis)을 기준으로 잡았어요. 출처는 \(base.source).",
+                method: "baseline"
+            )
+        }
+
         if let estimate = calendarEstimate[category] {
             return EstimateResponse(
                 title: title, category: category, amount: estimate.avg,
                 low: estimate.low, high: estimate.high, confidence: 0.7,
-                basis: "7월에 잡힌 비슷한 일정의 금액을 썼어요.",
+                basis: "비슷한 일정에 보통 드는 금액으로 잡았어요.",
                 method: "local"
             )
         }
