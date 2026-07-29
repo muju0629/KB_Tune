@@ -913,4 +913,52 @@ struct KB_TuneTests {
         #expect(match?.basis.contains("자장면") == true)
     }
 
+    // MARK: 웹 검색 — 제목이 검색어로 새지 않는가
+
+    @Test func searchQueryNeverCopiesWordsFromTheTitle() {
+        // 이 기능의 안전성 전부가 여기 걸려 있다. 검색어는 코드에 있는 말로만 조립되고
+        // 제목의 낱말은 하나도 복사되지 않아야 한다.
+        let secrets = ["제주도", "성심병원", "김민수", "성당", "강남", "롯데월드"]
+        let titles = [
+            "제주도 3박4일 여행", "성심병원 정기검진 여행", "김민수랑 여행",
+            "성당 모임 여행", "강남 여행 2명", "롯데월드 여행",
+        ]
+        for title in titles {
+            guard let built = SearchQuery.make(title: title, category: "여행") else { continue }
+            for secret in secrets {
+                #expect(!built.query.contains(secret), "‘\(secret)’이 검색어에 남음: \(built.query)")
+            }
+        }
+    }
+
+    @Test func searchQueryKeepsOnlyStructuralSignals() {
+        let built = SearchQuery.make(title: "제주도 3박4일 여행", category: "여행")
+        #expect(built?.query == "국내 3박 여행 1인 평균 경비")
+
+        let overseas = SearchQuery.make(title: "일본 2박 여행", category: "여행")
+        #expect(overseas?.query == "해외 2박 여행 1인 평균 경비")
+    }
+
+    @Test func categoriesWithGoodBaselinesAreNotSearched() {
+        // 공개 통계나 개인 이력으로 답이 나오는 건 검색하지 않는다.
+        for category in ["외식", "카페", "모임", "데이트", "자기관리", "쇼핑"] {
+            #expect(SearchQuery.make(title: "무엇이든", category: category) == nil)
+        }
+    }
+
+    @Test func headcountIsAppliedByTheAppNotTheSearch() {
+        // 검색은 늘 1인 기준으로 묻고, 인원 곱하기는 기기에서 한다.
+        #expect(SearchQuery.headcount(in: "여행 4명") == 4)
+        #expect(SearchQuery.headcount(in: "여행") == 1)
+        #expect(SearchQuery.headcount(in: "여행 99명") == 1)   // 말이 안 되는 값은 무시
+        #expect(SearchQuery.make(title: "여행 4명", category: "여행")?
+            .query.contains("1인 평균") == true)
+    }
+
+    @Test func webSearchIsOffUntilTheUserTurnsItOn() {
+        // 기본값이 꺼짐이어야 한다. 켠 적 없는 사람의 검색어가 나가면 안 된다.
+        UserDefaults.standard.removeObject(forKey: WebSearchConsent.key)
+        #expect(WebSearchConsent.granted == false)
+    }
+
 }

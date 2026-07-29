@@ -237,6 +237,27 @@ class EstimateResult(BaseModel):
     llm_raw: int | None = None   # LLM 원안(엔진 보정 전) — 투명성
 
 
+# ---------- 웹 검색으로 금액 찾기 (동의했을 때만) ----------
+
+class SearchRequest(BaseModel):
+    """검색어 하나뿐이다. 계획·카드·일정 필드를 **일부러** 두지 않았다.
+
+    이 통로는 질의가 검색 엔진까지 나간다. 받을 칸이 있으면 언젠가 채워 보내게 되므로
+    칸 자체를 만들지 않는다. 앱은 `SearchQuery.make()` 로 코드에 있는 말만 조립해
+    보내고, 일정 제목 원문은 여기 도달할 방법이 없다.
+    """
+    query: Annotated[str, Field(min_length=2, max_length=60)]
+
+
+class SearchResult(BaseModel):
+    amount: int | None       # 1인 기준. 못 찾으면 None
+    low: int | None
+    high: int | None
+    basis: str               # 사용자에게 보여줄 근거 한 줄
+    sources: list[str] = Field(default_factory=list)   # 참고한 문서 제목·주소
+    method: str              # web | unavailable
+
+
 # ---------- AI 기능 2: 캡처 이미지 → 거래 추출 ----------
 
 class ExtractRequest(BaseModel):
