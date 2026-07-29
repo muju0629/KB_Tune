@@ -144,6 +144,44 @@ class SearchRequest(BaseModel):
     query: Annotated[str, Field(min_length=1, max_length=200)]
 
 
+# ---------- 대화 에이전트 ----------
+
+class AgentRequest(ChatRequest):
+    """대화 한 턴. message 는 앱이 기기에서 가명처리한 문장이다.
+
+    이름·연락처·저장된 일정 제목은 `AgentService.sanitize()` 가 앱에서 이미 가렸다.
+    서버는 그걸 되돌릴 수 없고, 되돌리려 하지도 않는다.
+    """
+    # 앱이 웹 검색 동의를 받았는지. 없으면 검색 도구를 아예 안 준다.
+    may_search: bool = False
+    # 오늘 통산일 — 상대 날짜("모레")를 절대 날짜로 바꾸는 데 쓴다.
+    today: Day = 22
+
+
+class AgentAction(BaseModel):
+    """모델이 제안한 동작. 실행은 앱이 하고, 사용자가 버튼을 눌러야 일어난다.
+
+    서버는 사용자 데이터를 갖고 있지 않아서 실행할 수도 없다. 여기 담기는 건
+    '이렇게 하자'는 제안뿐이다.
+    """
+    kind: Literal["add_event", "move_event", "update_amount", "delete_event"]
+    day: Day
+    title: Annotated[str, Field(max_length=40)]
+    category: str | None = None
+    amount: Won | None = None      # 비우면 앱이 기기 안의 기준 금액 표에서 채운다
+    to_day: Day | None = None      # move_event 전용
+    label: Annotated[str, Field(max_length=30)]   # 버튼에 쓸 말
+
+
+class AgentResult(BaseModel):
+    reply: str
+    actions: list[AgentAction] = Field(default_factory=list)
+    # 검색을 실제로 했다면 나간 질의와 출처를 그대로 보여준다 — 무엇이 나갔는지 감출 이유가 없다.
+    searched_query: str | None = None
+    sources: list[str] = Field(default_factory=list)
+    method: str = "llm"            # llm | llm+web | template
+
+
 # ---------- 엔진 출력(결정론적) ----------
 
 class CategoryStat(BaseModel):

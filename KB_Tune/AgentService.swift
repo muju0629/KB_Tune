@@ -37,6 +37,22 @@ enum WebSearchConsent {
     static func set(_ value: Bool) { UserDefaults.standard.set(value, forKey: key) }
 }
 
+/// 대화가 일정을 직접 다루게 할지에 대한 동의.
+///
+/// 이걸 켜면 **방금 친 문장이 가명처리된 채로** 모델까지 간다. 이름·연락처·이미 저장된
+/// 일정 제목은 `sanitize()` 가 기기에서 가리지만, 지금 새로 말한 일정 이름은 나간다 —
+/// 모델이 그걸 알아들어야 일정을 넣고 고칠 수 있기 때문이다.
+///
+/// 끄면 대화는 예전처럼 금융 의도 라벨만 보내고, 일정 변경은 주간 탭에서만 한다.
+enum PlanAgentConsent {
+    static let key = "usesPlanAgent"
+
+    static var asked: Bool { UserDefaults.standard.object(forKey: key) != nil }
+    static var granted: Bool { UserDefaults.standard.bool(forKey: key) }
+
+    static func set(_ value: Bool) { UserDefaults.standard.set(value, forKey: key) }
+}
+
 /// 일정 금액을 웹에서 찾는 동의. 위 WebSearchConsent 와 따로 둔다.
 ///
 /// 저쪽은 대화에서 물어본 질문 원문이 나가고, 이쪽은 제목에서 만든 검색어가 나간다.
@@ -339,6 +355,34 @@ final class AgentService: ObservableObject {
               let r = try? JSONDecoder().decode(SearchCostResult.self, from: data),
               r.amount != nil else { return nil }
         return r
+    }
+
+    /// 대화 한 턴 — 답변과 '실행할 동작'을 함께 받는다.
+    ///
+    /// 보내는 문장은 `sanitize()` 를 거친다. 이름·연락처·이미 저장된 일정 제목은 기기에서
+    /// 가려지고, 방금 새로 말한 일정 이름만 남는다. 그게 나가야 모델이 "제주도 여행
+    /// 넣어줘"를 알아듣는다. 동의를 안 켰으면 호출부가 이 함수를 부르지 않는다.
+    ///
+    /// 검색은 서버가 알아서 하지 않는다 — `maySearch` 가 참일 때만 도구를 쥐여 주고,
+    /// 그마저도 서버의 검증기가 검색어를 검사한 뒤에야 실제로 나간다.
+    func agentTurn(_ message: String, model: AppModel, maySearch: Bool,
+                   history: [AgentChatTurn] = []) async -> AgentTurnResult? {
+        let body: [String: Any] = [
+            "message": OutboundPrivacy.sanitize(message, model: model),
+            "today": DemoClock.today,
+            "may_search": maySearch,
+            "history": history.suffix(6).map {
+                ["role": $0.role,
+                 "content": OutboundPrivacy.sanitize($0.content, model: model)]
+            },
+        ]
+        let req = Self.request("api/agent", timeout: 45, body: body)
+        guard let (data, resp) = try? await URLSession.shared.data(for: req) else {
+            backendReachable = false
+            return nil
+        }
+        guard accept(resp) else { return nil }
+        return try? JSONDecoder().decode(AgentTurnResult.self, from: data)
     }
 
     /// 스트리밍 대화. 토큰이 올 때마다 onToken(델타) 호출.

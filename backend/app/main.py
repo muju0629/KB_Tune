@@ -18,11 +18,13 @@ from .engine.categorize import categorize_many
 from .engine.estimate import estimate_event_cost
 from .engine.forecast import forecast_next_month
 from .eval.runner import run_eval
+from .llm.agent import run_agent
 from .llm.chat import chat_stream
 from .llm.coach import coach
 from .llm.extract import extract_from_text
 from .llm.search import search_cost
-from .models import (CategorizeRequest, CategorizeResult, ChatRequest,
+from .models import (AgentRequest, AgentResult, CategorizeRequest,
+                     CategorizeResult, ChatRequest,
                      CoachRequest, EstimateRequest, EstimateResult,
                      ExtractRequest, ExtractResult, ForecastResult,
                      PlanRequest, PlanResult, Profile, SearchCostRequest,
@@ -130,6 +132,22 @@ def estimate_endpoint(req: EstimateRequest):
     use_private_llm = config.llm_enabled() and not config.llm_is_external()
     return estimate_event_cost(req.title, TRANSACTIONS_HISTORY,
                                use_llm=use_private_llm, age_bucket=req.age_bucket)
+
+
+# ---------- 대화 에이전트 ----------
+
+@app.post("/api/agent", response_model=AgentResult, dependencies=_llm)
+def agent_endpoint(req: AgentRequest):
+    """대화 한 턴 — 답변 + 앱이 실행할 동작 제안.
+
+    message 는 앱이 기기에서 가명처리한 문장이다(이름·연락처·저장된 일정 제목 마스킹).
+    서버는 그걸 되돌릴 수 없고, 저장하지도 않는다.
+
+    동작은 제안일 뿐이다. 실행은 앱이 하고, 사용자가 버튼을 눌러야 일어난다 —
+    서버에는 애초에 그 사용자의 캘린더가 없다.
+    """
+    plan = build_plan(_profile(req), req.today, req.include_candidate)
+    return run_agent(plan, req.message, req.today, req.may_search, req.history)
 
 
 # ---------- 웹 검색으로 금액 찾기 ----------

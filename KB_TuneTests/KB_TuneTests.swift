@@ -955,6 +955,39 @@ struct KB_TuneTests {
             .query.contains("1인 평균") == true)
     }
 
+    // MARK: 대화 에이전트
+
+    @Test func planAgentIsOffUntilTheUserTurnsItOn() {
+        // 켜면 방금 친 문장이 모델까지 간다. 기본값이 꺼짐이 아니면 동의 없이 나간다.
+        UserDefaults.standard.removeObject(forKey: PlanAgentConsent.key)
+        #expect(PlanAgentConsent.granted == false)
+    }
+
+    @Test func consentsDoNotTurnEachOtherOn() {
+        // 넷 다 나가는 것이 달라 스위치가 따로다. 하나를 켠다고 다른 게 켜지면 안 된다.
+        let keys = [CloudAIConsent.key, WebSearchConsent.key,
+                    PlanAgentConsent.key, CostSearchConsent.key]
+        for key in keys { UserDefaults.standard.removeObject(forKey: key) }
+
+        PlanAgentConsent.set(true)
+        #expect(CloudAIConsent.granted == false)
+        #expect(WebSearchConsent.granted == false)
+        #expect(CostSearchConsent.granted == false)
+        PlanAgentConsent.set(false)
+    }
+
+    @Test func agentTurnMasksNamesAndSavedEventTitles() {
+        // 에이전트 경로로 나가는 문장. 이름과 이미 저장된 일정 제목은 기기에서 가려야 한다.
+        let model = AppModel()
+        let saved = model.calendarDays.flatMap(\.events).first { !$0.title.isEmpty }
+        let sentence = "\(model.userName)이랑 \(saved?.title ?? "와드") 얘기 좀 하자. 010-1234-5678로 연락함"
+        let sent = OutboundPrivacy.sanitize(sentence, model: model)
+
+        #expect(!sent.contains(model.userName))
+        if let title = saved?.title { #expect(!sent.contains(title)) }
+        #expect(!sent.contains("010-1234-5678"))
+    }
+
     @Test func webSearchIsOffUntilTheUserTurnsItOn() {
         // 기본값이 꺼짐이어야 한다. 켠 적 없는 사람의 검색어가 나가면 안 된다.
         UserDefaults.standard.removeObject(forKey: CostSearchConsent.key)
