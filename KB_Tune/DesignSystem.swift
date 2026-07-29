@@ -188,10 +188,11 @@ func formatWon(_ value: Int) -> String {
     decimalString(value) + "원"
 }
 
-/// 110000, 160000 -> "110,000~160,000원" — 문장 안에서 쓰는 범위(단위는 뒤에 한 번만).
-/// 표·요약 줄은 양쪽에 단위를 붙이는 WeeklyPlanView.formatRange 를 쓴다.
-func formatWonRange(_ low: Int, _ high: Int) -> String {
-    low == high ? formatWon(low) : decimalString(low) + "~" + formatWon(high)
+/// 110000, 160000 -> "110,000~160,000원". 문장 안에서는 단위를 뒤에 한 번만 붙이고,
+/// 표·요약 줄처럼 두 값을 나란히 읽는 자리에서는 `unitOnBoth` 로 양쪽에 붙인다.
+func formatWonRange(_ low: Int, _ high: Int, unitOnBoth: Bool = false) -> String {
+    if low == high { return formatWon(low) }
+    return (unitOnBoth ? formatWon(low) : decimalString(low)) + "~" + formatWon(high)
 }
 
 // MARK: - 버튼 스타일

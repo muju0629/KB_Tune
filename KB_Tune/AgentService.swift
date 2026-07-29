@@ -32,8 +32,9 @@ import NaturalLanguage
 /// 동의 시트가 이 값만 되켜서, 기록은 '철회'인데 전송은 이어졌다. 동의 시각도
 /// 안 남아 입증이 안 됐다. 진입점을 하나로 묶어 구조적으로 막는다.
 nonisolated enum AIConsent {
-    // 예전 키를 그대로 쓴다 — 이미 켜 둔 사람이 다시 켜지 않아도 되게.
-    static let key = "usesCloudAIAnalysis"
+    /// 국외 이전 동의와 **같은 칸**을 읽는다. 예전에는 전송 스위치용 키를 따로 두고
+    /// `ConsentStore.set` 이 손으로 맞춰 줬는데, 맞춰 주는 줄을 빠뜨리면 그대로 사고였다.
+    static let key = ConsentItem.overseas.rawValue
 
     static var asked: Bool { UserDefaults.standard.object(forKey: key) != nil }
     static var granted: Bool { UserDefaults.standard.bool(forKey: key) }

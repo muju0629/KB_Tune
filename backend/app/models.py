@@ -117,10 +117,6 @@ class PlanRequest(BaseModel):
     app_numbers: Optional[AppNumbers] = None
 
 
-class CoachRequest(PlanRequest):
-    pass
-
-
 class ChatHistoryItem(BaseModel):
     """사용자가 선택해 보낸 짧은 대화 문맥.
 
@@ -258,25 +254,6 @@ class PlanResult(BaseModel):
     adjustments: list[Adjustment]
     # LLM/평가가 인용해도 되는 숫자 화이트리스트
     grounded_numbers: list[int]
-
-
-# ---------- LLM 출력(언어) ----------
-
-class CoachResponse(BaseModel):
-    direction: Direction
-    headline: str        # 결론 한 줄
-    reason: str          # 이유(반영한 데이터)
-    impact: str          # 영향(전/후)
-    recommendation: str  # 다음 행동 제안
-    grounded: bool = True
-    used_llm: bool = True
-
-
-class EvalResult(BaseModel):
-    engine_tests_passed: int
-    engine_tests_total: int
-    groundedness_rate: float
-    details: list[str]
 
 
 # ---------- AI 기능 1: 일정 → 예상 지출 추정 ----------

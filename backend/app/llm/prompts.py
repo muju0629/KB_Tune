@@ -91,16 +91,6 @@ def _facts(plan: PlanResult, app=None) -> str:
     return "\n".join(lines)
 
 
-def coach_system(plan: PlanResult) -> str:
-    return f"{STYLE}\n\n{GROUNDING_RULE}\n\n[계획 수치]\n{_facts(plan)}"
-
-
-def coach_user(plan: PlanResult) -> str:
-    if plan.risk.has_risk:
-        return "위 계획을 바탕으로, 이번 주에 주의할 일정과 지킬 수 있는 방법을 코칭해줘."
-    return "위 계획을 바탕으로 이번 주 소비 코칭을 해줘."
-
-
 def _card_facts(card, upcoming, *, include_upcoming_titles: bool = True) -> str:
     """카드 청구와 앞으로의 일정 — 엔진의 월 예산 계산에는 들어가지 않는 별도 사실."""
     lines: list[str] = []

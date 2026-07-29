@@ -84,14 +84,6 @@ enum MatchEngine {
         return candidates.first
     }
 
-    /// 확인이 필요한(50~79점) 거래들 — 하루 마감에서 물어볼 목록.
-    static func needsConfirmation(in model: AppModel, day: Int) -> [MatchResult] {
-        BillingCycle.transactions
-            .filter { $0.day == day && $0.count == 1 }
-            .compactMap { bestMatch(for: $0, in: model) }
-            .filter { $0.verdict == .confirm }
-    }
-
     // MARK: 기준별 점수
 
     private static func score(tx: CardTransaction, event: DayEvent, dayNumber: Int) -> MatchResult {

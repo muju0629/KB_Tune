@@ -8,9 +8,8 @@ from app.engine.budget import disposable_month
 from app.engine.categorize import categorize_many, categorize_rule
 from app.engine.estimate import estimate_event_cost
 from app.engine.forecast import detect_patterns, forecast_next_month
-from app.eval.runner import run_eval
 from app.eval import groundedness
-from app.llm import chat, coach, prompts
+from app.llm import chat, prompts
 from app.llm.complete import _first_json_object, complete_json
 from app.llm.extract import extract_from_text
 from app.models import AppNumbers, CardBilling, ChatHistoryItem, UpcomingEvent
@@ -179,7 +178,7 @@ def test_chat_allows_exact_app_card_and_upcoming_numbers(monkeypatch):
     plan, app, card, upcoming = _chat_context()
     monkeypatch.setattr(config, "llm_backend", lambda: "openai")
     monkeypatch.setattr(
-        chat, "_openai_stream",
+        chat, "_openai_compatible_stream",
         lambda *_args, **_kwargs: iter([
             "이번 주 추가 사용 가능액은 77,777원이고 ",
             "8월 14일 카드 청구액은 542,630원이에요. 카페 일정은 20,000원이에요.",
@@ -196,7 +195,7 @@ def test_chat_marks_single_fabricated_amount_and_keeps_the_rest(monkeypatch):
     plan, app, card, upcoming = _chat_context()
     monkeypatch.setattr(config, "llm_backend", lambda: "openai")
     monkeypatch.setattr(
-        chat, "_openai_stream",
+        chat, "_openai_compatible_stream",
         lambda *_args, **_kwargs: iter([
             "이번 주 추가 사용 가능액은 77,777원이에요. 다음 달에는 999,999원이 필요해요."
         ]),
@@ -214,7 +213,7 @@ def test_chat_falls_back_to_template_when_mostly_fabricated(monkeypatch):
     plan, app, card, upcoming = _chat_context()
     monkeypatch.setattr(config, "llm_backend", lambda: "openai")
     monkeypatch.setattr(
-        chat, "_openai_stream",
+        chat, "_openai_compatible_stream",
         lambda *_args, **_kwargs: iter([
             "111,111원과 555,555원을 쓰면 888,888원이 남아요."
         ]),
@@ -264,7 +263,8 @@ def test_external_openai_payload_contains_only_structured_user_intent(monkeypatc
         return FakeResponse()
 
     monkeypatch.setattr("httpx.stream", fake_stream)
-    list(chat._openai_stream(
+    list(chat._openai_compatible_stream(
+        "openai",
         plan,
         f"{canary} 갈래, 2만원 정도",
         card,
@@ -285,22 +285,6 @@ def test_external_openai_payload_contains_only_structured_user_intent(monkeypatc
     system = captured["messages"][0]["content"]
     assert "8/9 여가 20,000원" in system
     assert canary not in system
-
-
-def test_eval_uses_configured_chat_path_and_reports_block(monkeypatch):
-    monkeypatch.setattr(config, "llm_backend", lambda: "openai")
-    monkeypatch.setattr(
-        chat, "_openai_stream",
-        lambda *_args, **_kwargs: iter(["근거에 없는 999,999원을 써도 돼요."]),
-    )
-    result = run_eval()
-    assert result.groundedness_rate == 0.0
-    chat_details = [d for d in result.details if "groundedness/chat" in d]
-    assert len(chat_details) == 3
-    # 표시를 붙여 내보냈어도 모델 접지 점수는 실패다 — 안전 폴백과 모델 품질을 섞지 않는다.
-    assert all("모델 차단 숫자=[999999]" in d for d in chat_details)
-    assert all("[FAIL]" in d for d in chat_details)
-    assert all("모델 차단 숫자=[999999]" in d for d in chat_details)
 
 
 # ---------- 지난 소비 열람 (자유 대화의 근거) ----------
@@ -360,27 +344,6 @@ def test_annotate_marks_only_the_ungrounded_number():
     assert bad == [999_999]
     assert "999,999원 (확인 필요)" in text
     assert "77,777원 남았고" in text
-
-
-def test_coach_uses_llm_on_any_model_backend(monkeypatch):
-    """Phase 4 — claude 전용 게이트 때문에 openai 에서 코칭만 템플릿으로 떨어졌다."""
-    plan = build_plan(PROFILE, 22)
-    monkeypatch.setattr(config, "llm_backend", lambda: "openai")
-    monkeypatch.setattr(coach, "complete_json", lambda *_a, **_k: {
-        "direction": "maintain",
-        "headline": f"이번 주에는 {plan.weekly_available:,}원까지 쓸 수 있어요.",
-        "reason": "확정 일정을 반영했어요.",
-        "impact": f"적금 목표 확률은 {plan.probability}%예요.",
-        "recommendation": "금액이 빈 일정만 채워 주세요.",
-    })
-    out = coach.coach(plan)
-    assert out.used_llm and out.grounded
-
-
-def test_coach_falls_back_to_template_when_offline(monkeypatch):
-    plan = build_plan(PROFILE, 22)
-    monkeypatch.setattr(config, "llm_backend", lambda: "offline")
-    assert coach.coach(plan).used_llm is False
 
 
 def test_openai_uses_max_completion_tokens_and_local_keeps_max_tokens(monkeypatch):

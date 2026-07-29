@@ -9,6 +9,9 @@ design-audit/
 design-qa-artifacts/
 design-qa.md
 
+# 회귀 테스트 결과 번들(xcresult 내보내기 — UUID 파일·mp4). 테스트를 다시 돌리면 나온다.
+docs/competition/*-regression-*/
+
 # Python
 __pycache__/
 *.pyc

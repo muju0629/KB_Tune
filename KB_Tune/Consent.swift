@@ -175,12 +175,6 @@ nonisolated enum ConsentStore {
         let defaults = UserDefaults.standard
         defaults.set(value, forKey: item.rawValue)
         defaults.set(value ? Date() : nil, forKey: item.rawValue + ".at")
-
-        // 외부 AI 동의는 기존 AI 스위치와 같은 뜻이다. 두 값이 어긋나면 동의를 철회했는데도
-        // 전송이 이어지는 사고가 나므로, 한쪽을 바꾸면 다른 쪽도 따라가게 묶어 둔다.
-        if item == .overseas {
-            UserDefaults.standard.set(value, forKey: AIConsent.key)
-        }
     }
 
     /// 필수 항목까지 받았고 고지 버전도 최신인가.
@@ -201,6 +195,5 @@ nonisolated enum ConsentStore {
             defaults.removeObject(forKey: item.rawValue + ".at")
         }
         defaults.removeObject(forKey: versionKey)
-        defaults.set(false, forKey: AIConsent.key)
     }
 }

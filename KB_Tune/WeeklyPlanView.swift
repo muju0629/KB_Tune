@@ -922,15 +922,17 @@ struct WeeklyPlanView: View {
             // 요약 — 캘린더 바로 위
             VStack(spacing: 0) {
                 summaryLine("\(model.viewingMonth)월 예상 지출",
-                            formatRange(low: model.viewingMonthEstimateLow,
-                                        high: model.viewingMonthEstimateHigh),
+                            formatWonRange(model.viewingMonthEstimateLow,
+                                           model.viewingMonthEstimateHigh, unitOnBoth: true),
                             highlight: true)
                 Divider().overlay(KB.line)
                 summaryLine("이번 주 예상 지출",
-                            formatRange(low: model.plannedSpendLow, high: model.plannedSpendHigh))
+                            formatWonRange(model.plannedSpendLow, model.plannedSpendHigh,
+                                           unitOnBoth: true))
                 Divider().overlay(KB.line)
                 summaryLine("월말 여유 예상",
-                            formatRange(low: model.monthEndRemainingLow, high: model.monthEndRemainingHigh),
+                            formatWonRange(model.monthEndRemainingLow,
+                                           model.monthEndRemainingHigh, unitOnBoth: true),
                             tint: KB.green)
             }
             .background(KB.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -1425,10 +1427,6 @@ struct DayTimetableBody: View {
     }
 }
 
-private func roundToTenThousand(_ amount: Int) -> Int {
-    Int((Double(amount) / 10_000).rounded()) * 10_000
-}
-
 /// 월간 캘린더 날짜 칸처럼 좁은 자리에 넣는 축약 지출 표기 (예: -73,000 → "-7.3만")
 private func compactSpend(_ amount: Int) -> String {
     if amount < 10_000 { return "-\(decimalString(amount))" }
@@ -1436,14 +1434,9 @@ private func compactSpend(_ amount: Int) -> String {
     return man == man.rounded() ? "-\(Int(man))만" : String(format: "-%.1f만", man)
 }
 
-private func formatRange(low: Int, high: Int) -> String {
-    if low == high { return formatWon(low) }
-    return "\(formatWon(low))~\(formatWon(high))"
-}
-
 private func estimateLabel(low: Int, high: Int, estimated: Bool) -> String {
     let prefix = estimated ? "예상 " : ""
-    return prefix + formatRange(low: low, high: high)
+    return prefix + formatWonRange(low, high, unitOnBoth: true)
 }
 
 /// 확정·예약·예상 상태를 구분하는 작은 배지(기획 보고서 11.1). 확정은 기본 상태라 표시하지 않는다.

@@ -1,12 +1,12 @@
 # KB Tune — 금융 에이전트 백엔드
 
-소비 데이터를 **결정론적 엔진**으로 계산하고, 그 위에서 **Claude**가 설명·판단·문장만 만드는
+소비 데이터를 **결정론적 엔진**으로 계산하고, 그 위에서 **LLM**이 설명·판단·문장만 만드는
 "금융 라이프 에이전트" API. 단순한 LLM 프롬프트 래퍼가 아니라, 검증 가능한 재무 모델이 핵심이다.
 
 ## 설계 원칙 — 숫자는 코드, 판단은 LLM
 
 ```
-요청 → [결정론 엔진] → PlanResult(모든 숫자) → [Claude] 설명/판단 → [groundedness 검증] → 응답
+요청 → [결정론 엔진] → PlanResult(모든 숫자) → [LLM] 설명/판단 → [groundedness 검증] → 응답
                 └ 예산배분 · 몬테카를로 목표확률 · 위험탐지 · 조정안 생성
 ```
 
@@ -31,14 +31,11 @@ app/
 │  ├─ risk.py         #   위험 일정 탐지 + 조정안 생성
 │  ├─ analysis.py     #   카테고리 분석·급증 탐지
 │  └─ plan.py         #   오케스트레이션 → PlanResult(숫자 단일 출처)
-├─ llm/               # Claude 레이어 (설명·판단만)
+├─ llm/               # LLM 레이어 (설명·판단만)
 │  ├─ prompts.py      #   엔진 숫자에 접지된 프롬프트
-│  ├─ coach.py        #   구조화 출력 + groundedness 폴백
 │  └─ chat.py         #   스트리밍 대화
 ├─ eval/              # 평가
-│  ├─ golden.py       #   엔진 정합성 골든 케이스
-│  ├─ groundedness.py #   LLM이 엔진 숫자만 쓰는지 검사
-│  └─ runner.py       #   /api/eval
+│  └─ groundedness.py #   LLM이 엔진 숫자만 쓰는지 검사
 ├─ data.py            # 성제의 2026년 7월 캘린더 기반 데모 입력
 ├─ models.py          # Pydantic 스키마
 └─ main.py            # FastAPI 라우트
@@ -55,10 +52,12 @@ python3 -m venv .venv && ./.venv/bin/pip install -r requirements.txt
 ./.venv/bin/uvicorn app.main:app --reload
 ```
 
-Claude 코칭을 켜려면 `.env`에 키만 넣으면 된다 (`.env.example` 참고):
+LLM 을 켜려면 `.env`에 백엔드와 키만 넣으면 된다 (`.env.example` 참고):
 
 ```
-ANTHROPIC_API_KEY=sk-ant-...
+LLM_BACKEND=openai
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=          # 비우면 config.py 의 기본값
 ```
 
 ## 엔드포인트
@@ -66,10 +65,10 @@ ANTHROPIC_API_KEY=sk-ant-...
 | 메서드 | 경로 | 설명 |
 |---|---|---|
 | GET | `/api/health` | 상태 + LLM 사용 여부 |
-| POST | `/api/plan` | **순수 엔진** 결과(숫자) — 알고리즘 단독 동작 |
-| POST | `/api/coach` | 엔진 계획 + 접지된 LLM 코칭 |
 | POST | `/api/chat` | 계획을 바꾸는 대화(텍스트 스트리밍) |
-| GET | `/api/eval` | 평가 리포트(골든 + groundedness) |
+| POST | `/api/agent` | 대화 한 턴 — 답변 + 앱이 실행할 동작 제안 |
+| POST | `/api/search` · `/api/search/cost` | 웹 검색 답변 · 검색어 하나로 1인 기준 금액 |
+| GET | `/api/baseline` | 공개 통계 기준 금액 표(앱이 통째로 받아 기기에서 조회) |
 | POST | `/api/estimate` | **① 일정 제목 → 예상 지출** (캘린더 유형 개인화 + 엔진 범위 보정) |
 | POST | `/api/extract` | **② OCR 텍스트 → 거래 추출** (`image_base64` 원본은 422로 차단) |
 | POST | `/api/categorize` | **③ 가맹점 → 카테고리** (규칙 사전 → 미스만 LLM, 집합 강제) |
@@ -88,8 +87,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 예:
 ```bash
-curl -s localhost:8000/api/plan -X POST -H 'content-type: application/json' -d '{}' | python3 -m json.tool
-curl -s localhost:8000/api/eval | python3 -m json.tool
+curl -s localhost:8000/api/forecast -X POST -H 'content-type: application/json' -d '{}' | python3 -m json.tool
 curl -sN localhost:8000/api/chat -X POST -H 'content-type: application/json' \
      -d '{"message":"이번 주 출근비까지 빼면 얼마 남아?"}'
 ```
@@ -98,7 +96,6 @@ curl -sN localhost:8000/api/chat -X POST -H 'content-type: application/json' \
 
 ```bash
 ./.venv/bin/pytest -q          # 엔진 골든·MC 정합성·groundedness
-curl -s localhost:8000/api/eval
 ```
 
 성제의 2026년 7월 캘린더 기준 엔진 출력(시드 고정 → 항상 동일):
@@ -116,7 +113,7 @@ curl -s localhost:8000/api/eval
 
 - Build: `pip install -r requirements.txt`
 - Start: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-- 환경변수: `ANTHROPIC_API_KEY` (선택 — 없어도 동작)
+- 환경변수: `OPENAI_API_KEY` (선택 — 없어도 동작)
 
 > ⚠️ 무료 티어는 유휴 시 슬립(콜드스타트). 라이브 데모라면 직전에 `/api/health`로 깨워두거나
 > 로컬 실행을 백업으로 준비. 심사자가 코드를 직접 받아 실행하는 방식이면 로컬만으로 충분.
