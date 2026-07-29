@@ -1,3 +1,4 @@
+<div align="center">
 # KB Tune
 
 ### 일정만 넣으면, 이번 주에 얼마 쓸 수 있는지 알려드려요
@@ -11,8 +12,6 @@
 <img src="https://img.shields.io/badge/LLM-OpenAI-FFCC00?style=flat-square&labelColor=25241F&logo=openai&logoColor=white" alt="OpenAI" />
 
 <br/><br/>
-
-<div align="center">
 
 <img src="docs/header.png" width="820" alt="KB Tune — 가계부는 이미 쓴 돈만 보여줍니다. KB Tune은 앞으로 쓸 돈을 미리 알려드립니다." />
 
