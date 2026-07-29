@@ -146,6 +146,19 @@ class SearchRequest(BaseModel):
 
 # ---------- 대화 에이전트 ----------
 
+class AgentEventRef(BaseModel):
+    """이미 잡혀 있는 일정 한 건 — **제목 없이** 번호로만 가리킨다.
+
+    옮기고 지우는 데 제목이 필요 없다. 번호와 날짜·유형만 있으면 모델이 "그 여행"을
+    지목할 수 있고, 제목은 기기 밖으로 나갈 이유가 사라진다. 제목으로 맞추던 방식은
+    비식별화가 '카페 약속'을 '[이름] 약속'으로 바꿔 놓으면 앱에서 못 찾는 문제도 있었다.
+    """
+    ref: Annotated[int, Field(ge=1, le=99)]
+    day: Day
+    category: str
+    amount: Won
+
+
 class AgentRequest(ChatRequest):
     """대화 한 턴. message 는 앱이 기기에서 가명처리한 문장이다.
 
@@ -156,6 +169,8 @@ class AgentRequest(ChatRequest):
     may_search: bool = False
     # 오늘 통산일 — 상대 날짜("모레")를 절대 날짜로 바꾸는 데 쓴다.
     today: Day = 22
+    # 이미 잡혀 있는 일정. 제목은 안 싣는다 — 번호로 가리키면 되기 때문이다.
+    events: Annotated[list[AgentEventRef], Field(max_length=40)] = Field(default_factory=list)
 
 
 class AgentAction(BaseModel):
@@ -166,7 +181,10 @@ class AgentAction(BaseModel):
     """
     kind: Literal["add_event", "move_event", "update_amount", "delete_event"]
     day: Day
-    title: Annotated[str, Field(max_length=40)]
+    # add_event 에만 쓴다. 나머지는 ref 로 기존 일정을 가리킨다.
+    title: Annotated[str, Field(max_length=40)] = ""
+    # 옮기기·금액 고치기·지우기가 대상으로 삼는 기존 일정 번호.
+    ref: Annotated[int, Field(ge=1, le=99)] | None = None
     category: str | None = None
     amount: Won | None = None      # 비우면 앱이 기기 안의 기준 금액 표에서 채운다
     to_day: Day | None = None      # move_event 전용

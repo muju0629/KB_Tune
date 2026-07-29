@@ -366,11 +366,16 @@ final class AgentService: ObservableObject {
     /// 검색은 서버가 알아서 하지 않는다 — `maySearch` 가 참일 때만 도구를 쥐여 주고,
     /// 그마저도 서버의 검증기가 검색어를 검사한 뒤에야 실제로 나간다.
     func agentTurn(_ message: String, model: AppModel, maySearch: Bool,
+                   events: [AgentEventRef] = [],
                    history: [AgentChatTurn] = []) async -> AgentTurnResult? {
         let body: [String: Any] = [
             "message": OutboundPrivacy.sanitize(message, model: model),
             "today": DemoClock.today,
             "may_search": maySearch,
+            // 제목은 안 싣는다 — 번호·날짜·유형·금액이면 모델이 지목할 수 있다.
+            "events": events.map {
+                ["ref": $0.ref, "day": $0.day, "category": $0.category, "amount": $0.amount]
+            },
             "history": history.suffix(6).map {
                 ["role": $0.role,
                  "content": OutboundPrivacy.sanitize($0.content, model: model)]

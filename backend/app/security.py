@@ -158,6 +158,22 @@ _PASSPORT = re.compile(r"(?<![A-Z0-9])[A-Z]{1,2}\d{7,8}(?![A-Z0-9])", re.IGNOREC
 _ADDRESS = re.compile(r"(?:주소(?:는|가|:)?|사는\s*곳(?:은|:)?|거주지(?:는|:)?)[^,.\n]{2,60}")
 _NAME_WITH_SUFFIX = re.compile(r"(?<![가-힣])([가-힣]{2,4})(님|씨)(?![가-힣])")
 _NAME_EVENT = re.compile(r"(?<![가-힣])([가-힣]{2,4})\s+(결혼식|생일|돌잔치|장례식|약속|만남)")
+# 사람 이름 자리에 오지만 이름이 아닌 말들. 이게 없으면 "카페 약속"이 "[이름] 약속"이
+# 되어 버려서, 대화로 그 일정을 지목할 방법이 사라진다. 소비 유형과 관계 호칭은
+# 이름으로 오인해도 얻는 게 없고 잃는 게 크다.
+_NOT_A_NAME = {
+    "카페", "커피", "점심", "저녁", "아침", "식사", "회식", "술자리", "모임", "약속",
+    "친구", "가족", "부모님", "회사", "학교", "병원", "치과", "미용실", "여행", "데이트",
+    "영화", "공연", "전시", "쇼핑", "운동", "헬스", "스터디", "팀플", "출근", "퇴근",
+    "동아리", "선배", "후배", "동기", "교수님", "사장님", "언니", "오빠", "누나",
+}
+
+
+def _name_or_original(captured: str, rebuild) -> str:
+    """이름으로 보이지만 위 사전에 있는 말이면 원문 그대로 둔다."""
+    return rebuild("[이름]") if captured not in _NOT_A_NAME else rebuild(captured)
+
+
 _NAME_RELATION = re.compile(
     r"(?<![가-힣])([가-힣]{2,4})(와|과|이랑|랑)\s*"
     r"(?=(?:카페|약속|만나|밥|술|여행|데이트|결혼|헬스|운동|식사|영화|공연|쇼핑))"
@@ -202,9 +218,12 @@ def redact_personal_data(value: object, limit: int = 20_000) -> str:
     text = _ADDRESS.sub("주소 [주소]", text)
     text = _EXPLICIT_NAME.sub(lambda m: f"{m.group(1)} [이름]{m.group(3) or ''}", text)
     text = _SELF_NAME.sub(lambda m: f"{m.group(1)} [이름]{m.group(3) or ''}", text)
-    text = _NAME_WITH_SUFFIX.sub(lambda m: f"[이름]{m.group(2)}", text)
-    text = _NAME_EVENT.sub(lambda m: f"[이름] {m.group(2)}", text)
-    text = _NAME_RELATION.sub(lambda m: f"[이름]{m.group(2)} ", text)
+    text = _NAME_WITH_SUFFIX.sub(
+        lambda m: _name_or_original(m.group(1), lambda w: f"{w}{m.group(2)}"), text)
+    text = _NAME_EVENT.sub(
+        lambda m: _name_or_original(m.group(1), lambda w: f"{w} {m.group(2)}"), text)
+    text = _NAME_RELATION.sub(
+        lambda m: _name_or_original(m.group(1), lambda w: f"{w}{m.group(2)} "), text)
     return text
 
 

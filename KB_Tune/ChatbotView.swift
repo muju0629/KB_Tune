@@ -183,6 +183,8 @@ struct ChatbotView: View {
     @State private var pendingSearchQuery: SearchPrompt?
     /// 지금 이 순간 질문 원문이 검색으로 나가는 중인지. 배지가 이걸 보고 바뀐다.
     @State private var searchingNow = false
+    /// 마지막 에이전트 턴에서 매긴 일정 번호표. 버튼을 누를 때 번호로 일정을 되찾는다.
+    @State private var agentIndex = AgentEventIndex(model: AppModel())
     /// 입력줄의 검색 스위치. 켜 두면 보내는 말이 예산 계산이 아니라 웹 검색으로 간다.
     /// 언제 원문이 나가는지를 앱이 눈치로 정하지 않고 사용자가 직접 정하게 하는 자리다.
     @FocusState private var inputFocused: Bool
@@ -325,8 +327,13 @@ struct ChatbotView: View {
     private func runAgent(_ message: String, history: [AgentChatTurn]) async {
         defer { isThinking = false }
 
+        // 이 턴에 쓸 번호표. 답이 돌아온 뒤 버튼을 누를 때 같은 표로 되찾는다.
+        let index = AgentEventIndex(model: model)
+        agentIndex = index
+
         guard let result = await agent.agentTurn(message, model: model,
                                                  maySearch: WebSearchConsent.granted,
+                                                 events: index.refs,
                                                  history: history) else {
             messages.append(ChatMessage(
                 role: .agent,
@@ -651,7 +658,8 @@ struct ChatbotView: View {
                 ForEach(actions) { action in
                     smallAction(action.label, filled: action.kind == .addEvent) {
                         consumeAction(message.id)
-                        let outcome = AgentActionRunner.run(action, on: model)
+                        let outcome = AgentActionRunner.run(action, on: model,
+                                                            index: agentIndex)
                         flash(outcome.message)
                     }
                 }

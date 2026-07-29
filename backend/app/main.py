@@ -147,7 +147,8 @@ def agent_endpoint(req: AgentRequest):
     서버에는 애초에 그 사용자의 캘린더가 없다.
     """
     plan = build_plan(_profile(req), req.today, req.include_candidate)
-    return run_agent(plan, req.message, req.today, req.may_search, req.history)
+    return run_agent(plan, req.message, req.today, req.may_search,
+                     req.history, req.events)
 
 
 # ---------- 웹 검색으로 금액 찾기 ----------
