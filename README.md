@@ -2,6 +2,7 @@
     
 # KB Tune
 
+### AI, 가계부, 캘린더 기능을 한번에
 <br/>
 
 <img src="https://img.shields.io/badge/KB_AI_Challenge-2026-FFCC00?style=flat-square&labelColor=25241F" alt="KB AI Challenge 2026" />
