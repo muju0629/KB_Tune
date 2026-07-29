@@ -53,7 +53,7 @@ LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL", "qwen2.5:3b")
 # --- OpenAI(선택) ---
 OPENAI_BASE_URL = _checked_llm_url(
     os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"), "OPENAI_BASE_URL")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.4-mini")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1")
 
 
 # --- 보안 ---
