@@ -3,7 +3,7 @@
 LLM_BACKEND 에 따라:
   offline → 결정론 템플릿을 청크로 스트리밍 (비용 0)
   local   → 로컬 오픈소스 모델(OpenAI 호환) 스트리밍 (비용 0)
-  claude  → Anthropic 스트리밍 (유료, 선택)
+  openai  → OpenAI 스트리밍 (유료, 선택)
 어떤 경우든 실패하면 템플릿으로 폴백. 모델 출력은 버퍼에서 숫자를 검증한 뒤 전송한다.
 """
 from __future__ import annotations
@@ -101,11 +101,9 @@ def chat_reply(plan: PlanResult, message: str, card=None, upcoming=None, app=Non
         return ChatResult(_template_reply(plan, message, card, app), "offline-template")
 
     try:
-        if backend == "claude":
-            chunks = _claude_stream(plan, message, card, upcoming, app, history, past)
-        else:                       # openai · local — 같은 OpenAI 호환 스키마
-            chunks = _openai_compatible_stream(
-                backend, plan, message, card, upcoming, app, history, past)
+        # openai · local — 같은 OpenAI 호환 스키마
+        chunks = _openai_compatible_stream(
+            backend, plan, message, card, upcoming, app, history, past)
         text = "".join(chunks).strip()
         if not text:
             raise ValueError("empty model response")
@@ -219,19 +217,6 @@ def _openai_compatible_stream(backend: str, plan: PlanResult, message: str, card
                       json=payload, headers=headers, timeout=60) as r:
         r.raise_for_status()
         yield from _sse_deltas(r)
-
-
-def _claude_stream(plan: PlanResult, message: str, card=None, upcoming=None, app=None,
-                   history=None, past=None) -> Iterator[str]:
-    import anthropic
-    client = anthropic.Anthropic()
-    with client.messages.stream(
-        model=config.CLAUDE_MODEL, max_tokens=1024,
-        system=_system(plan, card, upcoming, app, external=True, past=past),
-        messages=_conversation(message, history, external=True),
-    ) as stream:
-        for text in stream.text_stream:
-            yield text
 
 
 # ---------- 오프라인 템플릿(비용 0) ----------

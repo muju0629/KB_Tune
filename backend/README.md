@@ -1,12 +1,12 @@
 # KB Tune — 금융 에이전트 백엔드
 
-소비 데이터를 **결정론적 엔진**으로 계산하고, 그 위에서 **Claude**가 설명·판단·문장만 만드는
+소비 데이터를 **결정론적 엔진**으로 계산하고, 그 위에서 **LLM**이 설명·판단·문장만 만드는
 "금융 라이프 에이전트" API. 단순한 LLM 프롬프트 래퍼가 아니라, 검증 가능한 재무 모델이 핵심이다.
 
 ## 설계 원칙 — 숫자는 코드, 판단은 LLM
 
 ```
-요청 → [결정론 엔진] → PlanResult(모든 숫자) → [Claude] 설명/판단 → [groundedness 검증] → 응답
+요청 → [결정론 엔진] → PlanResult(모든 숫자) → [LLM] 설명/판단 → [groundedness 검증] → 응답
                 └ 예산배분 · 몬테카를로 목표확률 · 위험탐지 · 조정안 생성
 ```
 
@@ -31,7 +31,7 @@ app/
 │  ├─ risk.py         #   위험 일정 탐지 + 조정안 생성
 │  ├─ analysis.py     #   카테고리 분석·급증 탐지
 │  └─ plan.py         #   오케스트레이션 → PlanResult(숫자 단일 출처)
-├─ llm/               # Claude 레이어 (설명·판단만)
+├─ llm/               # LLM 레이어 (설명·판단만)
 │  ├─ prompts.py      #   엔진 숫자에 접지된 프롬프트
 │  └─ chat.py         #   스트리밍 대화
 ├─ eval/              # 평가
@@ -52,10 +52,12 @@ python3 -m venv .venv && ./.venv/bin/pip install -r requirements.txt
 ./.venv/bin/uvicorn app.main:app --reload
 ```
 
-Claude 코칭을 켜려면 `.env`에 키만 넣으면 된다 (`.env.example` 참고):
+LLM 을 켜려면 `.env`에 백엔드와 키만 넣으면 된다 (`.env.example` 참고):
 
 ```
-ANTHROPIC_API_KEY=sk-ant-...
+LLM_BACKEND=openai
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=          # 비우면 config.py 의 기본값
 ```
 
 ## 엔드포인트
@@ -111,7 +113,7 @@ curl -sN localhost:8000/api/chat -X POST -H 'content-type: application/json' \
 
 - Build: `pip install -r requirements.txt`
 - Start: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-- 환경변수: `ANTHROPIC_API_KEY` (선택 — 없어도 동작)
+- 환경변수: `OPENAI_API_KEY` (선택 — 없어도 동작)
 
 > ⚠️ 무료 티어는 유휴 시 슬립(콜드스타트). 라이브 데모라면 직전에 `/api/health`로 깨워두거나
 > 로컬 실행을 백업으로 준비. 심사자가 코드를 직접 받아 실행하는 방식이면 로컬만으로 충분.
