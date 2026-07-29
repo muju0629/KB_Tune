@@ -65,11 +65,11 @@ python -m tools.seed_baseline     # → Firestore
 `backend/` 에서 실행한다.
 
 ```sh
-gcloud run deploy kb-tune-api \
+gcloud run deploy kb-tune \
   --source . \
   --region asia-northeast3 \
   --allow-unauthenticated \
-  --set-env-vars "LLM_BACKEND=openai,OPENAI_MODEL=gpt-5.4" \
+  --set-env-vars "LLM_BACKEND=openai,OPENAI_MODEL=gpt-4.1" \
   --set-env-vars "OPENAI=<OpenAI 키>" \
   --set-env-vars "KB_TUNE_API_KEY=<아무 긴 무작위 문자열>"
 ```
@@ -81,9 +81,9 @@ gcloud run deploy kb-tune-api \
 
 ```sh
 printf '%s' '<OpenAI 키>' | gcloud secrets create openai-key --data-file=-
-gcloud run deploy kb-tune-api --source . --region asia-northeast3 \
+gcloud run deploy kb-tune --source . --region asia-northeast3 \
   --allow-unauthenticated \
-  --set-env-vars "LLM_BACKEND=openai,OPENAI_MODEL=gpt-5.4" \
+  --set-env-vars "LLM_BACKEND=openai,OPENAI_MODEL=gpt-4.1" \
   --set-secrets "OPENAI=openai-key:latest" \
   --set-env-vars "KB_TUNE_API_KEY=<무작위 문자열>"
 ```
@@ -94,7 +94,7 @@ gcloud run deploy kb-tune-api --source . --region asia-northeast3 \
 
 ```sh
 xcodebuild ... \
-  KB_TUNE_API_BASE_URL=https://kb-tune-api-xxxxx.asia-northeast3.run.app \
+  KB_TUNE_API_BASE_URL=https://kb-tune-xxxxx.asia-northeast3.run.app \
   KB_TUNE_API_KEY=<배포에 쓴 것과 같은 값>
 ```
 
@@ -131,5 +131,5 @@ curl -s -H "X-API-Key: <키>" https://<주소>/api/baseline
 서비스가 멈춘다. 이 구성은 요청이 없으면 과금이 없지만, 심사가 끝나면 정리하는 게 낫다.
 
 ```sh
-gcloud run services delete kb-tune-api --region asia-northeast3
+gcloud run services delete kb-tune --region asia-northeast3
 ```

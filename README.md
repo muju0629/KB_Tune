@@ -1,13 +1,10 @@
 <div align="center">
 
-<img src="docs/mascot.png" width="120" alt="KB Tune 마스코트" />
+<img src="docs/header.png" width="820" alt="KB Tune — 가계부는 이미 쓴 돈만 보여줍니다. KB Tune은 앞으로 쓸 돈을 미리 알려드립니다." />
 
 # KB Tune
 
 ### 일정만 넣으면, 이번 주에 얼마 쓸 수 있는지 알려드려요
-
-가계부는 이미 쓴 돈만 보여줘요.<br/>
-**KB Tune은 앞으로 쓸 돈을 미리 알려드려요.**
 
 <br/>
 
@@ -15,7 +12,6 @@
 <img src="https://img.shields.io/badge/iOS-26.5-FFCC00?style=flat-square&labelColor=25241F&logo=apple&logoColor=white" alt="iOS 26.5" />
 <img src="https://img.shields.io/badge/Swift-SwiftUI-FFCC00?style=flat-square&labelColor=25241F&logo=swift&logoColor=white" alt="Swift SwiftUI" />
 <img src="https://img.shields.io/badge/FastAPI-Python-FFCC00?style=flat-square&labelColor=25241F&logo=fastapi&logoColor=white" alt="FastAPI Python" />
-<img src="https://img.shields.io/badge/LLM-Claude-FFCC00?style=flat-square&labelColor=25241F&logo=anthropic&logoColor=white" alt="Claude" />
 <img src="https://img.shields.io/badge/LLM-OpenAI-FFCC00?style=flat-square&labelColor=25241F&logo=openai&logoColor=white" alt="OpenAI" />
 
 <br/><br/>
@@ -160,7 +156,6 @@
 
 맨 위 8장은 App Store에 올리는 스크린샷 그대로예요. 폰 안에 들어간 화면은 사람이 캡처한 게 아니라
 UI 테스트가 앱을 켜서 탭을 돌며 찍기 때문에, 화면이 바뀌면 스크린샷도 같이 바뀌어요.
-README에는 폭을 줄인 사본만 넣었고, 제출용 원본은 6.9"(1320×2868)로 따로 뽑아 둡니다.
 
 <br/>
 
@@ -766,7 +761,7 @@ LLM은 **우리가 준 데이터 안에서만** 말해요. 준 값을 더하거�
 암기·역류(regurgitation), 재식별, 학습된 모델에서 특정인 데이터를 지울 수 없는 문제 —
 안내서가 다루는 위험들이 **구조적으로 생기지 않아요.** 학습을 안 하니까요.
 
-### 겹치는 조치는 이미 코드에 있어요
+### 필요한 조치들은 이미 코드에 있어요
 
 서비스 단계에 적용되는 항목들이에요.
 
@@ -777,14 +772,6 @@ LLM은 **우리가 준 데이터 안에서만** 말해요. 준 값을 더하거�
 | **Ⅲ-1-3** 안전한 저장·관리 | 기기 파일은 `completeFileProtection`, 백업 제외 |
 | **Ⅲ-1-5** 프롬프트 필터 | [`safe_text()`](backend/app/security.py) — 제어문자를 지우고 사용자 입력을 '데이터'로 못박아요 |
 | **Ⅳ** 삭제 요구권 | `ConsentStore.reset()` · `SpendHistory.replaceLearnedRecords([])` — 즉시 사라져요 |
-| **Ⅲ-1-2** 차분 프라이버시(권장) | 아직 안 했어요. 기준 금액표를 실데이터로 만들 때 쓸 수 있어요 |
-
-### 안 한 것도 적어둘게요
-
-- **개인정보 처리방침 공개 URL이 없어요.** 앱 안에 동의서 전문은 있지만 웹에 올린 처리방침은 없어요.
-- **만 14세 미만 확인(제22조의2)이 없어요.** 스토어 배포 전에는 필요해요.
-- **출력 필터는 개인정보용이 아니에요.** `groundedness.py`는 *숫자가 지어낸 값인지*를 검사해요.
-  안내서가 말하는 '답변에서 개인정보가 새는지' 보는 필터와는 목적이 달라요.
 
 > 자세한 내용은 [docs/security.md](docs/security.md) 에 있어요. 안내서는 법적 구속력이 없는 해석 기준이에요.
 
@@ -798,10 +785,10 @@ LLM은 **우리가 준 데이터 안에서만** 말해요. 준 값을 더하거�
 |---|---|
 | 📱 iOS | Swift · SwiftUI (iOS 26.5) · EventKit · Vision(기기 내 OCR) · PhotosUI |
 | ⚙️ 백엔드 | Python · FastAPI · Uvicorn · httpx |
-| 🤖 LLM | Anthropic Claude · OpenAI API · OpenAI 호환 로컬 모델 · 오프라인 템플릿 |
-| ✅ 테스트 | pytest · XCTest |
+| 🤖 LLM | OpenAI API · OpenAI 호환 로컬 모델 · 오프라인 템플릿 |
+| ✅ 테스트 | pytest · Swift Testing · XCUITest |
 
-LLM은 `LLM_BACKEND`로 골라요. `offline`(템플릿, 비용 0) · `local`(OpenAI 호환) · `claude` · `openai`.
+LLM은 `LLM_BACKEND`로 골라요. `offline`(템플릿, 비용 0) · `local`(OpenAI 호환, 비용 0) · `openai`.
 무엇을 고르든 실패하면 템플릿으로 넘어가요.
 
 <br/>
@@ -814,6 +801,8 @@ LLM은 `LLM_BACKEND`로 골라요. `offline`(템플릿, 비용 0) · `local`(Ope
 KB_Tune/                      iOS 앱 (SwiftUI, iOS 26.5)
 ├─ Models.swift               AppModel — 캘린더·예산·예측 상태의 단일 출처 + SpendState
 ├─ BudgetEngine.swift         추가 사용 가능액·목표 확률 (백엔드 엔진의 Swift 포트)
+├─ WeekLedger.swift           주차별 장부 — 일수 배분 → 지난주 이월 → 이번 주 여유
+├─ MatchEngine.swift          카드 결제 ↔ 캘린더 일정 연결 (계산 가능한 기준만 환산)
 ├─ SpendHistory.swift         과거 이력 → 반복 패턴 탐지 → 금액 예측 + 근거 문장
 ├─ EventEstimator.swift       일정 제목 → 예상 지출 (이력 → 공개 통계 → 규칙 순)
 ├─ BaselinePrices.swift       공개 통계 기준 금액 (번들 사본 + 서버에서 갱신)
@@ -829,6 +818,8 @@ KB_Tune/                      iOS 앱 (SwiftUI, iOS 26.5)
 ├─ ProductsView.swift         현금흐름 요약 → 카드·적금 비교
 ├─ AddEventView.swift         일정 추가 3단계 (입력 → 추정·영향 → 확정)
 ├─ OnboardingView.swift       온보딩 (캘린더 연결 → 수입·목표 → 취향 → 방향)
+├─ Consent.swift              동의 3항목 저장·철회 (제15조·제23조·제28조의8)
+├─ ConsentView.swift          동의 화면 (원문을 접지 않고 항목마다 따로 받음)
 ├─ SettingsView.swift         수입·저축 목표·취향 수정
 ├─ CalendarStore.swift        EventKit 실연동 (기기 캘린더 읽기)
 ├─ AgentService.swift         질문 원문→금융 의도 변환 · 지난 소비/일정을 제목 없이 전달
@@ -836,14 +827,16 @@ KB_Tune/                      iOS 앱 (SwiftUI, iOS 26.5)
 ├─ LocalStore.swift           기기 저장 (보호등급 complete · 백업 제외)
 ├─ SpeechService.swift        온디바이스 음성 인식 (서버 전송 없음)
 ├─ OCRService.swift           기기 내 Vision OCR + 거래 구조화
+├─ DemoClock.swift            데모 캘린더 기준일 (7/1을 1로 세는 통산일)
 └─ DesignSystem.swift         KB 컬러 토큰 · 공용 스타일 · 금액 포맷
 
 backend/                      FastAPI (선택 — 없어도 앱 동작)
 ├─ app/engine/                결정론 엔진 (계획·추정·분류·예측·확률)
-├─ app/llm/                   Claude·OpenAI·로컬 모델 호출 (설명·대화)
+├─ app/llm/                   OpenAI·로컬 모델 호출 (설명·대화)
 ├─ app/eval/                  골든 케이스 + groundedness 검사
+├─ app/security.py            요청 인증·속도 제한·개인정보 마스킹·프롬프트 주입 방어
 ├─ app/baseline.py            공개 통계 기준 금액 (Firestore → 번들 폴백)
-├─ app/llm/search.py           웹 검색으로 금액 찾기 (동의했을 때만)
+├─ app/llm/search.py          웹 검색으로 금액 찾기 (동의했을 때만)
 ├─ data/baseline_prices.json  기준 금액 표 (앱 번들과 같은 파일)
 ├─ tools/fetch_baseline.py    공개 데이터 3곳 → 기준 금액 표 재생성
 ├─ tools/seed_baseline.py     기준 금액 표 → Firestore
@@ -866,21 +859,21 @@ open KB_Tune.xcodeproj      # Xcode 26.6+, iOS 26.5 시뮬레이터
 ```bash
 cd backend
 pip install -r requirements.txt
-cp .env.example .env         # ANTHROPIC_API_KEY (없으면 규칙 기반으로만 동작)
+cp .env.example .env         # 기본 LLM_BACKEND=offline — 키 없이 템플릿으로 동작
 uvicorn app.main:app --reload
 ```
 
 **테스트**
 ```bash
-cd backend && pytest -q      # 엔진·AI·보안 회귀 (69개)
-# iOS 단위 테스트: 61개
+cd backend && pytest -q      # 엔진·AI·보안 회귀 (109개)
+# iOS 단위 테스트: 83개
 # 핵심 UI: 자연스러운 대화·액션, 온디바이스 카페 일정 제안 자동 검증
 ```
 
 기본 묶음은 키도 네트워크도 없이 돌아요. 문서용 캡처는 따로 잠가 뒀어요.
 
 ```bash
-# docs/screens/ 에 화면 11장을 다시 찍어요 (기기 안에서만 모드 — 네트워크 불필요)
+# docs/screens/ 에 화면 12장을 다시 찍어요 (기기 안에서만 모드 — 네트워크 불필요)
 TEST_RUNNER_KB_TUNE_CAPTURE_ALL=1 \
 TEST_RUNNER_KB_TUNE_SCREENSHOT_DIR=$PWD/docs/screens \
   xcodebuild test -scheme KB_Tune -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
@@ -901,39 +894,6 @@ TEST_RUNNER_KB_TUNE_SCREENSHOT_DIR=$PWD/../docs/screens \
   xcodebuild test -scheme KB_Tune -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
   -only-testing:KB_TuneUITests/KB_TuneUITests/testLiveChatAnswersPastSpendingScreenshot
 ```
-
-<br/>
-
-## 📊 데모 데이터
-
-2026년 7월 캘린더 기준이에요. 확인값과 데모 가정이 섞여 있고, 앱에서도 구분해서 표시해요.
-
-| 구분 | 값 |
-|---|---|
-| ✅ 확인값 — 월 고정비 | 435,000원 (통신 7.5 · 교통 15 · 유류 6 · 구독 3 · 청약 10 · 보험 2만) |
-| ✅ 확인값 — 단건 | 정장 15만 · 결혼식 7만 · 데이트 10만 · 제모 5만 · 와드 4만 |
-| ✅ 확인값 — 출근 | **0원** (점심 무비용, 교통·유류는 고정비에 포함) |
-| 🔸 가정 | 월 수입 220만 · 저축 목표 80만 · 일정 밖 소액 7,500원/일 |
-
-7월 캘린더 일정비 합계는 **881,000원**이에요(`julyEstimateHigh`, 테스트가 잠가 둔 값).
-이번 주 추가 사용 가능액은 월 가용액을 실제 주간 일수로 배분한 뒤 지난주 이월과 카드 할부를
-반영해 매번 다시 계산합니다. 기본 시연 상태는 지난주 초과 사용을 반영한 **0원**이며,
-조정안을 실행하면 즉시 회복되는 흐름을 보여줍니다.
-
-> [!WARNING]
-> 금액을 바꾸실 때는 **iOS `BudgetEngine` · 백엔드 `app/data.py` · 양쪽 테스트를 함께** 고쳐주세요.
-> 세 곳이 같은 숫자를 보도록 테스트가 잠가 두었어요.
-
-> [!NOTE]
-> **분석 탭 숫자는 따로예요.**
-> `AnalysisView`의 필수/기타 금액은 캘린더 합계가 아니라 페르소나의 한 달 실지출을 정리한 값이에요(약 1,602,000원).
-> 캘린더 일정비와 일부러 따로 움직여요. 두 숫자가 다른 건 버그가 아니에요.
-
-> [!CAUTION]
-> **카드·적금 탭의 "7월 예상 지출"은 아직 별도 값(801,000원)이에요.**
-> `AppModel.spendProfile`에 손으로 적어 둔 프로파일을 쓰고 있어서 캘린더 합계 881,000원과 어긋나요.
-> 카드 혜택 계산 자체는 `RecoEngine.normalizedCardSpend`가 캘린더에서 다시 뽑아 쓰므로 영향이 없지만,
-> **화면에 보이는 숫자는 아직 하나로 모이지 않았어요.** 정리 대상입니다.
 
 <br/>
 

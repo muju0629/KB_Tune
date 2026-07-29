@@ -333,6 +333,23 @@ struct KB_TuneTests {
         #expect(weeks.first?.rollover == 0)             // 지난달에서 넘어온 게 없다
     }
 
+    /// 달을 넘길 때는 이월하지 않는다 — 8월은 8월 몫으로만 시작한다.
+    ///
+    /// 예전에는 7월 마지막 주 잔액이 8월 첫 주에 얹혔다. 8월도 한 달치 가용액을
+    /// 통째로 받으므로 남은 돈이 두 번 세어졌고, 화면에서 8월 1주차 금액을
+    /// 설명할 수 없었다.
+    @Test func augustStartsFreshWithoutJulyLeftover() {
+        let model = onJuly22 { AppModel() }
+        let julyLeftover = model.closingRollover
+        #expect(julyLeftover != 0)                      // 넘길 게 있는 상황이어야 의미가 있다
+
+        let august = try! #require(model.weekBudgets(of: 8).first)
+        #expect(august.rollover == 0)
+        #expect(august.allowance == august.baseAllowance)
+        // 다음 달 미리보기도 같은 규칙을 따른다.
+        #expect(model.nextMonthFirstWeek.rollover == 0)
+    }
+
     /// 지난달 잔액이 있으면 첫 주가 그만큼 넉넉해진다 — 8월로 넘길 때의 동작.
     @Test func openingRolloverLiftsTheFirstWeek() {
         let model = onJuly22 { AppModel() }
