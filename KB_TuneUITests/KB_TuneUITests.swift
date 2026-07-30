@@ -60,6 +60,7 @@ final class KB_TuneUITests: XCTestCase {
 
         XCTAssertTrue(app.descendants(matching: .any)["tune-adjustment-comparison"]
             .waitForExistence(timeout: 3))
+        XCTAssertTrue(app.descendants(matching: .any)["tune-model-version"].exists)
         XCTAssertTrue(app.staticTexts["추천"].exists)
         XCTAssertTrue(app.staticTexts["제외"].exists)
         XCTAssertTrue(app.staticTexts["적금 자동이체 취소"].exists)
@@ -422,8 +423,17 @@ final class KB_TuneUITests: XCTestCase {
         field.tap()
         field.typeText("와드")
 
-        // 추정이 끝나면 결과 단계로 넘어간다
-        let toggle = app.switches["고정 지출"]
+        // 직접 입력 흐름은 사용자가 계산 버튼을 눌러야 결과 단계로 넘어간다.
+        let estimate = app.buttons["예상 지출 계산하기"]
+        XCTAssertTrue(estimate.waitForExistence(timeout: 4), "예상 지출 계산 버튼이 없다")
+        let keyboardDone = app.buttons["Done"]
+        if keyboardDone.exists { keyboardDone.tap() }
+        app.scrollViews.firstMatch.swipeUp()
+        XCTAssertTrue(waitUntilHittable(estimate), "예상 지출 계산 버튼을 누를 수 없다")
+        // 소프트웨어 키보드가 늦게 내려가는 시뮬레이터에서도 버튼의 노출된 위쪽을 누른다.
+        estimate.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05)).tap()
+
+        let toggle = app.switches["fixed-amount-toggle"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 12), "고정 지출 토글이 없다")
         try capture("add-event-fixed-toggle", in: app)
 

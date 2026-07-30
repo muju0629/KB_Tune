@@ -182,13 +182,15 @@ struct TuneScoreTests {
             candidateID: candidateID, label: "팀 외식",
             scoreBefore: 61, scoreAfter: 74,
             reasonCodes: [TuneAdjustmentReason.bestRecovery.rawValue],
-            evidenceIDs: ["calendar-1"]
+            evidenceIDs: ["calendar-1"],
+            modelVersion: "forecast-test-v1",
+            featureVersion: "feature-test-v1"
         )
         let state = PersistedState(
             hasOnboarded: true, usesDemoData: true, kbPayLinked: false,
             monthlyIncome: 2_200_000, savingsGoal: 800_000,
             direction: .maintain, hobbies: [], calendarDays: AppModel.makeCalendar(),
-            learnedSpendRecords: [], dismissedPredictions: [], dailyCloseDismissed: false,
+            dismissedPredictions: [],
             tuneAuditLog: [entry], rejectedAdjustmentIDs: [candidateID]
         )
 
@@ -196,6 +198,8 @@ struct TuneScoreTests {
             PersistedState.self, from: JSONEncoder().encode(state)
         )
         #expect(restored.tuneAuditLog == [entry])
+        #expect(restored.tuneAuditLog.first?.modelVersion == "forecast-test-v1")
+        #expect(restored.tuneAuditLog.first?.featureVersion == "feature-test-v1")
         #expect(restored.rejectedAdjustmentIDs == [candidateID])
     }
 }

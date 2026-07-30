@@ -44,6 +44,7 @@ struct AddEventView: View {
                 }
             }
             .tint(KB.yellow)
+            .accessibilityIdentifier("fixed-amount-toggle")
 
             Text(isFixedAmount
                  ? "매번 같은 금액이라 범위를 붙이지 않아요."

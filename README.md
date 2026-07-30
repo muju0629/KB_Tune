@@ -630,16 +630,21 @@ KB Tune은 한 모델이 금액·날짜·위험·개인화를 전부 맡지 않�
 
 | 제품 질문 | 최종 후보 | 선택 근거 | 현재 상태 |
 |---|---|---|---|
-| 다음 주에 **얼마** 쓸까 | 편향 보정 LightGBM 중앙값 | 점예측 WAPE와 편향의 절충 | 합성 홀드아웃 통과 · 앱 통합 전 |
-| 부족하지 않으려면 **얼마를 잡아둘까** | LightGBM q75 | 과소예측 비용 2·3배에서 최저 손실 | 합성 홀드아웃 통과 · 앱 통합 전 |
-| 다음 7일에 **발생할까** | 동의 시 Hazard + 캘린더, 그 외 Hazard | Brier 0.1089, 주간 LightGBM보다 개선 | 합성 홀드아웃 통과 · 앱 통합 전 |
-| **언제** 발생할까 | 일정형은 Hazard + 캘린더, 그 외 Hazard | 일정형 날짜 MAE 0.69일 → 0.44일 | 합성 홀드아웃 통과 · 앱 통합 전 |
+| 다음 주에 **얼마** 쓸까 | 편향 보정 LightGBM 중앙값 | 점예측 WAPE와 편향의 절충 | 합성 홀드아웃 통과 · 온디바이스 통합 |
+| 부족하지 않으려면 **얼마를 잡아둘까** | LightGBM q75 | 과소예측 비용 2·3배에서 최저 손실 | 합성 홀드아웃 통과 · 온디바이스 통합 |
+| 다음 7일에 **발생할까** | 일정형은 Hazard + 캘린더, 그 외 Hazard | Brier 0.1089, 주간 LightGBM보다 개선 | 합성 홀드아웃 통과 · 온디바이스 통합 |
+| **언제** 발생할까 | 일정형은 Hazard + 캘린더, 그 외 Hazard | 일정형 날짜 MAE 0.69일 → 0.44일 | 합성 홀드아웃 통과 · 온디바이스 통합 |
 | 오래 쓰면 **자동 개인화될까** | Bayesian 충분통계량 shadow mode | 신규 홀드아웃에서 미질문 일반화 미확인 | 사용자 비노출 |
 | 지금 계획이 **안전할까** | 결정론 Tune 점수 + 보호 제약 | 근거 추적·승인·감사 로그 단위 테스트 | 앱 구현 완료 |
 
 > [!IMPORTANT]
 > 아래 수치는 대부분 합성 데이터의 상대 비교예요. 실제 고객 성능이나 인과효과가 아닙니다.
 > 실험마다 생성 시드·평가 기간·분모가 다르므로 **같은 표 안의 값끼리만** 직접 비교해야 합니다.
+
+선정 모델은 `forecast-synth-v1-2026-07-30` 버전의 2.4MB 중립 JSON 트리로 번들됩니다.
+Swift 런타임이 서버 호출 없이 중앙값·q75·발생확률·예상일을 계산하며, Python이 만든
+고정 입력과 Swift 결과를 골든 테스트로 대조합니다. 앱은 모델·피처 버전을 Tune 상세와
+감사 로그에 남깁니다. 모델 파일에는 트리·집단 사전값·보정 계수만 있고 원거래·사용자 ID는 없습니다.
 
 #### 1) 중앙 금액: LightGBM + 별도 사용자 편향 보정
 
@@ -1029,7 +1034,7 @@ LLM은 **우리가 준 데이터 안에서만** 말해요. 준 값을 더하거�
 | **Ⅲ-1-2** 개인 식별자 삭제·비식별화<br/><sub>고유식별정보·민감정보·계좌·카드번호</sub> | [`OutboundPrivacy.sanitize()`](KB_Tune/AgentService.swift) + 서버 [`redact_personal_data()`](backend/app/security.py) — 안내서가 예시로 든 항목과 거의 같아요 |
 | **Ⅲ-1-3** 안전한 저장·관리 | 기기 파일은 `completeFileProtection`, 백업 제외 |
 | **Ⅲ-1-5** 프롬프트 필터 | [`safe_text()`](backend/app/security.py) — 제어문자를 지우고 사용자 입력을 '데이터'로 못박아요 |
-| **Ⅳ** 삭제 요구권 | `ConsentStore.reset()` · `SpendHistory.replaceLearnedRecords([])` — 즉시 사라져요 |
+| **Ⅳ** 삭제 요구권 | `ConsentStore.reset()` · `LocalStore.clear()` — 동의와 기기 저장 상태가 즉시 사라져요 |
 
 > 자세한 내용은 [docs/security.md](docs/security.md) 에 있어요. 안내서는 법적 구속력이 없는 해석 기준이에요.
 
@@ -1063,6 +1068,8 @@ KB_Tune/                      iOS 앱 (SwiftUI, iOS 26.5)
 ├─ MatchEngine.swift          카드 결제 ↔ 캘린더 일정 연결 (계산 가능한 기준만 환산)
 ├─ SpendHistory.swift         과거 이력 → 반복 패턴 탐지 → 금액 예측 + 근거 문장
 ├─ SpendModel.swift           Gamma–Poisson·log-normal·Weibull 온디바이스 패턴 모델
+├─ ForecastEngine.swift       LightGBM·q75·Hazard 중립 트리 온디바이스 추론
+├─ ForecastModels.json        모델·피처 버전·집단 사전값·확률 보정 계수(원거래 없음)
 ├─ TuneScore.swift            목표·잔액·보호 소비를 결합한 Tune 점수와 신뢰도
 ├─ RiskDetector.swift         점수 하락·잔액 부족·일정/결제 중첩 선제 경보
 ├─ AdjustmentEngine.swift     보호 제약을 지킨 추천·보조·제외 조정안 비교
@@ -1107,6 +1114,7 @@ backend/                      FastAPI (선택 — 없어도 앱 동작)
 └─ app/data.py                데모 입력 (프로필·고정비·일정)
 
 tools/forecast_bench/         모델 비교·피드백·개인화·위험·Hazard 재현 실험
+├─ export_ondevice_models.py  선정 모델 JSON·Python↔Swift 골든 케이스 생성
 └─ results/                   원시 예측·요약 CSV·bootstrap CI·KB 스타일 그래프
 ```
 
@@ -1132,9 +1140,13 @@ uvicorn app.main:app --reload
 
 **테스트**
 ```bash
-cd backend && pytest -q      # 엔진·AI·보안 회귀
-# Xcode Test에서 예산·Tune 점수·보호 제약·감사 로그·핵심 UI 회귀 실행
+cd backend && PYTHONPATH=. .venv/bin/python -m pytest -q
+xcodebuild test -project KB_Tune.xcodeproj -scheme KB_Tune \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
+
+`KB_TuneTests/ForecastModelTests.swift`는 Python 골든 케이스와 Swift 트리 추론의
+중앙값·q75·Hazard 확률·예상일이 같은지 별도로 막습니다.
 
 기본 묶음은 키도 네트워크도 없이 돌아요. 문서용 캡처는 따로 잠가 뒀어요.
 
@@ -1167,9 +1179,9 @@ TEST_RUNNER_KB_TUNE_SCREENSHOT_DIR=$PWD/../docs/screens \
 
 | 단계 | 기간 | 구현·검증 목표 | 완료 기준 |
 |:--:|---|---|---|
-| 1 | 제출 전 | Tune 점수·보호 제약·선제 경보·감사 로그 회귀 | 앱 재실행 복원·승인 없는 실행 0건·보호 소비 침해 0건 |
+| 1 | 완료 | Tune 점수·보호 제약·선제 경보·감사 로그 회귀 | 앱 재실행 복원·승인 없는 실행 0건·보호 소비 침해 0건 |
 | 2 | 12주 | 20~50명 shadow-mode 시간 순 파일럿 | WAPE·편향·Brier·ECE·날짜 MAE·±1일 적중률 공개 |
-| 3 | 파일럿 후 | 보정 LightGBM·Hazard 모델 파일의 온디바이스 배포 | 원거래 외부 전송 0건·모델 버전 롤백·지연/배터리 기준 통과 |
+| 3 | 통합 완료·실측 전 | 보정 LightGBM·q75·Hazard 온디바이스 추론 | Python↔Swift 골든 일치 완료·실기기 지연/배터리 측정 필요 |
 | 4 | 파일럿 후 | 누적 Bayesian 승격 여부 재판정 | 미질문 WAPE 개선 95% CI 하한 > 0, 8주·12주 모두 통과 |
 | 5 | 연동 단계 | KB Pay 샌드박스·토큰 인증·동의 철회 | 원본 미저장·철회 즉시 반영·위협모델 리뷰 |
 

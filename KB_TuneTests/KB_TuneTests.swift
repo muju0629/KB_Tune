@@ -196,61 +196,20 @@ struct KB_TuneTests {
         #expect(e.amount == 40_000)
     }
 
-    @Test func cafeEstimateComesFromPersonalMedianAndChangesWithHistory() throws {
-        let previous = SpendHistory.learnedRecords
-        defer { SpendHistory.replaceLearnedRecords(previous) }
-        SpendHistory.replaceLearnedRecords([])
-
+    @Test func cafeEstimateComesFromCardHistoryMedian() throws {
         let baseline = EventEstimator.estimate("카페 약속")
         #expect(baseline.amount == 20_000)       // 10,000원·30,000원 표본의 중앙값
         #expect(baseline.method == "history")
         #expect(baseline.basis.contains("2건"))
         #expect(baseline.basis.contains("중앙값"))
 
-        SpendHistory.replaceLearnedRecords([
-            SpendRecord(title: "퇴근 커피", category: "카페", month: 7, day: 10,
-                        amount: 50_000, onCalendar: true)
-        ])
-        let learned = EventEstimator.estimate("카페 약속")
         let draft = try #require(EventPhrase.parse("8월 5일 카페 갈래"))
 
-        #expect(learned.amount == 30_000)        // 10,000·30,000·50,000원의 중앙값
-        #expect(learned.basis.contains("3건"))
-        #expect(draft.amount == learned.amount)  // 자연어 일정 추가도 같은 이력을 쓴다
-        #expect(draft.basis.contains("3건"))
+        #expect(draft.amount == baseline.amount) // 자연어 일정 추가도 같은 카드 이력을 쓴다
+        #expect(draft.basis.contains("2건"))
     }
 
-    @Test func dailyCloseLearnsCashPaymentAndResetClearsIt() {
-        let previous = SpendHistory.learnedRecords
-        defer { SpendHistory.replaceLearnedRecords(previous) }
-
-        onJuly22 {
-            let model = AppModel()
-            model.addEvent(title: "카페 약속", day: 22, amount: 50_000,
-                           category: "카페", basis: "사용자 확인", state: .reserved)
-            let cafeID = model.day(number: 22)?.events.first { $0.title == "카페 약속" }?.id
-
-            model.resolveDailyClose(paidCash: true)
-
-            let learnedCafe = model.learnedSpendRecords.first { $0.sourceEventID == cafeID }
-            #expect(learnedCafe?.amount == 50_000)
-            #expect(learnedCafe?.category == "카페")
-            #expect(model.day(number: 22)?.events.first { $0.id == cafeID }?.state == .confirmed)
-            #expect(EventEstimator.estimate("카페 약속").amount == 30_000)
-
-            let learnedCount = model.learnedSpendRecords.count
-            model.resolveDailyClose(paidCash: true)
-            #expect(model.learnedSpendRecords.count == learnedCount) // 같은 결제를 중복 학습하지 않는다
-
-            model.resetToDemo()
-            #expect(model.learnedSpendRecords.isEmpty)
-            #expect(EventEstimator.estimate("카페 약속").amount == 20_000)
-        }
-    }
-
-    @Test func learnedHistoryRoundTripsAndOldStateDefaultsToEmptyHistory() throws {
-        let learned = SpendRecord(title: "카페 약속", category: "카페", month: 7, day: 22,
-                                  amount: 24_000, onCalendar: true, sourceEventID: UUID())
+    @Test func deprecatedCashLearningStateIsIgnoredWithoutLosingCalendar() throws {
         let state = PersistedState(
             hasOnboarded: true,
             usesDemoData: true,
@@ -260,22 +219,20 @@ struct KB_TuneTests {
             direction: .maintain,
             hobbies: ["카페"],
             calendarDays: AppModel.makeCalendar(),
-            learnedSpendRecords: [learned],
-            dismissedPredictions: [],
-            dailyCloseDismissed: false
+            dismissedPredictions: []
         )
 
         let restored = try JSONDecoder().decode(
             PersistedState.self,
             from: JSONEncoder().encode(state)
         )
-        #expect(restored.learnedSpendRecords == [learned])
+        #expect(!restored.calendarDays.isEmpty)
 
-        let oldJSON = #"{"version":1,"hasOnboarded":true,"usesDemoData":true,"kbPayLinked":false,"monthlyIncome":2200000,"savingsGoal":800000,"direction":"maintain","hobbies":["카페"],"calendarDays":[{"weekday":"수","dateLabel":"7/22","dayNumber":22,"events":[]}],"dismissedPredictions":[],"dailyCloseDismissed":false}"#
+        let oldJSON = #"{"version":1,"hasOnboarded":true,"usesDemoData":true,"kbPayLinked":false,"monthlyIncome":2200000,"savingsGoal":800000,"direction":"maintain","hobbies":["카페"],"calendarDays":[{"weekday":"수","dateLabel":"7/22","dayNumber":22,"events":[]}],"learnedSpendRecords":[{"title":"현금 카페","category":"카페","month":7,"day":22,"amount":24000,"onCalendar":true}],"dismissedPredictions":[],"dailyCloseDismissed":false}"#
         let old = try JSONDecoder().decode(PersistedState.self, from: Data(oldJSON.utf8))
 
         #expect(old.calendarDays.count == 1)
-        #expect(old.learnedSpendRecords.isEmpty)
+        #expect(old.hobbies == ["카페"])
     }
 
     @Test func upcomingSpendsCoverCalendarGaps() {
@@ -283,9 +240,9 @@ struct KB_TuneTests {
             let model = AppModel()
             let keys = model.upcomingSpends.map(\.pattern.key)
 
-            // 캘린더에 없지만 주기가 이번 주에 돌아오는 지출
+            // 모델 확률이 임계값을 넘긴 캘린더 밖 지출만 제안한다.
             #expect(keys.contains("쿠팡 장보기"))
-            #expect(keys.contains("주말 데이트"))
+            #expect(model.upcomingSpends.allSatisfy { $0.reason.contains(ForecastEngine.modelVersion) })
             // 이번 주 캘린더에 이미 있는 '와드'는 중복 제안하지 않는다
             #expect(!keys.contains("와드"))
 
@@ -306,7 +263,7 @@ struct KB_TuneTests {
         #expect(!model.upcomingSpends.contains { $0.pattern.key == "쿠팡 장보기" })
         let added = model.day(number: spend.expectedDay)?.events.first { $0.title == "쿠팡 장보기" }
         #expect(added?.isPredicted == true)      // 예측 금액이라 '예상'으로 표시된다
-        #expect(added?.amount == 35_000)
+        #expect(added?.amount == spend.amount)
     }
 
     // MARK: 주차별 이월
