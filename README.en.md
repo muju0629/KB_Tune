@@ -2,7 +2,7 @@
 
 # KB Tune
 
-### An on-device finance app that tells you what the next 7 days will cost — and what that does to your goal
+### Beyond a budgeting app — an on-device finance app that forecasts future spending and helps you reach your savings goal
 <br/>
 
 <img src="https://img.shields.io/badge/KB_AI_Challenge-2026-FFCC00?style=flat-square&labelColor=25241F" alt="KB AI Challenge 2026" />
@@ -18,17 +18,30 @@
 
 <sub><a href="README.md">한국어</a> · <b>English</b></sub>
 
+
+
+KB Tune uses your past card history together with your calendar.
+
+It forecasts how much you'll spend next week, whether an expense will occur, and if so, when.
+
+But it doesn't stop at forecasting well.
+
+It converts the risk of breaking this month's spending limit or savings goal into a Tune score,
+
+and proposes adjustments backed by sound reasoning — without cutting the spending you especially want to keep.
+
+<br/><br/>
+
+Plan with KB Tune and it syncs to your calendar in real time, and you can ask the AI the harder questions.
+
+But the AI never takes the decision for you — it always asks for your approval.
+<br/><br/>
+
+Enjoy a smarter financial life with KB Tune! 🌟
+
 </div>
 
-KB Tune reads your card transactions and your calendar together. It forecasts how much
-you'll spend over the next 7 days, whether a given expense will happen at all, and when.
-If your savings goal looks like it's slipping, it proposes an adjustment — without touching
-the spending you told it to protect.
-
-Forecasting and personalization state are computed on the device. Nothing about your
-schedule or savings changes until you approve it.
-
-## 60-second summary
+## TL;DR
 
 | Question | KB Tune's answer |
 |---|---|
@@ -111,7 +124,7 @@ What the app does and how to use it
 
 - [Why we built it](#why)
 - [First launch](#getting-started)
-- [The four screens](#screens)
+- [The four menus](#screens)
 - [What you can do by chatting](#chat)
 - [How far does my data travel](#privacy)
 - [Money in three states](#money-states)
@@ -202,7 +215,7 @@ Cards and savings accounts appear only after the plan is set. Cash flow comes fi
 
 <a id="screens"></a>
 
-## 📱 The four screens
+## 📱 The four menus
 
 | Tab | What it's for |
 |---|---|
@@ -726,7 +739,7 @@ baseline is [LightGBM](#ref-lightgbm).
 
 $$
 \hat y_{raw}(x)
-= \hat p(\text{occurrence}\mid x)\;\mathrm{expm1}\!\left(\hat m_{\log}(x)\right)
+= \hat p(\text{occurrence}\mid x)\thickspace\mathrm{expm1}\negthinspace\left(\hat m_{\log}(x)\right)
 $$
 
 Structural under-bias is reduced using a total-ratio correction computed on a calibration user set
@@ -760,7 +773,7 @@ choice rests on [quantile regression](#ref-quantile-regression), which estimates
 quantile rather than a mean.
 
 $$
-\rho_\tau(u)=u\left(\tau-\mathbf 1[u<0]\right),
+\rho_\tau(u)=u\left(\tau-\mathbf 1\lbrack u\lt 0\rbrack\right),
 \qquad
 \hat q_\tau(x)=\arg\min_q\sum_i\rho_\tau(y_i-q(x_i))
 $$
@@ -780,7 +793,7 @@ same number on screen.
 
 #### 3) Date and cycle: daily discrete-time Hazard
 
-For each day $d\in\{0,\ldots,6\}$, the probability of occurrence today conditional on not having
+For each day $d\in\lbrace 0,\ldots,6\rbrace$, the probability of occurrence today conditional on not having
 occurred yet. To handle weekly occurrence and date distribution together, the hazard formulation of a
 [discrete-time survival model](#ref-discrete-survival) is used.
 
@@ -793,7 +806,7 @@ Daily hazards convert to a weekly occurrence probability and a date probability 
 $$
 P(T\le6)=1-\prod_{d=0}^{6}(1-h_d),
 \qquad
-P(T=d)=\left[\prod_{j<d}(1-h_j)\right]h_d
+P(T=d)=\left\lbrack\prod_{j\lt d}(1-h_j)\right\rbrack h_d
 $$
 
 The expected payment date is the $d$ maximising $P(T=d)$. The cycle is the interval from the last
@@ -957,7 +970,7 @@ month end.
 $$
 \sigma^2=
 \sum_j a_j^2\left(e^{s^2}-1\right)
-+E[X]^2\left(t e^{s^2}+t^2CV_\lambda^2\right)
++E\lbrack X\rbrack^2\left(t e^{s^2}+t^2CV_\lambda^2\right)
 $$
 
 Current values are $s=0.40$, an off-calendar rate of 1 event/day, and $CV_\lambda=1.0$.

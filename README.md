@@ -721,7 +721,7 @@ Swift 런타임이 서버 호출 없이 중앙값·q75·발생확률·예상일�
 
 $$
 \hat y_{raw}(x)
-= \hat p(\text{발생}\mid x)\;\mathrm{expm1}\!\left(\hat m_{\log}(x)\right)
+= \hat p(\text{발생}\mid x)\thickspace\mathrm{expm1}\negthinspace\left(\hat m_{\log}(x)\right)
 $$
 
 학습에 쓰지 않은 보정 사용자 집합 $\mathcal C$에서 총액 비율을 구해 구조적 과소편향을 줄입니다.
@@ -755,7 +755,7 @@ $\tau=3/4=0.75$이므로 q75를 사용합니다. LightGBM은 pinball loss를 최
 [분위 회귀](#ref-quantile-regression)에 기반합니다.
 
 $$
-\rho_\tau(u)=u\left(\tau-\mathbf 1[u<0]\right),
+\rho_\tau(u)=u\left(\tau-\mathbf 1\lbrack u\lt 0\rbrack\right),
 \qquad
 \hat q_\tau(x)=\arg\min_q\sum_i\rho_\tau(y_i-q(x_i))
 $$
@@ -774,7 +774,7 @@ q75의 WAPE는 0.4723, 편향은 +18.4%로 중앙 예측에는 너무 보수적�
 
 #### 3) 발생일·주기: 일별 discrete-time Hazard
 
-각 날짜 $d\in\{0,\ldots,6\}$에 대해 그날까지 발생하지 않았다는 조건에서 오늘 발생할 확률을 예측합니다.
+각 날짜 $d\in\lbrace 0,\ldots,6\rbrace$에 대해 그날까지 발생하지 않았다는 조건에서 오늘 발생할 확률을 예측합니다.
 주간 발생 여부와 날짜 분포를 함께 다루기 위해 [이산시간 생존모형](#ref-discrete-survival)의
 hazard 표현을 사용했습니다.
 
@@ -787,7 +787,7 @@ $$
 $$
 P(T\le6)=1-\prod_{d=0}^{6}(1-h_d),
 \qquad
-P(T=d)=\left[\prod_{j<d}(1-h_j)\right]h_d
+P(T=d)=\left\lbrack\prod_{j\lt d}(1-h_j)\right\rbrack h_d
 $$
 
 예상 결제일은 $P(T=d)$가 가장 큰 날짜입니다. 주기는 마지막 관측 결제일부터 그 날짜까지의
@@ -942,7 +942,7 @@ $$
 $$
 \sigma^2=
 \sum_j a_j^2\left(e^{s^2}-1\right)
-+E[X]^2\left(t e^{s^2}+t^2CV_\lambda^2\right)
++E\lbrack X\rbrack^2\left(t e^{s^2}+t^2CV_\lambda^2\right)
 $$
 
 현재 $s=0.40$, 캘린더 밖 발생률은 일 1건, $CV_\lambda=1.0$을 사용합니다.
