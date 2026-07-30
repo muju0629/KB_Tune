@@ -32,9 +32,33 @@ PROMPT = (
     "아래 검색어로 웹을 찾아 한국 기준 1인당 평균 비용을 알려줘.\n"
     "여러 출처의 값이 다르면 대표값 하나와 흔한 범위를 잡아줘.\n"
     "찾지 못하면 amount 를 null 로 둬. 추측해서 채우지 마.\n"
-    'JSON만 출력: {"amount":정수원,"low":정수원,"high":정수원,"basis":"한 문장 근거"}\n\n'
+    "금액은 원 단위 정수로, 근거는 한 문장으로.\n"
+    "sources 에는 그 금액을 실제로 읽은 문서 주소를 넣어. 없으면 빈 배열로 둬.\n\n"
     "검색어: {query}"
 )
+
+# 형식은 부탁이 아니라 강제로 받는다. 프롬프트로만 부탁하면 모델이 설명문을 앞에 붙이거나
+# 289,000 처럼 콤마를 넣어서 파싱이 조용히 실패한다 — 배포 환경에서 이 경로가 항상
+# "웹에서 못 찾았어요" 로 떨어지던 원인이었다.
+SCHEMA = {
+    "type": "json_schema",
+    "name": "search_cost",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "amount": {"type": ["integer", "null"]},
+            "low": {"type": ["integer", "null"]},
+            "high": {"type": ["integer", "null"]},
+            "basis": {"type": "string"},
+            # 출처도 스키마로 받는다. JSON 만 출력하게 강제하면 모델이 본문에 인용을 붙일
+            # 자리가 없어져 응답의 annotations 가 비고, 아래 '출처 없음' 가드에 늘 걸린다.
+            "sources": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["amount", "low", "high", "basis", "sources"],
+    },
+}
 
 
 def search_cost(query: str) -> SearchCostResult:
@@ -53,6 +77,8 @@ def search_cost(query: str) -> SearchCostResult:
         return UNAVAILABLE
 
     if not isinstance(obj, dict):
+        # 조용히 떨어지면 프롬프트가 깨졌는지 모델이 못 찾았는지 구분할 수 없다.
+        log.warning("응답에서 JSON 을 못 꺼냄: %s", query)
         return UNAVAILABLE
 
     amount = _valid_won(obj.get("amount"))
@@ -64,6 +90,7 @@ def search_cost(query: str) -> SearchCostResult:
     low, high = min(low, amount), max(high, amount)
 
     basis = str(obj.get("basis") or "").strip()[:200] or "웹에서 찾은 평균 비용이에요."
+    sources = sources or _urls(obj.get("sources"))
     if not sources:
         # 근거 문서를 못 대면 모델이 지어낸 숫자와 구분할 수 없다.
         log.warning("검색은 됐지만 출처가 없어 버림: %s (금액 %s)", query, amount)
@@ -71,6 +98,17 @@ def search_cost(query: str) -> SearchCostResult:
 
     return SearchCostResult(amount=amount, low=low, high=high, method="web",
                         basis=basis, sources=sources[:3])
+
+
+def _urls(value: object) -> list[str]:
+    """모델이 적어 낸 출처 중 http(s) 주소만. 중복은 앞의 것만 남긴다."""
+    if not isinstance(value, list):
+        return []
+    seen: list[str] = []
+    for item in value:
+        if isinstance(item, str) and item.startswith(("http://", "https://")) and item not in seen:
+            seen.append(item)
+    return seen
 
 
 def _valid_won(value: object) -> int | None:
@@ -91,7 +129,7 @@ def _search(query: str) -> tuple[object, list[str]]:
     from .complete import _first_json_object
 
     prompt = PROMPT.replace("{query}", query)
-    payload = websearch.responses_call(prompt, timeout=45)
+    payload = websearch.responses_call(prompt, timeout=45, text_format=SCHEMA)
     if payload is None:
         raise RuntimeError("Responses API 호출 실패")
     return _first_json_object(websearch.answer_of(payload)), websearch.sources_of(payload)
