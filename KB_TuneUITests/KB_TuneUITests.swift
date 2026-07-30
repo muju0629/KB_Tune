@@ -21,7 +21,7 @@ final class KB_TuneUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["이번 주 추가 사용 가능액"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["이번 주에 추가로 쓸 수 있어요"].exists)
         XCTAssertTrue(app.buttons["add-event-primary"].exists)
-        XCTAssertFalse(app.buttons["show-adjustments"].exists)
+        XCTAssertTrue(app.buttons["tune-score-card"].exists)
         XCTAssertTrue(app.buttons["billing-dock"].exists)
 
         try capture("budget-positive", in: app)
@@ -32,8 +32,9 @@ final class KB_TuneUITests: XCTestCase {
         let app = launchMain(state: "zero")
 
         XCTAssertTrue(app.staticTexts["이번 주 추가 지출 여유가 없어요"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["show-adjustments"].exists)
+        XCTAssertTrue(app.buttons["tune-score-card"].exists)
         XCTAssertTrue(app.buttons["add-event-primary"].exists)
+        XCTAssertFalse(app.staticTexts["결제 기록이 없는 지출이 있어요"].exists)
 
         try capture("budget-zero", in: app)
     }
@@ -43,10 +44,28 @@ final class KB_TuneUITests: XCTestCase {
         let app = launchMain(state: "negative")
 
         XCTAssertTrue(app.staticTexts["지난주 초과 사용이 이번 주에 반영됐어요"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["show-adjustments"].exists)
+        XCTAssertTrue(app.buttons["tune-score-card"].exists)
         XCTAssertTrue(app.buttons["add-event-primary"].exists)
 
         try capture("budget-negative", in: app)
+    }
+
+    @MainActor
+    func testTuneScoreShowsRecommendationAndExclusionReasonsTogether() throws {
+        let app = launchMain(state: "zero")
+
+        let card = app.buttons["tune-score-card"]
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        card.tap()
+
+        XCTAssertTrue(app.descendants(matching: .any)["tune-adjustment-comparison"]
+            .waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["추천"].exists)
+        XCTAssertTrue(app.staticTexts["제외"].exists)
+        XCTAssertTrue(app.staticTexts["적금 자동이체 취소"].exists)
+        XCTAssertTrue(app.staticTexts.containing(
+            NSPredicate(format: "label CONTAINS %@", "장기 목표를 훼손")
+        ).firstMatch.exists)
     }
 
     @MainActor
@@ -193,10 +212,15 @@ final class KB_TuneUITests: XCTestCase {
     func testAdjustmentAndChatAgreeOnTheSameEvent() throws {
         let app = launchMain(state: "zero")
 
-        app.buttons["show-adjustments"].tap()
-        let applyButton = app.buttons["apply-adjustment"]
+        app.buttons["tune-score-card"].tap()
+        let applyButton = app.descendants(matching: .any)["apply-adjustment"]
+        // Tune 점수 구성 아래에 조정안 버튼이 있어 작은 화면에서는 시트를 올려야 나타난다.
+        for _ in 0..<3 where !applyButton.exists {
+            app.scrollViews.firstMatch.swipeUp()
+        }
         XCTAssertTrue(applyButton.waitForExistence(timeout: 3))
         let planAmount = applyButton.label
+        app.buttons["닫기"].tap()
 
         app.buttons["대화 탭"].tap()
         let field = app.textFields["편하게 말해 주세요"]
@@ -234,8 +258,8 @@ final class KB_TuneUITests: XCTestCase {
         try capture("01-weekly", in: app)
 
         // 조정안 펼친 상태 — 예산이 0원일 때 무엇을 옮기라고 하는지
-        if app.buttons["show-adjustments"].exists {
-            app.buttons["show-adjustments"].tap()
+        if app.buttons["tune-score-card"].exists {
+            app.buttons["tune-score-card"].tap()
             _ = app.buttons["apply-adjustment"].waitForExistence(timeout: 3)
             try capture("02-weekly-adjustment", in: app)
         }
@@ -379,6 +403,37 @@ final class KB_TuneUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 2)
 
         try capture("chat-past-spending", in: app)
+    }
+
+    /// 일정 추가 화면의 "고정 지출" 토글이 뜨는지, 이력에서 자동 판정되는지.
+    ///
+    /// 와드(미용실)는 42,000/38,000 이라 같은 값이 반복되지 않는다 → 자동 판정 = 변동(꺼짐).
+    /// 판정이 됐으니 "자동 판정" 배지가 붙어야 한다.
+    @MainActor
+    func testFixedAmountToggleAppearsAndAutoDetects() throws {
+        let app = launchMain()
+
+        let add = app.buttons["add-event-primary"]
+        XCTAssertTrue(add.waitForExistence(timeout: 6), "일정 추가 버튼이 없다")
+        add.tap()
+
+        let field = app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 4), "제목 입력란이 없다")
+        field.tap()
+        field.typeText("와드")
+
+        // 추정이 끝나면 결과 단계로 넘어간다
+        let toggle = app.switches["고정 지출"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 12), "고정 지출 토글이 없다")
+        try capture("add-event-fixed-toggle", in: app)
+
+        // 와드는 금액이 반복되지 않으니 자동 판정은 꺼짐이어야 한다
+        XCTAssertEqual(toggle.value as? String, "0", "와드는 고정 지출이 아니어야 한다")
+        XCTAssertTrue(app.staticTexts["자동 판정"].exists, "자동 판정 배지가 없다")
+
+        // 켜면 범위 표시가 사라진다
+        toggle.tap()
+        try capture("add-event-fixed-toggle-on", in: app)
     }
 
     @MainActor

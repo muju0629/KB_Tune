@@ -1,0 +1,19 @@
+{
+  "user_id": 455,
+  "test_month": 7,
+  "income": 2654419,
+  "available_after_goal": 688627,
+  "predicted_spend": 1116889,
+  "actual_spend": 508270,
+  "registered_calendar": 102420,
+  "unplanned_shock": 0,
+  "goal_probability": 0.00950585802410786,
+  "goal_achieved": 1,
+  "tune_score": 1,
+  "alert": 1,
+  "evidence_count": 4,
+  "protected_violation": 0,
+  "unapproved_execution": 0,
+  "squared_error": 0.9810786452885588,
+  "reason": "두 달 표본만으로 개인 변동성을 충분히 추정하지 못했다."
+}

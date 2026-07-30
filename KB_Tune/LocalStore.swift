@@ -35,13 +35,15 @@ struct PersistedState: Codable {
     var learnedSpendRecords: [SpendRecord]
     var dismissedPredictions: [String]
     var dailyCloseDismissed: Bool
+    var tuneAuditLog: [TuneAuditEntry] = []
+    var rejectedAdjustmentIDs: [String] = []
 }
 
 extension PersistedState {
     private enum CodingKeys: String, CodingKey {
         case version, hasOnboarded, usesDemoData, kbPayLinked, monthlyIncome,
              savingsGoal, direction, hobbies, calendarDays, learnedSpendRecords, dismissedPredictions,
-             dailyCloseDismissed
+             dailyCloseDismissed, tuneAuditLog, rejectedAdjustmentIDs
     }
 
     init(from decoder: Decoder) throws {
@@ -60,6 +62,9 @@ extension PersistedState {
                                                     forKey: .learnedSpendRecords) ?? []
         dismissedPredictions = try c.decodeIfPresent([String].self, forKey: .dismissedPredictions) ?? []
         dailyCloseDismissed = try c.decodeIfPresent(Bool.self, forKey: .dailyCloseDismissed) ?? false
+        tuneAuditLog = try c.decodeIfPresent([TuneAuditEntry].self, forKey: .tuneAuditLog) ?? []
+        rejectedAdjustmentIDs = try c.decodeIfPresent([String].self,
+                                                       forKey: .rejectedAdjustmentIDs) ?? []
     }
 }
 

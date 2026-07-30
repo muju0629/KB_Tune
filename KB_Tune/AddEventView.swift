@@ -25,10 +25,51 @@ struct AddEventView: View {
     @State private var source: Source = .manual
     @State private var step: Step = .input
 
+    /// 고정 지출 토글. 이력에서 자동 판정한 값이 기본으로 들어오고 사용자가 바꿀 수 있다.
+    ///
+    /// 자동 판정만으로는 모자란다 — 첫 등록이면 표본이 없어 판정이 안 되고,
+    /// "자기관리" 처럼 한 카테고리에 미용실(고정가)과 병원(변동)이 섞이면 라벨로도
+    /// 못 가른다. 사용자는 자기 소비를 아니까 한 번 눌러주면 그게 가장 정확한 신호다.
+    @ViewBuilder
+    private var fixedAmountToggle: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle(isOn: $isFixedAmount) {
+                HStack(spacing: 5) {
+                    Text("고정 지출").font(.kb(13.5, .semibold)).foregroundStyle(KB.ink)
+                    if autoDetectedFixed != nil {
+                        Text("자동 판정").font(.kb(10, .medium)).foregroundStyle(KB.ink)
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(KB.yellowSoft, in: Capsule())
+                    }
+                }
+            }
+            .tint(KB.yellow)
+
+            Text(isFixedAmount
+                 ? "매번 같은 금액이라 범위를 붙이지 않아요."
+                 : "매번 달라서 과거 기록으로 범위를 잡아요.")
+                .font(.kb(11)).foregroundStyle(KB.muted.opacity(0.9))
+        }
+    }
+
+    /// 같은 일정의 과거 기록에서 판정한 값. 기록이 2건 미만이면 nil.
+    private var autoDetectedFixed: Bool? {
+        let q = title.trimmingCharacters(in: .whitespaces)
+            .replacingOccurrences(of: " ", with: "")
+        guard !q.isEmpty else { return nil }
+        guard let p = SpendHistory.patterns.first(where: {
+            let key = $0.key.replacingOccurrences(of: " ", with: "")
+            return q.contains(key) || key.contains(q)
+        }) else { return nil }
+        return SpendHistory.isFixedAmount(for: p)
+    }
+
     @State private var title = ""
     @State private var date: Date = AddEventView.defaultDate   // 날짜+시간을 함께 고른다
     @State private var estimate: EstimateResponse?
     @State private var amount = 0            // 사용자가 조정 가능한 최종 금액
+    /// 고정 지출인가. 이력에서 자동 판정한 값으로 시작하고 사용자가 바꿀 수 있다.
+    @State private var isFixedAmount = false
     @State private var amountText = ""       // 입력 단계에서 사용자가 직접 적은 금액(비면 추정치 사용)
     @State private var suggested: EstimateResponse?  // 제목으로 미리 잡은 회색 예상 금액
     @State private var isEstimating = false
@@ -332,12 +373,19 @@ struct AddEventView: View {
                 }
                 .padding(.top, 2)
 
+                fixedAmountToggle
+                    .padding(.top, 4)
+
                 if let e = estimate {
                     Text(e.basis).font(.kb(12)).foregroundStyle(KB.muted)
                         .fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 6) {
-                        Text("예상 범위 \(formatWon(e.low))~\(formatWon(e.high))")
-                        Text("·")
+                        // 고정으로 두면 범위를 보여주지 않는다 — 매달 같은 금액인데
+                        // "2,900~5,200원" 이라고 쓰면 모델이 모르는 것처럼 보인다.
+                        if !isFixedAmount {
+                            Text("예상 범위 \(formatWon(e.low))~\(formatWon(e.high))")
+                            Text("·")
+                        }
                         Text("신뢰도 \(Int(e.confidence * 100))%")
                         Text("·")
                         Text(e.method == "local" ? "기기 계산" : "서버 추정")
@@ -420,7 +468,8 @@ struct AddEventView: View {
                                category: estimate?.category ?? "기타",
                                basis: estimate?.basis, startHour: startHour,
                                riskNote: note, riskDetail: detail,
-                               calendarEventID: calendarID)
+                               calendarEventID: calendarID,
+                               isFixedAmount: isFixedAmount)
                 withAnimation(spring) { step = .done }
             } label: { Text("이 계획으로 일정 추가") }
             .buttonStyle(PrimaryButtonStyle())
@@ -509,6 +558,8 @@ struct AddEventView: View {
             // 사용자가 직접 적은 금액이 있으면 그 값이 우선, 없으면 추정치.
             let typed = Int(amountText.filter(\.isNumber)) ?? 0
             amount = typed > 0 ? typed : result.amount
+            // 이력에서 판정된 값이 있으면 그걸 기본 선택으로. 없으면 추정 범위로 가늠한다.
+            isFixedAmount = autoDetectedFixed ?? (result.low == result.high)
             isEstimating = false
             withAnimation(spring) { step = .result }
         }

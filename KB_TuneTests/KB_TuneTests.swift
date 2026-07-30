@@ -906,9 +906,14 @@ struct KB_TuneTests {
 
     @Test func personalHistoryStillWinsOverPublicAverage() {
         // 기기에 같은 카테고리 결제 이력이 있으면 통계 평균이 그걸 덮으면 안 된다.
-        let result = EventEstimator.estimate("친구 저녁")
+        //
+        // 전에는 "친구 저녁"(→ 모임)으로 검증했다. 와드가 모임으로 잘못 분류돼 있어서
+        // 모임에 표본 2건이 있었기 때문이다. 와드는 미용실이라 자기관리로 옮겼고,
+        // 그 결과 모임 이력이 0건이 됐다. 검증하려는 불변식은 그대로이므로 이력이 있는
+        // 카테고리로 픽스처만 바꾼다.
+        let result = EventEstimator.estimate("저녁 데이트")
         #expect(result.method == "history")
-        #expect(result.amount != BaselinePrices.forCategory("모임")?.amount)
+        #expect(result.amount != BaselinePrices.forCategory("데이트")?.amount)
         #expect(result.basis.contains("기기에 저장된"))
     }
 

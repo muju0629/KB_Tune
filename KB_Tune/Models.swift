@@ -83,6 +83,12 @@ struct DayEvent: Identifiable, Codable {
     var category: String = "기타"    // 결제 업종(무엇에 썼는지) — 식사·카페·쇼핑·교통 등
     var purpose: String? = nil      // 생활 목적(왜 썼는지) — 데이트·가족·모임·업무·공부 등
     var state: SpendState = .confirmed
+    /// 고정 지출인가. **nil = 관측에서 자동 판정**, 값이 있으면 사용자가 확정한 것.
+    ///
+    /// 사용자가 덮을 수 있게 뒀다 — 첫 등록이면 표본이 없어 판정이 안 되고,
+    /// "자기관리" 처럼 한 카테고리에 미용실(고정가)과 병원(변동)이 섞이면
+    /// 라벨로도 못 가른다. true 면 범위를 붙이지 않는다.
+    var isFixedAmount: Bool? = nil
     /// 기기 캘린더에 쓴 이벤트의 식별자. 앱이 직접 쓴 일정만 값이 있고,
     /// 지울 때 이 값이 있는 경우에만 기기 캘린더에서도 지운다 —
     /// 사용자가 캘린더 앱에서 만든 일정을 앱이 함부로 지우면 안 되기 때문이다.
@@ -118,7 +124,7 @@ extension DayEvent {
     private enum CodingKeys: String, CodingKey {
         case id, title, symbol, startHour, duration, amount, estimateLow, estimateHigh,
              estimateBasis, isPredicted, isProtected, riskNote, riskDetail, category,
-             purpose, state, calendarEventID
+             purpose, state, isFixedAmount, calendarEventID
     }
 
     init(from decoder: Decoder) throws {
@@ -139,6 +145,8 @@ extension DayEvent {
         category = try c.decodeIfPresent(String.self, forKey: .category) ?? "기타"
         purpose = try c.decodeIfPresent(String.self, forKey: .purpose)
         state = try c.decodeIfPresent(SpendState.self, forKey: .state) ?? .confirmed
+        // 없으면 nil — 관측에서 자동 판정한다. 사용자가 고른 값만 저장된다.
+        isFixedAmount = try c.decodeIfPresent(Bool.self, forKey: .isFixedAmount)
         calendarEventID = try c.decodeIfPresent(String.self, forKey: .calendarEventID)
     }
 }
@@ -321,12 +329,14 @@ final class AppModel: ObservableObject {
             ? todayDayNumber
             : DemoClock.range(of: targetMonth).lowerBound
         let spent = targetMonth == currentMonth ? spentToDate : 0
-        let committed = calendarDays
+        let future = calendarDays
             .filter { DemoClock.range(of: targetMonth).contains($0.dayNumber) && $0.dayNumber >= asOf }
-            .reduce(0) { $0 + $1.spendTotal }
+        let committed = future.reduce(0) { $0 + $1.spendTotal }
+        let committedSumSq = future.reduce(0.0) { $0 + pow(Double($1.spendTotal), 2) }
         return BudgetEngine.probability(direction,
                                         spentToDate: spent,
                                         committedFuture: committed,
+                                        committedSumSq: committedSumSq,
                                         extraCommitted: extraCommitted,
                                         income: monthlyIncome,
                                         savingsGoal: savingsGoal,
@@ -550,6 +560,10 @@ final class AppModel: ObservableObject {
 
     @Published private(set) var dailyCloseDismissed = false
 
+    /// Tune 판단과 승인·거절은 서버가 아니라 기기 안 감사 로그에만 남긴다.
+    @Published private(set) var tuneAuditLog: [TuneAuditEntry] = []
+    @Published private(set) var rejectedAdjustmentIDs: Set<String> = []
+
     /// 카드 기록 없이 예정만 잡혀 있는 오늘 지출 — 현금 결제 여부를 되물어야 하는 항목.
     var todayCloseItems: [DayEvent] {
         guard let today = day(number: todayDayNumber) else { return [] }
@@ -598,13 +612,16 @@ final class AppModel: ObservableObject {
                   basis: String?, predicted: Bool = false, startHour: Double? = nil,
                   riskNote: String? = nil, riskDetail: String? = nil,
                   purpose: String? = nil, state: SpendState = .reserved,
-                  calendarEventID: String? = nil) {
+                  calendarEventID: String? = nil,
+                  isFixedAmount: Bool? = nil) {
         guard let i = calendarDays.firstIndex(where: { $0.dayNumber == day }) else { return }
         // 사용자가 시간을 골랐으면 그 시각에, 아니면 겹치지 않는 빈 시간에 넣는다.
         let start = startHour ?? Self.freeSlot(after: calendarDays[i].events)
         let event = DayEvent(title: title, symbol: Self.symbol(for: category),
                              startHour: start, duration: 2, amount: amount,
-                             estimateLow: amount, estimateHigh: amount,
+                             // 고정으로 표시된 금액에는 범위를 붙이지 않는다.
+                             estimateLow: isFixedAmount == true ? nil : amount,
+                             estimateHigh: isFixedAmount == true ? nil : amount,
                              estimateBasis: basis, isPredicted: predicted,
                              riskNote: riskNote, riskDetail: riskDetail,
                              category: category, purpose: purpose, state: state,
@@ -658,7 +675,7 @@ final class AppModel: ObservableObject {
     var movableEventThisWeek: (day: Int, event: DayEvent)? {
         for day in week.sorted(by: { $0.dayNumber < $1.dayNumber })
             where day.dayNumber >= todayDayNumber && day.dayNumber + 7 <= DemoClock.lastDay {
-            if let event = day.events.first(where: { $0.amount > 0 && !$0.isProtected }) {
+            if let event = day.events.first(where: { $0.amount > 0 && !isProtectedSpend($0) }) {
                 return (day.dayNumber, event)
             }
         }
@@ -670,7 +687,7 @@ final class AppModel: ObservableObject {
         let candidates = week
             .filter { $0.dayNumber >= todayDayNumber }
             .flatMap { day in
-                day.events.filter { $0.amount > 0 && !$0.isProtected }
+                day.events.filter { $0.amount > 0 && !isProtectedSpend($0) }
                     .map { (day: day.dayNumber, event: $0) }
             }
         return candidates.max { $0.event.amount < $1.event.amount }
@@ -715,6 +732,146 @@ final class AppModel: ObservableObject {
               let j = calendarDays[i].events.firstIndex(where: { $0.id == event.id }) else { return }
         calendarDays[i].events[j].riskNote = nil
         calendarDays[i].events[j].riskDetail = nil
+    }
+
+    // MARK: Tune 점수 · 보호 제약 · 선제 경보
+
+    /// 일정 자체의 보호 표시와 온보딩에서 고른 생활 목적을 같은 하드 제약으로 취급한다.
+    func isProtectedSpend(_ event: DayEvent) -> Bool {
+        event.isProtected
+            || protectedTags.contains(event.category)
+            || event.purpose.map(protectedTags.contains) == true
+    }
+
+    /// 점수의 모든 입력을 현재 장부에서 만들고, 화면에 공개할 근거도 같은 자리에서 묶는다.
+    var tuneScoreInput: TuneScoreInput {
+        let month = DemoClock.month(of: todayDayNumber)
+        let monthEnd = DemoClock.range(of: month).upperBound
+        let futureDays = calendarDays.filter {
+            $0.dayNumber >= todayDayNumber && $0.dayNumber <= monthEnd
+        }
+        let futureEvents = futureDays.flatMap { day in
+            day.events.filter { $0.amount > 0 }.map { (day.dayNumber, $0) }
+        }
+        let currentWeekEvents = futureEvents.filter { currentWeekRange.contains($0.0) }
+        let flexible = currentWeekEvents
+            .filter { !isProtectedSpend($0.1) && $0.1.state == .reserved }
+            .reduce(0) { $0 + $1.1.amount }
+        let protected = currentWeekEvents
+            .filter { isProtectedSpend($0.1) }
+            .reduce(0) { $0 + $1.1.amount }
+
+        let groundedCount = futureEvents.filter { $0.1.estimateBasis != nil }.count
+        let coverage = futureEvents.isEmpty
+            ? 1.0
+            : Double(groundedCount) / Double(futureEvents.count)
+        let historicalDays = SpendHistory.allRecords.map(\.dayOfYear)
+        let observationWeeks: Int
+        if let first = historicalDays.min(), let last = historicalDays.max() {
+            observationWeeks = max(1, Int(ceil(Double(last - first + 1) / 7.0)))
+        } else {
+            observationWeeks = 0
+        }
+
+        var evidence: [TuneEvidenceReference] = [
+            TuneEvidenceReference(id: "goal.savings", source: .goal,
+                                  label: "이번 달 적금 목표", amount: savingsGoal, day: nil),
+            TuneEvidenceReference(id: "forecast.goal-probability", source: .forecast,
+                                  label: "목표 달성 확률", amount: probability, day: nil),
+            TuneEvidenceReference(id: "policy.weekly-buffer", source: .policy,
+                                  label: "주간 안전 버퍼 v0", amount: max(50_000, BudgetEngine.fixed / 8), day: nil),
+            TuneEvidenceReference(id: "billing.carryover", source: .billing,
+                                  label: "다음 달 할부 이월", amount: billing.carryover, day: nil),
+        ]
+        evidence += currentWeekEvents.map { day, event in
+            TuneEvidenceReference(
+                id: "calendar.\(event.id.uuidString)",
+                source: isProtectedSpend(event) ? .userChoice : .calendar,
+                label: isProtectedSpend(event) ? "보호 소비 · \(event.title)" : event.title,
+                amount: event.amount, day: day
+            )
+        }
+
+        return TuneScoreInput(
+            goalProbability: Double(probability) / 100.0,
+            projectedBalance: thisWeekBudget?.carriesForward ?? 0,
+            baseSafetyBuffer: max(50_000, BudgetEngine.fixed / 8),
+            flexibleSpend: flexible,
+            protectedSpend: protected,
+            observationWeeks: observationWeeks,
+            calendarCoverage: coverage,
+            evidence: evidence
+        )
+    }
+
+    var tuneScore: TuneScoreResult { TuneScoreEngine.calculate(tuneScoreInput) }
+
+    var tuneAdjustmentCandidates: [TuneAdjustmentCandidate] {
+        let expenses = week
+            .filter { $0.dayNumber >= todayDayNumber }
+            .flatMap { day in
+                day.events.filter { $0.amount > 0 }.map {
+                    TuneExpenseSnapshot(id: $0.id, day: day.dayNumber, title: $0.title,
+                                        amount: $0.amount, state: $0.state,
+                                        isProtected: isProtectedSpend($0))
+                }
+            }
+        return TuneAdjustmentEngine.candidates(
+            expenses: expenses,
+            planEndDay: DemoClock.range(of: DemoClock.month(of: todayDayNumber)).upperBound,
+            savingsGoal: savingsGoal,
+            scoreInput: tuneScoreInput,
+            rejectedIDs: rejectedAdjustmentIDs
+        )
+    }
+
+    var proactiveTuneRisk: TuneRiskAlert? {
+        let history = tuneAuditLog.compactMap { entry -> TuneAlertHistory? in
+            guard entry.event == .alertAcknowledged, let fingerprint = entry.fingerprint else { return nil }
+            return TuneAlertHistory(fingerprint: fingerprint, notifiedAt: entry.timestamp)
+        }
+        let previous = tuneAuditLog.last.map { $0.scoreAfter ?? $0.scoreBefore }
+        let upcomingCount = week.filter { $0.dayNumber >= todayDayNumber }
+            .flatMap(\.events).filter { $0.amount > 0 }.count
+        return TuneRiskDetector.detect(
+            current: tuneScore, previousScore: previous,
+            goalProbability: tuneScoreInput.goalProbability,
+            upcomingCalendarCount: upcomingCount,
+            upcomingBilling: billing.dueNext,
+            history: history
+        )
+    }
+
+    func acknowledgeTuneRisk(_ alert: TuneRiskAlert) {
+        tuneAuditLog.append(TuneAuditEntry(
+            timestamp: Date(), event: .alertAcknowledged, fingerprint: alert.id,
+            candidateID: nil, label: "선제 위험 경보 확인",
+            scoreBefore: alert.score, scoreAfter: nil,
+            reasonCodes: alert.reasons.map(\.rawValue),
+            evidenceIDs: tuneScore.evidence.map(\.id)
+        ))
+    }
+
+    /// 화면에서 실제 변경이 끝난 뒤에만 호출한다. 후보를 계산하거나 펼친 것만으로는 기록하지 않는다.
+    func recordAdjustmentApproval(_ candidate: TuneAdjustmentCandidate) {
+        tuneAuditLog.append(TuneAuditEntry(
+            timestamp: Date(), event: .adjustmentApproved, fingerprint: nil,
+            candidateID: candidate.id, label: candidate.title,
+            scoreBefore: candidate.scoreBefore, scoreAfter: tuneScore.score,
+            reasonCodes: [candidate.reason.rawValue],
+            evidenceIDs: tuneScore.evidence.map(\.id)
+        ))
+    }
+
+    func rejectAdjustment(_ candidate: TuneAdjustmentCandidate) {
+        rejectedAdjustmentIDs.insert(candidate.id)
+        tuneAuditLog.append(TuneAuditEntry(
+            timestamp: Date(), event: .adjustmentRejected, fingerprint: nil,
+            candidateID: candidate.id, label: candidate.title,
+            scoreBefore: candidate.scoreBefore, scoreAfter: nil,
+            reasonCodes: [TuneAdjustmentReason.userRejected.rawValue],
+            evidenceIDs: tuneScore.evidence.map(\.id)
+        ))
     }
 
     /// 기존 일정과 겹치지 않는 2시간 슬롯. 저녁이 차 있으면 같은 날의 이른 빈칸을 찾는다.
@@ -831,7 +988,9 @@ final class AppModel: ObservableObject {
             calendarDays: calendarDays,
             learnedSpendRecords: learnedSpendRecords,
             dismissedPredictions: Array(dismissedPredictions),
-            dailyCloseDismissed: dailyCloseDismissed
+            dailyCloseDismissed: dailyCloseDismissed,
+            tuneAuditLog: tuneAuditLog,
+            rejectedAdjustmentIDs: Array(rejectedAdjustmentIDs)
         ))
     }
 
@@ -858,6 +1017,8 @@ final class AppModel: ObservableObject {
         learnedSpendRecords = SpendHistory.learnedRecords
         dismissedPredictions = Set(s.dismissedPredictions)
         dailyCloseDismissed = s.dailyCloseDismissed
+        tuneAuditLog = s.tuneAuditLog
+        rejectedAdjustmentIDs = Set(s.rejectedAdjustmentIDs)
     }
 
     /// 시연을 처음부터 다시 할 때. 저장본을 지우고 시드 데이터로 되돌린다.
@@ -875,6 +1036,8 @@ final class AppModel: ObservableObject {
         SpendHistory.replaceLearnedRecords([])
         dismissedPredictions = []
         dailyCloseDismissed = false
+        tuneAuditLog = []
+        rejectedAdjustmentIDs = []
     }
 
     // MARK: 캘린더 원본을 앱 데모 데이터로 변환

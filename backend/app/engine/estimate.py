@@ -68,8 +68,9 @@ def estimate_event_cost(title: str, txns: list[Transaction], use_llm: bool = Fal
             method="rule", llm_raw=None,
         )
     if "와드" in compact:
+        # 미용실이다. 금액이 거의 고정이라 low=high 로 둔다.
         return EstimateResult(
-            title=title, category="업무·학업", amount=40_000, low=40_000, high=40_000,
+            title=title, category="자기관리", amount=40_000, low=40_000, high=40_000,
             confidence=1.0, basis="사용자가 확인한 금액을 반영했어요.",
             method="rule", llm_raw=None,
         )

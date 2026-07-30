@@ -20,3 +20,15 @@ __pycache__/
 
 # 로컬 빌드 설정(배포 주소·API 키). 저장소에 올리지 않는다.
 Config/Local.xcconfig
+
+# 예측 벤치마크 — 원본 파생 데이터는 커밋하지 않는다 (용량 + 재식별 회피)
+tools/forecast_bench/data/
+tools/forecast_bench/__pycache__/
+
+# 행 단위 예측 덤프 — 재생성 가능한 중간 산출물이고 합계 110MB 를 넘는다.
+# 요약(results.md·results.csv)과 figure 만 커밋한다.
+tools/forecast_bench/results/**/*predictions.csv
+tools/tune_score_backtest/results/predictions.csv
+
+# 슬라이드 검사 도구 산출물
+docs/competition/*.inspect.ndjson

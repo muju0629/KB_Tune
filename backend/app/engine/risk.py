@@ -84,4 +84,6 @@ def generate_adjustments(profile: Profile, txns, events: list[PlannedEvent], tod
 
 def _prob_with_extra(profile, events, today, days_in_month, remaining_budget, extra: int) -> int:
     mu = probability.expected_remaining_spend(profile, events, today, days_in_month, False) + extra
-    return probability.probability_mc(mu, probability.SPEND_SIGMA, remaining_budget)
+    sigma = probability.spend_sigma(events, today, days_in_month, profile.direction, False,
+                                    extra=extra)
+    return probability.probability_mc(mu, sigma, remaining_budget)

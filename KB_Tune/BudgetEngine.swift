@@ -19,7 +19,14 @@ enum BudgetEngine {
     static let savingsGoal = 800_000            // 미확인 — 데모 가정
     static let candidateAmount = 0              // 미확정 일정은 기본 계산에서 제외
     static let discretionaryDaily = 7_500.0     // 일정 밖 소액지출 데모 가정
-    static let sigma = 100_000.0                // 추정 오차를 넉넉히 반영
+
+    // σ 는 상수가 아니다. 상수로 두면 월초와 월말의 불확실성이 같아진다 —
+    // 남은 일수가 31일일 때와 3일일 때 오차가 같을 수는 없다.
+    // 아래 값과 spendSigma 식은 backend/app/engine/probability.py 와 동일하다.
+    static let amountLogSD = 0.40               // 건당 금액의 로그 표준편차 (AI Hub 분산분해)
+    static let discretionaryRate = 1.0          // 일정 밖 지출 발생률(건/일)
+    static let rateCV = 1.0                     // 그 발생률 자체의 불확실성 (= 거의 모른다)
+    static let maxConfidence = 97               // 모델이 담지 못하는 예외 지출이 있어 상한을 둔다
 
     /// 오늘 — 앱을 켤 때 실제 날짜에서 읽는다.
     static var today: Int { DemoClock.today }
@@ -56,6 +63,58 @@ enum BudgetEngine {
         let month = DemoClock.range(of: DemoClock.month(of: referenceDay))
         return days.filter { month.contains($0.dayNumber) && $0.dayNumber >= referenceDay }
             .reduce(0) { $0 + $1.spendTotal }
+    }
+
+    /// 남은 확정 지출의 제곱합. σ 계산에 쓴다 — 분산은 금액의 제곱에 비례한다.
+    ///
+    /// 백엔드는 일정 단위로 더하고 여기서는 날짜 단위로 더한다. 한 날짜에 금액이 있는
+    /// 일정이 둘 이상이면 값이 갈리는데, 현재 캘린더는 그런 날이 없어 일치한다.
+    static func committedFutureSumSq(in days: [PlanDay], asOfDay: Int? = nil) -> Double {
+        let referenceDay = asOfDay ?? today
+        let month = DemoClock.range(of: DemoClock.month(of: referenceDay))
+        return days.filter { month.contains($0.dayNumber) && $0.dayNumber >= referenceDay }
+            .reduce(0.0) { $0 + pow(Double($1.spendTotal), 2) }
+    }
+
+    /// 남은 지출의 표준편차. 확정 일정의 금액 오차 + 일정 밖 지출의 발생 불확실성.
+    ///
+    ///     Var = Σ 일정금액² · (exp(s²) − 1)
+    ///         + E[X]² · (t · exp(s²) + t² · CV²)
+    ///
+    /// 둘째 항의 t² 때문에 기간이 길어질수록 불확실성이 제곱으로 커진다.
+    static func spendSigma(committedSumSq: Double, daysLeft: Double,
+                           _ d: SpendDirection) -> Double {
+        let s2 = amountLogSD * amountLogSD
+        var variance = committedSumSq * (exp(s2) - 1)
+        variance += discretionaryVariance(daysLeft: daysLeft, d)
+        return variance.squareRoot()
+    }
+
+    /// 일정 밖 지출의 분산.
+    ///
+    /// 두 근사 중 **큰 쪽**을 쓴다. 합성으로 교체하지 않는 이유가 있다.
+    ///
+    /// 카테고리별 사후분포 합성은 **탐지된 반복 패턴만** 설명한다. 편의점·교통·일회성
+    /// 지출처럼 패턴으로 안 잡히는 돈을 보지 못한다. 지금 캘린더 밖 패턴은 장보기
+    /// 하나뿐이라 합성 σ 가 37,289원인데 닫힌 공식은 81,011원이다. 그냥 갈아끼우면
+    /// 불확실성이 절반으로 줄고 달성 확률이 부풀려진다 — 관측하지 않은 지출에 대한
+    /// 불확실성을 줄일 근거는 없다.
+    ///
+    /// 그래서 합성은 **하한을 올리는 역할**만 한다. 패턴이 쌓여 설명되는 분산이
+    /// 무지 기준선을 넘으면 그때 합성이 이긴다. 지금은 닫힌 공식이 이기고, 그게 맞다.
+    ///
+    /// 백엔드는 요청에 실려온 값만 보므로 늘 닫힌 공식을 쓴다.
+    static func discretionaryVariance(daysLeft: Double, _ d: SpendDirection) -> Double {
+        let s2 = amountLogSD * amountLogSD
+        let perEvent = discretionaryDaily * discretionaryFactor(d) / discretionaryRate
+        let t = discretionaryRate * daysLeft
+        let ignorance = pow(perEvent, 2) * (t * exp(s2) + t * t * rateCV * rateCV)
+
+        guard let empirical = SpendHistory.offCalendarVariance(days: daysLeft) else {
+            return ignorance
+        }
+        // 소비방향은 재량지출의 크기를 조절한다. 분산은 크기의 제곱에 비례한다.
+        return max(ignorance, empirical * pow(discretionaryFactor(d), 2))
     }
 
     /// 다음 달로 넘어가는 할부 잔액 (기획 보고서 7.3 '카드 결제예정액').
@@ -107,6 +166,7 @@ enum BudgetEngine {
     static func probability(_ d: SpendDirection,
                             spentToDate: Int? = nil,
                             committedFuture: Int? = nil,
+                            committedSumSq: Double? = nil,
                             extraCommitted: Int = 0,
                             income: Int = income,
                             savingsGoal: Int = savingsGoal,
@@ -118,8 +178,14 @@ enum BudgetEngine {
         let committed = Double((committedFuture ?? Self.committedFuture(in: seed)) + extraCommitted)
         let mu = committed + discretionary
         let remaining = remainingBudget(income: income, savingsGoal: savingsGoal, spentToDate: spentToDate)
+
+        // 검토 중인 일정도 금액 오차를 갖는다 — 평균에만 넣고 분산에서 빼면 안 된다.
+        let sumSq = (committedSumSq ?? Self.committedFutureSumSq(in: seed, asOfDay: referenceDay))
+            + pow(Double(extraCommitted), 2)
+        let sigma = spendSigma(committedSumSq: sumSq, daysLeft: daysLeft, d)
+
         let z = (Double(remaining) - mu) / sigma
         let cdf = 0.5 * (1 + erf(z / 2.0.squareRoot()))
-        return Int((cdf * 100).rounded())
+        return min(Int((cdf * 100).rounded()), maxConfidence)
     }
 }
