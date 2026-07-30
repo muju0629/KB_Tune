@@ -20,6 +20,11 @@
 들어 있으므로 캡처와 같은 `.complete` 파일 보호등급을 적용하고 iCloud·iTunes 백업에서 제외한다.
 백엔드는 요청마다 계산하고 저장하지 않는 무상태 구조다.
 
+예측 모델 `ForecastModels.json`에는 LightGBM/Hazard 트리, 비식별 집단 사전값, 보정 계수와
+모델·피처 버전만 들어 있다. 현재 번들은 합성 데이터로 만들었고 원거래·사용자 ID·일정 제목을
+포함하지 않는다. 앱은 카드 거래와 구조화된 일정 피처를 기기에서만 조합해 추론하며,
+예측 입력이나 결과를 모델 서버로 보내지 않는다.
+
 **데이터 최소화** — 이름과 나이는 엔진도 프롬프트도 쓰지 않는다. 그래서 앱이 보내지 않고,
 서버 스키마(`Profile`)에 필드 자체가 없다. 다른 클라이언트가 보내와도 무시된다.
 안 쓰는 개인정보는 받지 않는 게 가장 확실한 보호다.
@@ -40,9 +45,10 @@
 OCR과 거래 구조화는 Apple Vision·`LocalExtractor`로 **기기 안에서** 돈다
 ([OCRService.swift](../KB_Tune/OCRService.swift)). 이미지 원본과 OCR 원문 모두 서버로 보내지 않는다.
 
-백엔드의 `/api/extract`도 `image_base64` 입력을 거절한다. 앱 구현을 우회해 호출하더라도
-금융 캡처 원본이 외부 비전 모델로 전달되지 않는다. `/api/extract`의 텍스트 파서는
-개발·검증용으로 남아 있지만 iOS 앱은 이 엔드포인트를 호출하지 않는다.
+백엔드에는 이미지를 받는 칸 자체가 없다. 예전에는 `/api/extract`가 `image_base64`를
+422로 거절했지만, 거절 규칙은 한 군데 빠뜨리면 새고 필드는 안 새기 때문에 스키마에서
+없앴다. `test_security.py`가 OpenAPI 스키마 전체를 훑어 `image_base64`·`merchants`
+필드가 되살아나지 않았는지 확인한다.
 
 ## 3. 전송
 
@@ -290,7 +296,7 @@ AI를 학습시키는 경우*(Ⅰ-2 적용 대상)를 상정한다. 이 프로�
 | Ⅲ-1-2 개인 식별자 삭제·비식별화 | `OutboundPrivacy.sanitize()` · `redact_personal_data()`. 안내서 예시(고유식별정보·민감정보·계좌·카드)와 항목이 거의 겹친다 |
 | Ⅲ-1-3 안전한 저장 및 관리 | §1·§2 — `completeFileProtection`, 백업 제외 |
 | Ⅲ-1-5 프롬프트 필터 | §7 — `safe_text()` |
-| Ⅳ 삭제 요구권 | `ConsentStore.reset()` · `SpendHistory.replaceLearnedRecords([])` |
+| Ⅳ 삭제 요구권 | `ConsentStore.reset()` · `LocalStore.clear()` |
 
 **아직 안 한 것.**
 

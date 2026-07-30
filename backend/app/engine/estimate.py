@@ -14,6 +14,12 @@ import math
 from .. import baseline
 from ..models import EstimateResult, Transaction
 
+# LLM 이 답으로 고를 수 있는 카테고리 집합. 모델이 이 밖의 말을 지어내면 버린다.
+CATEGORIES = [
+    "출근", "업무·학업", "데이트", "가족", "모임", "문화", "자기관리",
+    "카페", "외식", "배달", "쇼핑", "교통", "구독", "여가", "경조사", "기타",
+]
+
 # 카테고리 판정 키워드 + 최후 기본 금액(원).
 # 금액은 baseline 에도 이력에도 없는 카테고리(경조사·여행·업무·학업 등)에만 쓰인다.
 EVENT_RULES: list[tuple[str, list[str], int]] = [
@@ -62,8 +68,9 @@ def estimate_event_cost(title: str, txns: list[Transaction], use_llm: bool = Fal
             method="rule", llm_raw=None,
         )
     if "와드" in compact:
+        # 미용실이다. 금액이 거의 고정이라 low=high 로 둔다.
         return EstimateResult(
-            title=title, category="업무·학업", amount=40_000, low=40_000, high=40_000,
+            title=title, category="자기관리", amount=40_000, low=40_000, high=40_000,
             confidence=1.0, basis="사용자가 확인한 금액을 반영했어요.",
             method="rule", llm_raw=None,
         )
@@ -128,7 +135,6 @@ def _llm_estimate(title: str) -> dict | None:
     """세상 지식이 필요한 제목만 LLM에. 반환 {category, amount}."""
     from ..llm.complete import complete_json
     from ..security import safe_text
-    from .categorize import CATEGORIES
 
     prompt = (
         "한국 대학생 기준으로 아래 일정에 보통 얼마를 쓰는지 추정해줘.\n"

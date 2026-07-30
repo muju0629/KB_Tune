@@ -258,14 +258,6 @@ class PlanResult(BaseModel):
 
 # ---------- AI 기능 1: 일정 → 예상 지출 추정 ----------
 
-class EstimateRequest(BaseModel):
-    title: Annotated[str, Field(min_length=1, max_length=80)]
-    day: Day | None = None
-    # 공개 통계 기준값에 연령 배수를 적용할 때만 쓴다. 선택 입력이라 비어 오는 게 정상이고,
-    # 저장하지 않는다. 나이 자체보다 좁은 정보를 받으려고 만 나이 대신 10년 단위로 받는다.
-    age_bucket: Literal["20", "30", "40", "50"] | None = None
-
-
 class EstimateResult(BaseModel):
     title: str
     category: str
@@ -297,78 +289,3 @@ class SearchCostResult(BaseModel):
     basis: str               # 사용자에게 보여줄 근거 한 줄
     sources: list[str] = Field(default_factory=list)   # 참고한 문서 제목·주소
     method: str              # web | unavailable
-
-
-# ---------- AI 기능 2: 캡처 이미지 → 거래 추출 ----------
-
-class ExtractRequest(BaseModel):
-    # 상한은 본문 크기 제한(config.MAX_BODY_BYTES)의 2차 방어선이다.
-    # Content-Length 없이 오는 chunked 요청은 미들웨어가 못 막으므로 여기서 잘린다.
-    text: Annotated[str, Field(max_length=20_000)] | None = None          # iOS Vision(온디바이스 OCR) 결과
-    # 하위 호환 스키마로만 남아 있고 엔드포인트는 항상 422로 거절한다.
-    image_base64: Annotated[str, Field(max_length=1_400_000)] | None = None
-
-
-class ExtractedTransaction(BaseModel):
-    merchant: str
-    amount: int
-    category: str
-    confidence: float
-
-
-class ExtractResult(BaseModel):
-    transactions: list[ExtractedTransaction]
-    total: int
-    method: str          # ocr-rule | on-device-required | none
-    warnings: list[str] = Field(default_factory=list)
-
-
-# ---------- AI 기능 3: 거래 → 카테고리 자동 분류 ----------
-
-class CategorizeRequest(BaseModel):
-    # 개수 상한이 없으면 한 번의 요청으로 LLM 프롬프트를 무한정 키울 수 있다.
-    merchants: Annotated[list[ShortText], Field(max_length=100)]
-
-
-class CategoryGuess(BaseModel):
-    merchant: str
-    category: str
-    confidence: float
-    method: str          # rule | llm | fallback
-
-
-class CategorizeResult(BaseModel):
-    results: list[CategoryGuess]
-    rule_hit_rate: float
-
-
-# ---------- AI 기능 4: 다음 달 일정·지출 예측 ----------
-
-class RecurringPattern(BaseModel):
-    category: str
-    merchant: str | None
-    cadence: str         # monthly | biweekly | weekly
-    typical_day: int
-    avg_amount: int
-    occurrences: int
-    confidence: float
-
-
-class PredictedEvent(BaseModel):
-    title: str
-    category: str
-    day: int
-    amount: int
-    confidence: float
-    reason: str
-
-
-class ForecastResult(BaseModel):
-    month_label: str
-    predicted_events: list[PredictedEvent]
-    predicted_total: int
-    by_category: dict[str, int]
-    disposable_month: int
-    over_budget_by: int          # 0이면 예산 내
-    verdict: str                 # 사용자에게 보여줄 한 줄
-    patterns: list[RecurringPattern]

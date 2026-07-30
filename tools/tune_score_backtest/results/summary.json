@@ -1,0 +1,21 @@
+{
+  "data": "card-only synthetic",
+  "seed": 20260730,
+  "users": 600,
+  "rolling_folds": 10,
+  "prediction_rows": 6000,
+  "brier": 0.17299929889252144,
+  "ece_10_bin": 0.051317421002410796,
+  "classification": {
+    "tp": 3194,
+    "tn": 1223,
+    "fp": 774,
+    "fn": 809,
+    "accuracy": 0.7361666666666666,
+    "alert_precision": 0.4784162771514985,
+    "alerts_per_user_month": 0.6061666666666666
+  },
+  "protected_spend_violations": 0,
+  "unapproved_executions": 0,
+  "unsupported_score_evidence": 0
+}
