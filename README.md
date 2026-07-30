@@ -648,13 +648,13 @@ KB Tune은 한 모델이 금액·날짜·위험·개인화를 전부 맡지 않�
 
 $$
 \hat y_{raw}(x)
-= \hat p(\text{발생}\mid x)\;\operatorname{expm1}\!\left(\hat m_{\log}(x)\right)
+= \hat p(\text{발생}\mid x)\;\mathrm{expm1}\!\left(\hat m_{\log}(x)\right)
 $$
 
 학습에 쓰지 않은 보정 사용자 집합 $\mathcal C$에서 총액 비율을 구해 구조적 과소편향을 줄입니다.
 
 $$
-c=\operatorname{clip}\left(
+c=\mathrm{clip}\left(
 \frac{\sum_{i\in\mathcal C} y_i}
      {\sum_{i\in\mathcal C}\hat y_{raw,i}},
 0.75,1.35\right),
@@ -744,8 +744,8 @@ known-future feature로 추가하고 제목 원문은 모델 입력으로 쓰지
 현재 Swift `SpendModel`은 사용자×카테고리마다 원거래 대신 충분통계량만 저장합니다.
 
 $$
-N(\Delta)\sim\operatorname{Poisson}(\lambda\Delta),
-\quad \lambda\sim\operatorname{Gamma}(a,b)
+N(\Delta)\sim\mathrm{Poisson}(\lambda\Delta),
+\quad \lambda\sim\mathrm{Gamma}(a,b)
 $$
 
 $$
@@ -754,7 +754,7 @@ $$
 $$
 
 $$
-T\sim\operatorname{Weibull}(k,\eta),
+T\sim\mathrm{Weibull}(k,\eta),
 \quad \eta=\frac{1}{\lambda\Gamma(1+1/k)}
 $$
 
@@ -776,11 +776,11 @@ Tune 점수는 모델 정확도 점수가 아니라, 현재 계획이 목표·�
 코드의 v0 가중치는 다음과 같습니다.
 
 $$
-\text{Tune}=\operatorname{round}(0.55G+0.30L+0.15V)
+\text{Tune}=\mathrm{round}(0.55G+0.30L+0.15V)
 $$
 
 $$
-G=100\cdot\operatorname{clip}(p_{goal},0,1)
+G=100\cdot\mathrm{clip}(p_{goal},0,1)
 $$
 
 신뢰도가 낮으면 같은 잔액에도 더 큰 안전 버퍼를 요구합니다.
@@ -793,7 +793,7 @@ B_{eff}=B_{base}\times
 1.00,& \text{높음}
 \end{cases},
 \qquad
-L=100\cdot\operatorname{clip}\left(\frac{\text{예상 잔액}}{B_{eff}},0,1\right)
+L=100\cdot\mathrm{clip}\left(\frac{\text{예상 잔액}}{B_{eff}},0,1\right)
 $$
 
 필요 조정액 $A=\max(0,B_{eff}-\text{예상 잔액})$ 중 유연 소비로 해결하지 못하는 금액을
@@ -802,7 +802,7 @@ $S=\max(0,A-\text{유연 소비})$라고 두면 보호 소비 보존도는 다�
 $$
 V=\begin{cases}
 100,& \text{보호 소비가 없거나 }S=0\\
-100\cdot\operatorname{clip}\left(1-\frac{S}{\text{보호 소비}},0,1\right),& \text{그 외}
+100\cdot\mathrm{clip}\left(1-\frac{S}{\text{보호 소비}},0,1\right),& \text{그 외}
 \end{cases}
 $$
 
