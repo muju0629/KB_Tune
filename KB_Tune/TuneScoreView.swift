@@ -48,6 +48,11 @@ struct TuneScoreSheet: View {
             }
             Text("약속과 저축 목표를 함께 지킬 수 있는 정도예요.")
                 .font(.kb(14, .medium)).foregroundStyle(KB.ink)
+            if let forecast = model.weeklyForecast {
+                Text("예측 \(forecast.modelVersion) · 피처 \(forecast.featureVersion)")
+                    .font(.kb(10.5)).foregroundStyle(KB.muted)
+                    .accessibilityIdentifier("tune-model-version")
+            }
         }
         .padding(18)
         .background(KB.yellowSoft, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -172,6 +177,11 @@ struct TuneScoreSheet: View {
                                 Text("\(entry.scoreBefore) → \(after)점")
                                     .money(11.5).foregroundStyle(KB.ink)
                             }
+                        }
+                        if let version = entry.modelVersion {
+                            Text("모델 \(version)")
+                                .font(.kb(9.5)).foregroundStyle(KB.muted)
+                                .padding(.leading, 28)
                         }
                     }
                 }

@@ -20,18 +20,14 @@ struct SpendRecord: Codable, Equatable {
     let amount: Int
     /// 캘린더에 일정으로 잡히는 지출인지(false = 장보기·구독처럼 일정 없이 나가는 돈)
     let onCalendar: Bool
-    /// 하루 마감에서 학습한 일정의 식별자. 같은 결제를 두 번 학습하지 않게 한다.
-    let sourceEventID: UUID?
-
     init(title: String, category: String, month: Int, day: Int, amount: Int,
-         onCalendar: Bool, sourceEventID: UUID? = nil) {
+         onCalendar: Bool) {
         self.title = title
         self.category = category
         self.month = month
         self.day = day
         self.amount = amount
         self.onCalendar = onCalendar
-        self.sourceEventID = sourceEventID
     }
 
     var dayOfYear: Int { SpendHistory.dayOfYear(month: month, day: day) }
@@ -133,16 +129,9 @@ enum SpendHistory {
         SpendRecord(title: "미용실", category: "자기관리", month: 6, day: 27, amount: 27_000, onCalendar: true),
     ]
 
-    /// 하루 마감에서 사용자가 현금 결제로 확인한 개인 이력.
-    /// 앱의 기존 호출부를 바꾸지 않고도 일정 추가·챗봇·반복 예측이 같은 최신 표본을 보도록
-    /// 메모리의 단일 원천으로 둔다. 실제 영속 원천은 보호된 LocalStore의 PersistedState다.
-    private(set) static var learnedRecords: [SpendRecord] = []
-
-    static var allRecords: [SpendRecord] { records + learnedRecords }
-
-    static func replaceLearnedRecords(_ records: [SpendRecord]) {
-        learnedRecords = records.filter(isValid)
-    }
+    /// 현재 데모에서는 카드 거래만 예측 이력으로 사용한다.
+    /// 실연동 시 KB Pay가 제공한 카드 거래를 이 배열과 같은 계약으로 주입한다.
+    static var allRecords: [SpendRecord] { records }
 
     /// 패턴별 아이콘
     private static let symbols: [String: String] = [

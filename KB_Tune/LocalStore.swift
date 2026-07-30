@@ -31,10 +31,7 @@ struct PersistedState: Codable {
     var hobbies: [String]
 
     var calendarDays: [PlanDay]
-    /// 하루 마감에서 현금 결제로 확인한 개인 표본. state.json과 같은 보호 등급으로 저장한다.
-    var learnedSpendRecords: [SpendRecord]
     var dismissedPredictions: [String]
-    var dailyCloseDismissed: Bool
     var tuneAuditLog: [TuneAuditEntry] = []
     var rejectedAdjustmentIDs: [String] = []
 }
@@ -57,14 +54,30 @@ extension PersistedState {
         direction = try c.decodeIfPresent(SpendDirection.self, forKey: .direction) ?? .maintain
         hobbies = try c.decodeIfPresent([String].self, forKey: .hobbies) ?? []
         calendarDays = try c.decodeIfPresent([PlanDay].self, forKey: .calendarDays) ?? []
-        // v1 저장본에는 이 키가 없다. 기존 일정은 살리고 학습 이력만 빈 배열로 시작한다.
-        learnedSpendRecords = try c.decodeIfPresent([SpendRecord].self,
-                                                    forKey: .learnedSpendRecords) ?? []
+        // 구버전의 현금 결제 학습값은 읽어서 버린다. 카드 거래만 쓰는 현재 계약에
+        // 섞지 않으면서도 나머지 일정·설정은 그대로 복원한다.
+        _ = try c.decodeIfPresent([SpendRecord].self, forKey: .learnedSpendRecords)
         dismissedPredictions = try c.decodeIfPresent([String].self, forKey: .dismissedPredictions) ?? []
-        dailyCloseDismissed = try c.decodeIfPresent(Bool.self, forKey: .dailyCloseDismissed) ?? false
+        _ = try c.decodeIfPresent(Bool.self, forKey: .dailyCloseDismissed)
         tuneAuditLog = try c.decodeIfPresent([TuneAuditEntry].self, forKey: .tuneAuditLog) ?? []
         rejectedAdjustmentIDs = try c.decodeIfPresent([String].self,
                                                        forKey: .rejectedAdjustmentIDs) ?? []
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(version, forKey: .version)
+        try c.encode(hasOnboarded, forKey: .hasOnboarded)
+        try c.encode(usesDemoData, forKey: .usesDemoData)
+        try c.encode(kbPayLinked, forKey: .kbPayLinked)
+        try c.encode(monthlyIncome, forKey: .monthlyIncome)
+        try c.encode(savingsGoal, forKey: .savingsGoal)
+        try c.encode(direction, forKey: .direction)
+        try c.encode(hobbies, forKey: .hobbies)
+        try c.encode(calendarDays, forKey: .calendarDays)
+        try c.encode(dismissedPredictions, forKey: .dismissedPredictions)
+        try c.encode(tuneAuditLog, forKey: .tuneAuditLog)
+        try c.encode(rejectedAdjustmentIDs, forKey: .rejectedAdjustmentIDs)
     }
 }
 

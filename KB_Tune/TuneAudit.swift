@@ -22,4 +22,6 @@ struct TuneAuditEntry: Codable, Equatable, Identifiable {
     let scoreAfter: Int?
     let reasonCodes: [String]
     let evidenceIDs: [String]
+    var modelVersion: String? = nil
+    var featureVersion: String? = nil
 }

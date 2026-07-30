@@ -504,14 +504,47 @@ final class AppModel: ObservableObject {
 
     // MARK: 과거 이력 기반 예상 소비
 
-    /// 사용자가 하루 마감에서 실제 결제로 확인한 개인 표본.
-    /// 일정 제목·금액은 외부 AI가 아니라 보호된 기기 저장소에만 남는다.
-    @Published private(set) var learnedSpendRecords: [SpendRecord] = []
+    /// 검증된 전역 모델을 기기 안에서 실행한 이번 주 예측.
+    /// 필수 동의로 받은 구조화 일정만 사용한다. 제목 원문은 모델 피처가 아니다.
+    var weeklyForecast: WeeklyForecastResult? {
+        ForecastEngine.weekly(
+            records: SpendHistory.records,
+            calendarDays: calendarDays,
+            startDay: currentWeekRange.lowerBound,
+            useCalendar: ConsentStore.granted(.essential)
+        )
+    }
+
+    /// q75 안전액 가운데 캘린더 예약으로 이미 잡힌 금액을 제외한 추가 방어액.
+    var forecastSafetyReserve: Int {
+        max(0, (weeklyForecast?.safeTotal ?? plannedSpendTotal) - plannedSpendTotal)
+    }
 
     /// 이번 주 남은 기간에 주기가 돌아오는, 캘린더에 아직 없는 지출.
     /// 확정이 아니므로 예산 계산에는 넣지 않고 "반영하기"를 눌러야 일정이 된다.
     var upcomingSpends: [UpcomingSpend] {
         let titles = Set(week.flatMap(\.events).map(\.title))
+        if let forecast = weeklyForecast {
+            let byCategory = Dictionary(uniqueKeysWithValues:
+                forecast.categories.map { ($0.category, $0) })
+            return SpendHistory.patterns.compactMap { pattern -> UpcomingSpend? in
+                guard !pattern.onCalendar, !titles.contains(pattern.key),
+                      let item = byCategory[pattern.category],
+                      item.occurrenceProbability >= 0.5,
+                      item.expectedDay >= todayDayNumber,
+                      item.expectedDay <= currentWeekRange.upperBound else { return nil }
+                let conditional = item.occurrenceProbability > 0
+                    ? Double(item.centralAmount) / item.occurrenceProbability
+                    : Double(pattern.avgAmount)
+                let amount = max(1_000, Int((conditional / 1_000).rounded()) * 1_000)
+                return UpcomingSpend(
+                    pattern: pattern, expectedDay: item.expectedDay, amount: amount,
+                    reason: "\(forecast.modelVersion) · 발생확률 \(Int((item.occurrenceProbability * 100).rounded()))% · 편향 보정 중앙값"
+                )
+            }
+            .filter { !dismissedPredictions.contains(Self.predictionOccurrenceKey($0)) }
+            .sorted { $0.expectedDay < $1.expectedDay }
+        }
         return SpendHistory.upcoming(from: todayDayNumber,
                                      to: currentWeekRange.upperBound,
                                      excludingTitles: titles)
@@ -552,51 +585,9 @@ final class AppModel: ObservableObject {
     var plannedSpendLow: Int { weekSpendItems.reduce(0) { $0 + $1.amountLow } }
     var plannedSpendHigh: Int { weekSpendItems.reduce(0) { $0 + $1.amountHigh } }
 
-    // MARK: 하루 마감 (기획 보고서 8.2)
-    //
-    // 실서비스에선 KB Pay 결제 기록으로 예약 지출의 실제 결제 여부를 자동으로 안다.
-    // 카드 기록이 붙은 지출은 물어볼 필요 없이 확정되고,
-    // '예정돼 있었는데 카드 기록이 없는' 지출만 남아 "현금으로 결제하셨나요?"라고 되묻는다.
-
-    @Published private(set) var dailyCloseDismissed = false
-
     /// Tune 판단과 승인·거절은 서버가 아니라 기기 안 감사 로그에만 남긴다.
     @Published private(set) var tuneAuditLog: [TuneAuditEntry] = []
     @Published private(set) var rejectedAdjustmentIDs: Set<String> = []
-
-    /// 카드 기록 없이 예정만 잡혀 있는 오늘 지출 — 현금 결제 여부를 되물어야 하는 항목.
-    var todayCloseItems: [DayEvent] {
-        guard let today = day(number: todayDayNumber) else { return [] }
-        return today.events.filter { $0.amount > 0 && $0.state == .reserved }
-    }
-
-    /// 확인할 게 있는 날에만 카드를 띄운다 — 무조건 알림 금지.
-    var shouldShowDailyClose: Bool { !dailyCloseDismissed && !todayCloseItems.isEmpty }
-
-    /// paidCash=true: 현금으로 결제했다고 확인 → 예약을 확정 지출로 학습한다.
-    /// paidCash=false: 아직 안 썼으니 예약 상태 그대로 두고 카드만 닫는다.
-    func resolveDailyClose(paidCash: Bool) {
-        if paidCash, let i = calendarDays.firstIndex(where: { $0.dayNumber == todayDayNumber }) {
-            for j in calendarDays[i].events.indices where calendarDays[i].events[j].state == .reserved {
-                let event = calendarDays[i].events[j]
-                calendarDays[i].events[j].state = .confirmed
-                guard event.amount > 0,
-                      !learnedSpendRecords.contains(where: { $0.sourceEventID == event.id }) else { continue }
-                learnedSpendRecords.append(SpendRecord(
-                    title: event.title,
-                    category: event.category,
-                    month: DemoClock.month(of: todayDayNumber),
-                    day: DemoClock.dayOfMonth(of: todayDayNumber),
-                    amount: event.amount,
-                    onCalendar: true,
-                    sourceEventID: event.id
-                ))
-            }
-            // EventEstimator·EventPhrase·반복 예측이 다음 호출부터 즉시 같은 표본을 사용한다.
-            SpendHistory.replaceLearnedRecords(learnedSpendRecords)
-        }
-        dailyCloseDismissed = true
-    }
 
     /// 이번 주 위험 일정 (예산 초과)
     var riskyDay: PlanDay? { week.first { $0.hasRisk } }
@@ -783,6 +774,16 @@ final class AppModel: ObservableObject {
             TuneEvidenceReference(id: "billing.carryover", source: .billing,
                                   label: "다음 달 할부 이월", amount: billing.carryover, day: nil),
         ]
+        if let forecast = weeklyForecast {
+            evidence += [
+                TuneEvidenceReference(id: "forecast.central.\(forecast.modelVersion)", source: .forecast,
+                                      label: "이번 주 예상 지출 · 보정 중앙값",
+                                      amount: forecast.centralTotal, day: nil),
+                TuneEvidenceReference(id: "forecast.safe.\(forecast.modelVersion)", source: .forecast,
+                                      label: "이번 주 안전 예상액 · q75",
+                                      amount: forecast.safeTotal, day: nil),
+            ]
+        }
         evidence += currentWeekEvents.map { day, event in
             TuneEvidenceReference(
                 id: "calendar.\(event.id.uuidString)",
@@ -794,7 +795,7 @@ final class AppModel: ObservableObject {
 
         return TuneScoreInput(
             goalProbability: Double(probability) / 100.0,
-            projectedBalance: thisWeekBudget?.carriesForward ?? 0,
+            projectedBalance: (thisWeekBudget?.carriesForward ?? 0) - forecastSafetyReserve,
             baseSafetyBuffer: max(50_000, BudgetEngine.fixed / 8),
             flexibleSpend: flexible,
             protectedSpend: protected,
@@ -848,7 +849,9 @@ final class AppModel: ObservableObject {
             candidateID: nil, label: "선제 위험 경보 확인",
             scoreBefore: alert.score, scoreAfter: nil,
             reasonCodes: alert.reasons.map(\.rawValue),
-            evidenceIDs: tuneScore.evidence.map(\.id)
+            evidenceIDs: tuneScore.evidence.map(\.id),
+            modelVersion: ForecastEngine.modelVersion,
+            featureVersion: ForecastEngine.featureVersion
         ))
     }
 
@@ -859,7 +862,9 @@ final class AppModel: ObservableObject {
             candidateID: candidate.id, label: candidate.title,
             scoreBefore: candidate.scoreBefore, scoreAfter: tuneScore.score,
             reasonCodes: [candidate.reason.rawValue],
-            evidenceIDs: tuneScore.evidence.map(\.id)
+            evidenceIDs: tuneScore.evidence.map(\.id),
+            modelVersion: ForecastEngine.modelVersion,
+            featureVersion: ForecastEngine.featureVersion
         ))
     }
 
@@ -870,7 +875,9 @@ final class AppModel: ObservableObject {
             candidateID: candidate.id, label: candidate.title,
             scoreBefore: candidate.scoreBefore, scoreAfter: nil,
             reasonCodes: [TuneAdjustmentReason.userRejected.rawValue],
-            evidenceIDs: tuneScore.evidence.map(\.id)
+            evidenceIDs: tuneScore.evidence.map(\.id),
+            modelVersion: ForecastEngine.modelVersion,
+            featureVersion: ForecastEngine.featureVersion
         ))
     }
 
@@ -953,12 +960,8 @@ final class AppModel: ObservableObject {
     private var saveBag: AnyCancellable?
 
     init() {
-        // 뷰의 기존 정적 추정 API도 이 AppModel의 보호 저장 이력을 보도록 맞춘다.
-        SpendHistory.replaceLearnedRecords([])
         if let saved = LocalStore.load() {
             apply(saved)
-        } else {
-            SpendHistory.replaceLearnedRecords(learnedSpendRecords)
         }
 
         // 어느 값이 바뀌든 한곳에서 저장한다. 바뀔 때마다 쓰면 타이핑 한 글자에도
@@ -986,9 +989,7 @@ final class AppModel: ObservableObject {
             direction: direction,
             hobbies: Array(hobbies),
             calendarDays: calendarDays,
-            learnedSpendRecords: learnedSpendRecords,
             dismissedPredictions: Array(dismissedPredictions),
-            dailyCloseDismissed: dailyCloseDismissed,
             tuneAuditLog: tuneAuditLog,
             rejectedAdjustmentIDs: Array(rejectedAdjustmentIDs)
         ))
@@ -1013,10 +1014,7 @@ final class AppModel: ObservableObject {
         // isToday는 저장할 상태가 아니라 현재 시각에서 파생되는 표시다.
         // 전날 저장본을 그대로 복원하면 어제가 계속 오늘로 남는다.
         calendarDays = Self.markingToday(s.calendarDays, today: todayDayNumber)
-        SpendHistory.replaceLearnedRecords(s.learnedSpendRecords)
-        learnedSpendRecords = SpendHistory.learnedRecords
         dismissedPredictions = Set(s.dismissedPredictions)
-        dailyCloseDismissed = s.dailyCloseDismissed
         tuneAuditLog = s.tuneAuditLog
         rejectedAdjustmentIDs = Set(s.rejectedAdjustmentIDs)
     }
@@ -1032,10 +1030,7 @@ final class AppModel: ObservableObject {
         direction = .maintain
         hobbies = []
         calendarDays = Self.makeCalendar()
-        learnedSpendRecords = []
-        SpendHistory.replaceLearnedRecords([])
         dismissedPredictions = []
-        dailyCloseDismissed = false
         tuneAuditLog = []
         rejectedAdjustmentIDs = []
     }
