@@ -16,6 +16,8 @@
 
 <img src="docs/header.png" width="820" alt="KB Tune — 가계부는 이미 쓴 돈만 보여줍니다. KB Tune은 앞으로 쓸 돈을 미리 알려드립니다." />
 
+<sub><b>한국어</b> · <a href="README.en.md">English</a></sub>
+
 </div>
 
 KB Tune은 카드 거래와 일정을 함께 봅니다. 다음 7일에 얼마를 쓸지, 지출이 생길지,
