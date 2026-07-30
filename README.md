@@ -2,26 +2,85 @@
     
 # KB Tune
 
-### AI, 가계부, 캘린더 기능을 한번에
+### 다음 7일의 지출과 목표 위험을 먼저 보여주는 온디바이스 금융 에이전트
 <br/>
 
 <img src="https://img.shields.io/badge/KB_AI_Challenge-2026-FFCC00?style=flat-square&labelColor=25241F" alt="KB AI Challenge 2026" />
 <img src="https://img.shields.io/badge/iOS-26.5-FFCC00?style=flat-square&labelColor=25241F&logo=apple&logoColor=white" alt="iOS 26.5" />
 <img src="https://img.shields.io/badge/Swift-SwiftUI-FFCC00?style=flat-square&labelColor=25241F&logo=swift&logoColor=white" alt="Swift SwiftUI" />
-<img src="https://img.shields.io/badge/EventKit-Calendar-FFCC00?style=flat-square&labelColor=25241F&logo=apple&logoColor=white" alt="EventKit" />
-<img src="https://img.shields.io/badge/On--Device-Vision_Speech_NL-FFCC00?style=flat-square&labelColor=25241F&logo=apple&logoColor=white" alt="On-device Vision, Speech, NaturalLanguage" />
-<img src="https://img.shields.io/badge/Swift_Testing-XCTest-FFCC00?style=flat-square&labelColor=25241F&logo=swift&logoColor=white" alt="Swift Testing" />
+<img src="https://img.shields.io/badge/Forecast-On--Device-FFCC00?style=flat-square&labelColor=25241F&logo=apple&logoColor=white" alt="On-device forecast" />
 <img src="https://img.shields.io/badge/FastAPI-Python-FFCC00?style=flat-square&labelColor=25241F&logo=fastapi&logoColor=white" alt="FastAPI Python" />
-<img src="https://img.shields.io/badge/LLM-OpenAI-FFCC00?style=flat-square&labelColor=25241F&logo=openai&logoColor=white" alt="OpenAI" />
-<img src="https://img.shields.io/badge/Python-3.12-FFCC00?style=flat-square&labelColor=25241F&logo=python&logoColor=white" alt="Python 3.12" />
-<img src="https://img.shields.io/badge/Pydantic-v2-FFCC00?style=flat-square&labelColor=25241F&logo=pydantic&logoColor=white" alt="Pydantic v2" />
-<img src="https://img.shields.io/badge/Google_Cloud-Run-FFCC00?style=flat-square&labelColor=25241F&logo=googlecloud&logoColor=white" alt="Google Cloud Run" />
-<img src="https://img.shields.io/badge/Firestore-read__only-FFCC00?style=flat-square&labelColor=25241F&logo=firebase&logoColor=white" alt="Firestore read-only" />
-<img src="https://img.shields.io/badge/Docker-Cloud_Build-FFCC00?style=flat-square&labelColor=25241F&logo=docker&logoColor=white" alt="Docker" />
+<img src="https://img.shields.io/badge/Test-Python_Swift_XCUITest-FFCC00?style=flat-square&labelColor=25241F" alt="Python, Swift and XCUITest" />
 
 <br/><br/>
 
 <img src="docs/header.png" width="820" alt="KB Tune — 가계부는 이미 쓴 돈만 보여줍니다. KB Tune은 앞으로 쓸 돈을 미리 알려드립니다." />
+
+</div>
+
+카드 거래와 일정을 함께 분석해 **금액·발생 여부·발생일**을 예측하고, 저축 목표가
+위태로워지기 전에 보호 소비를 지키는 조정안을 제안합니다. 소비 예측과 개인화 상태는 기기 안에서
+계산하며, 일정이나 적금은 사용자의 승인 없이 바꾸지 않습니다.
+
+## 60초 요약
+
+| 심사 질문 | KB Tune의 답 |
+|---|---|
+| 어떤 문제를 푸나요? | 가계부가 설명하지 못하는 **앞으로 쓸 돈과 목표 위험**을 다음 7일 단위로 보여줍니다. |
+| 무엇이 다른가요? | 거래만 보는 대신 **캘린더의 예정 일정**을 함께 보고, 사용자가 지정한 보호 소비를 조정 대상에서 제외합니다. |
+| AI가 무엇을 결정하나요? | 금액·발생확률·예상일과 안전 예상액을 계산합니다. 실제 변경은 하지 않고 **추천·제외 근거와 선택지**를 제시합니다. |
+| 어떻게 검증했나요? | 역할별 모델을 동일 조건에서 비교하고, 학습에 쓰지 않은 사용자·시드·기간으로 홀드아웃 평가했습니다. 실패한 개인화 가설도 공개합니다. |
+| 어디까지 구현됐나요? | 보정 LightGBM·q75·Hazard 온디바이스 추론, Tune 점수, 보호 제약, 선제 경보, 승인, 감사 로그까지 앱에 연결했습니다. |
+
+### 한 번에 보는 작동 방식
+
+```mermaid
+flowchart LR
+    A["카드 거래 · 동의한 일정"] --> B["금액 · 발생 여부 · 발생일 예측"]
+    B --> C["Tune 점수 · 안전 버퍼"]
+    C --> D["추천안과 제외 근거"]
+    D --> E{"사용자 승인"}
+    E -->|승인| F["계획 재계산 · 감사 로그"]
+    E -->|거절| G["기존 계획 유지"]
+```
+
+### 핵심 검증 결과
+
+| 제품 판단 | 검증 결과 | 제품에서의 역할 |
+|---|---:|---|
+| 다음 주 **중앙 금액** | 보정 LightGBM WAPE **0.4151**, 편향 **−2.7%** | 화면의 예상 지출 |
+| 부족하지 않을 **안전 금액** | q75가 과소예측 사용자 비율 **54.5% → 29.7%** | 안전 버퍼와 위험 판단 |
+| 다음 7일 **발생 여부** | Hazard + 캘린더 Brier **0.1089** | 선제 지출 알림 |
+| 일정형 소비의 **발생일** | 날짜 MAE **0.69일 → 0.44일** | 예상일과 주기 설명 |
+
+> [!IMPORTANT]
+> 위 수치는 합성 데이터의 신규 홀드아웃 상대 비교이며 실제 고객 성능이나 행동 개선 효과가 아닙니다.
+> 실험별 평가 집합이 다르므로 서로 다른 행의 수치를 직접 순위 비교하지 않습니다.
+> 누적 Bayesian 개인화는 최종 홀드아웃에서 우위를 입증하지 못해 사용자 비노출 shadow mode로 유지합니다.
+
+### 구현과 검증 상태
+
+| 상태 | 범위 | 의미 |
+|:--:|---|---|
+| ✅ 앱 통합 | 보정 LightGBM·q75·Hazard, Tune 점수, 보호 제약, 승인, 감사 로그 | 데모 가능한 실제 앱 로직 |
+| 🧪 홀드아웃 통과 | 금액·안전 금액·발생확률·발생일 | 합성 데이터 안에서 후보 선택 근거 확보 |
+| 🔒 Shadow mode | 사용자별 Bayesian 잔차 개인화 | 실제 파일럿 전에는 예측값에 미반영 |
+| ⏳ 다음 검증 | 20~50명, 12주 시간 순 파일럿 | 실제 고객 성능·보정·개인화 승격 판단 |
+
+### 3분 확인
+
+```bash
+open KB_Tune.xcodeproj
+```
+
+앱에서 `주간 → Tune 점수 → 조정안 비교 → 승인 → 판단 기록` 순서로 보면 핵심 루프를
+한 번에 확인할 수 있습니다. 키와 네트워크 없이 실행되며, 전체 빌드·테스트 명령은
+[실행](#run), 실험 재현 경로와 실패 사례는
+[소비 예측 실험 종합 정리](docs/tune-experiments-2026-07-30.md)에 있습니다.
+
+### 주요 화면
+
+<div align="center">
 
 <img src="docs/appstore/01-intro.png" width="190" alt="가계부, 캘린더, AI가 만나다" />
 <img src="docs/appstore/02-chat.png" width="190" alt="대화로 일정 추가" />
@@ -30,22 +89,7 @@
 
 <sub>이번 주 예산 · 대화로 일정 추가 · 예상 지출 · 계산 근거</sub>
 
-<br/><br/>
-
-<img src="docs/appstore/05-ask.png" width="190" alt="언제든 물어보기" />
-<img src="docs/appstore/06-analysis.png" width="190" alt="소비 분석" />
-<img src="docs/appstore/07-products.png" width="190" alt="카드·적금" />
-<img src="docs/appstore/08-privacy.png" width="190" alt="안 나가는 것" />
-
-<sub>언제든 물어보기 · 소비 분석 · 카드·적금 · 안 나가는 것</sub>
-
 </div>
-
-<br/>
-
-일정에 "카페"라고만 적어도 금액이 채워져요. 예전에 카페에서 쓰신 돈에서 가져오거든요.
-<br/>그 자리에서 이번 주에 더 써도 되는 돈이 다시 계산돼요. 저축 목표와 지난주에 남긴 돈까지 넣어서요.
-<br/>목표가 위태로워 보이면 미리 말씀드려요. 뭘 미루면 되는지까지요.
 
 <br/>
 
