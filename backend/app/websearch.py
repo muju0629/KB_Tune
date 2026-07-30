@@ -39,11 +39,16 @@ def enabled() -> bool:
 
 
 def responses_call(query: str, instructions: str | None = None,
-                   timeout: float = _TIMEOUT) -> dict[str, Any] | None:
+                   timeout: float = _TIMEOUT,
+                   text_format: dict[str, Any] | None = None) -> dict[str, Any] | None:
     """OpenAI Responses API + web_search 를 부르고 원본 응답을 돌려준다. 실패하면 None.
 
     금액 찾기(`llm/search.py`)도 같은 API 를 같은 도구로 부른다. 호출과 응답 파싱을
     두 벌 두면 한쪽만 고치게 되므로 여기 한 곳에 둔다 — 갈리는 건 지시문과 대기 시간뿐이다.
+
+    `text_format` 을 주면 그 형식으로만 답하게 강제한다(구조화 출력). JSON 을 받아야 하는
+    쪽은 이걸 쓴다 — 프롬프트로 "JSON만 출력" 이라고 부탁하면 모델이 설명문을 앞에 붙이거나
+    숫자에 콤마를 넣어서 파싱이 조용히 실패한다. 검색 도구와 같이 써도 인용은 그대로 온다.
     """
     payload: dict[str, Any] = {
         "model": config.OPENAI_MODEL,
@@ -52,6 +57,8 @@ def responses_call(query: str, instructions: str | None = None,
     }
     if instructions:
         payload["instructions"] = instructions
+    if text_format:
+        payload["text"] = {"format": text_format}
     try:
         r = httpx.post(config.OPENAI_BASE_URL.rstrip("/") + "/responses",
                        headers={"Authorization": f"Bearer {config.openai_key()}"},
