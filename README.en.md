@@ -773,7 +773,7 @@ choice rests on [quantile regression](#ref-quantile-regression), which estimates
 quantile rather than a mean.
 
 $$
-\rho_\tau(u)=u\left(\tau-\mathbf 1[u<0]\right),
+\rho_\tau(u)=u\left(\tau-\mathbf 1\lbrack u\lt 0\rbrack\right),
 \qquad
 \hat q_\tau(x)=\arg\min_q\sum_i\rho_\tau(y_i-q(x_i))
 $$
@@ -806,7 +806,7 @@ Daily hazards convert to a weekly occurrence probability and a date probability 
 $$
 P(T\le6)=1-\prod_{d=0}^{6}(1-h_d),
 \qquad
-P(T=d)=\left[\prod_{j<d}(1-h_j)\right]h_d
+P(T=d)=\left\lbrack\prod_{j\lt d}(1-h_j)\right\rbrack h_d
 $$
 
 The expected payment date is the $d$ maximising $P(T=d)$. The cycle is the interval from the last
@@ -970,7 +970,7 @@ month end.
 $$
 \sigma^2=
 \sum_j a_j^2\left(e^{s^2}-1\right)
-+E[X]^2\left(t e^{s^2}+t^2CV_\lambda^2\right)
++E\lbrack X\rbrack^2\left(t e^{s^2}+t^2CV_\lambda^2\right)
 $$
 
 Current values are $s=0.40$, an off-calendar rate of 1 event/day, and $CV_\lambda=1.0$.
