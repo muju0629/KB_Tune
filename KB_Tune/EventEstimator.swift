@@ -141,14 +141,28 @@ enum EventEstimator {
             break
         }
 
-        // 규칙의 고정값보다 기기 안의 개인 결제 이력을 우선한다. 표본이 한 건뿐이면
-        // 우연일 수 있어 학습값으로 쓰지 않고, 최소 2건부터 중앙값을 대표값으로 삼는다.
+        // 그 카테고리 결제가 한 건이라도 있으면 예측 모델에 맡긴다 — 모델은 기록을 피처로
+        // 받으므로 기록이 있을 때만 그 사람의 값이 된다. 기록이 없으면 인구 평균으로
+        // 수렴하니 아래 공개 통계(BaselinePrices)가 더 정직하다.
+        if source.contains(where: { $0.category == category }),
+           let m = ForecastEngine.eventAmount(category: category, records: source,
+                                              on: DemoClock.today) {
+            return EstimateResponse(
+                title: title, category: category, amount: m.amount,
+                low: m.low, high: m.high, confidence: 0.75,
+                basis: "예측 모델이 기기 안 \(category) 결제 기록으로 추정한 금액이에요. 보통 \(formatWon(m.low))~\(formatWon(m.high)) 사이로 봤어요.",
+                method: "forecast"
+            )
+        }
+
+        // 모델이 모르는 카테고리는 개인 결제 이력으로 — 표본이 한 건뿐이면 우연일 수 있어
+        // 최소 2건부터 중앙값을 대표값으로 삼는다.
         if let personal = SpendHistory.representative(for: category, in: source) {
             let confidence = min(0.92, 0.55 + Double(personal.sampleCount) * 0.07)
             return EstimateResponse(
                 title: title, category: category, amount: personal.amount,
                 low: personal.low, high: personal.high, confidence: confidence,
-                basis: "기기에 저장된 개인 \(category) 결제 \(personal.sampleCount)건의 중앙값 \(formatWon(personal.amount))이에요. 관측 범위는 \(formatWon(personal.low))~\(formatWon(personal.high))이에요.",
+                basis: "기기에 저장된 \(category) 결제 \(personal.sampleCount)건으로 추정한 금액이에요. 지금까지 \(formatWon(personal.low))~\(formatWon(personal.high)) 사이로 쓰셨어요.",
                 method: "history"
             )
         }

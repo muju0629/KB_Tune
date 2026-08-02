@@ -32,6 +32,8 @@ final class KB_TuneUITests: XCTestCase {
         let app = launchMain(state: "zero")
 
         XCTAssertTrue(app.staticTexts["이번 주 추가 지출 여유가 없어요"].waitForExistence(timeout: 5))
+        // 주간 합계는 타임라인 아래 한 줄에만 있다 — 히어로에서 지웠으니 여기서 사라지면 안 된다.
+        XCTAssertTrue(app.staticTexts["이번 주 합계"].exists)
         XCTAssertTrue(app.buttons["tune-score-card"].exists)
         XCTAssertTrue(app.buttons["add-event-primary"].exists)
         XCTAssertFalse(app.staticTexts["결제 기록이 없는 지출이 있어요"].exists)
@@ -60,7 +62,6 @@ final class KB_TuneUITests: XCTestCase {
 
         XCTAssertTrue(app.descendants(matching: .any)["tune-adjustment-comparison"]
             .waitForExistence(timeout: 3))
-        XCTAssertTrue(app.descendants(matching: .any)["tune-model-version"].exists)
         XCTAssertTrue(app.staticTexts["추천"].exists)
         XCTAssertTrue(app.staticTexts["제외"].exists)
         XCTAssertTrue(app.staticTexts["적금 자동이체 취소"].exists)
@@ -118,9 +119,14 @@ final class KB_TuneUITests: XCTestCase {
     func testWeeklyPlanCalculationBasis() throws {
         let app = launchMain()
 
-        XCTAssertTrue(app.staticTexts["성제님의 이번 주 예상 지출은 95,000원"].waitForExistence(timeout: 5))
+        // 주간 합계는 타임라인 아래 한 줄, 계산 근거는 접혀 있다.
+        XCTAssertTrue(app.staticTexts["이번 주 합계"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["95,000원"].exists)
 
-        app.buttons["계산 기준 보기"].tap()
+        expandWeeklyCalculation(app)
+        let basis = app.buttons["계산 기준 보기"]
+        XCTAssertTrue(basis.waitForExistence(timeout: 3))
+        basis.tap()
         XCTAssertTrue(app.staticTexts["0원 계산 기준"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["할부로 다음 달에 넘어갈 돈"].exists)
         XCTAssertTrue(app.staticTexts["90,590원"].exists)
@@ -138,7 +144,7 @@ final class KB_TuneUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["881,000원"].waitForExistence(timeout: 3))
 
         app.buttons["plan-mode-week"].tap()
-        XCTAssertTrue(app.buttons["계산 기준 보기"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["이번 주 계산 보기"].waitForExistence(timeout: 3))
 
         app.buttons["내 계획과 설정"].tap()
         XCTAssertTrue(app.staticTexts["설정"].waitForExistence(timeout: 3))
@@ -171,10 +177,11 @@ final class KB_TuneUITests: XCTestCase {
         let app = launchMain()
         app.buttons["대화 탭"].tap()
 
-        let privateBadge = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label CONTAINS %@", "기기 안에서만"))
+        // 평상시에는 프라이버시 배지를 띄우지 않는다. 질문 원문이 실제로 나갈 때만
+        // '검색 사용 중'이 뜨므로, 이 흐름 내내 그 배지가 없어야 기기 안에서 끝난 것이다.
+        let searchBadge = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS %@", "검색 사용 중"))
             .firstMatch
-        XCTAssertTrue(privateBadge.waitForExistence(timeout: 3))
 
         let field = app.textFields["편하게 말해 주세요"]
         XCTAssertTrue(field.waitForExistence(timeout: 3))
@@ -184,12 +191,41 @@ final class KB_TuneUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["카페 약속"].waitForExistence(timeout: 6))
         XCTAssertTrue(app.staticTexts["8월 5일"].exists)
-        XCTAssertTrue(app.staticTexts["20,000원"].exists)
+        // 금액은 예측 모델이 정한다 — 값을 박아 두면 모델을 갱신할 때마다 깨진다.
+        // 여기서 지킬 것은 "기기 안에서 금액까지 채워서 제안한다"는 사실이다.
+        XCTAssertTrue(app.staticTexts.containing(
+            NSPredicate(format: "label MATCHES %@", "^[0-9,]+원$")
+        ).firstMatch.exists)
+        XCTAssertFalse(searchBadge.exists)
         let addButton = app.buttons["일정 추가"]
         XCTAssertTrue(addButton.exists)
         XCTAssertTrue(waitUntilHittable(addButton))
 
         try capture("chat-private-cafe-proposal", in: app)
+    }
+
+    /// 내 소비를 묻는 질문은 기기 안에서 답이 나와야 한다.
+    /// "이번 달 소비 어땠어?"에 "모르겠어요, 웹에서 찾아볼까요?"로 답하던 회귀를 막는다.
+    @MainActor
+    func testOwnSpendingQuestionIsAnsweredOnDevice() throws {
+        let app = launchMain()
+        app.buttons["대화 탭"].tap()
+
+        // 앞선 테스트가 켜 뒀을 수 있다. 기기 안 답변을 보는 테스트라 꺼진 상태로 맞춘다.
+        let toggle = app.buttons["external-ai-toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 3))
+        if toggle.label.contains("켜짐") { toggle.tap() }
+
+        let field = app.textFields["편하게 말해 주세요"]
+        XCTAssertTrue(field.waitForExistence(timeout: 3))
+        field.tap()
+        field.typeText("이번달 소비는 어땠어?")
+        app.buttons["질문 보내기"].tap()
+
+        XCTAssertTrue(app.staticTexts
+            .containing(NSPredicate(format: "label CONTAINS %@", "예상 지출은"))
+            .firstMatch.waitForExistence(timeout: 6))
+        XCTAssertFalse(app.buttons["검색해서 알아보기"].exists)
     }
 
     /// 금액이 안 적힌 캘린더 일정을 얼마로 잡았는지 설명하는지.
@@ -263,6 +299,8 @@ final class KB_TuneUITests: XCTestCase {
             app.buttons["tune-score-card"].tap()
             _ = app.buttons["apply-adjustment"].waitForExistence(timeout: 3)
             try capture("02-weekly-adjustment", in: app)
+            // 시트를 닫지 않으면 뒤이은 월간·청구 캡처가 전부 이 시트로 찍힌다.
+            dismissSheet(app)
         }
 
         // 월간
@@ -306,6 +344,9 @@ final class KB_TuneUITests: XCTestCase {
         }
 
         // ── 분석
+        // 키보드가 올라와 있으면 탭 바를 가려 탭이 먹지 않는다.
+        if app.keyboards.element.exists { app.scrollViews.firstMatch.tap() }
+        Thread.sleep(forTimeInterval: 1)
         app.buttons["분석 탭"].tap()
         Thread.sleep(forTimeInterval: 1.5)
         try capture("08-analysis", in: app)
@@ -315,24 +356,23 @@ final class KB_TuneUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 2)
         try capture("09-products-card", in: app)
 
-        // 적금 쪽 세그먼트가 있으면 그것도
-        let savings = app.buttons["적금"]
-        if savings.waitForExistence(timeout: 3) {
-            savings.tap()
-            Thread.sleep(forTimeInterval: 1.5)
-            try capture("10-products-savings", in: app)
-        }
+        // 적금 세그먼트 — 화면 라벨은 "적금·통장"이다. "적금"으로 찾으면 늘 못 찾아
+        // 10번 스크린샷이 조용히 비어 있었다.
+        let savings = app.buttons["적금·통장"]
+        XCTAssertTrue(savings.waitForExistence(timeout: 3), "적금 세그먼트를 못 찾았다")
+        savings.tap()
+        Thread.sleep(forTimeInterval: 1.5)
+        try capture("10-products-savings", in: app)
 
-        // ── 설정
+        // ── 설정. 주간 화면의 진입 버튼 라벨은 "내 계획과 설정"이다.
         app.buttons["주간 탭"].tap()
         Thread.sleep(forTimeInterval: 1)
-        let settings = app.buttons["설정"]
-        if settings.waitForExistence(timeout: 3) {
-            settings.tap()
-            Thread.sleep(forTimeInterval: 1.5)
-            try capture("11-settings", in: app)
-            dismissSheet(app)
-        }
+        let settings = app.buttons["내 계획과 설정"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 3), "설정 버튼을 못 찾았다")
+        settings.tap()
+        Thread.sleep(forTimeInterval: 1.5)
+        try capture("11-settings", in: app)
+        dismissSheet(app)
     }
 
     /// 온보딩은 첫 실행에서만 보이므로 따로 띄운다.
@@ -347,7 +387,43 @@ final class KB_TuneUITests: XCTestCase {
         app.launchArguments = ["-ui-test-offline", "-ui-test-date-22"]
         app.launch()
         Thread.sleep(forTimeInterval: 4)   // 스플래시
-        try capture("00-onboarding", in: app)
+        try capture("00-splash", in: app)
+
+        // 스플래시 → (동의) → 온보딩 질문 단계까지 실제로 넘겨 가며 찍는다.
+        // 예전에는 스플래시 한 장만 찍고 "온보딩"이라 이름 붙여 두었다.
+        app.buttons["시작하기"].tap()
+        Thread.sleep(forTimeInterval: 1.5)
+
+        // 동의는 항목당 한 화면 — 세 번 넘긴다.
+        for i in 1...3 where app.buttons["동의합니다"].waitForExistence(timeout: 3) {
+            try capture(String(format: "00b-consent-%d", i), in: app)
+            app.buttons["동의합니다"].tap()
+            Thread.sleep(forTimeInterval: 0.4)
+            let advance = app.buttons["동의하고 시작하기"].exists
+                ? app.buttons["동의하고 시작하기"]
+                : app.buttons["다음"]
+            guard advance.waitForExistence(timeout: 2) else { break }
+            advance.tap()
+            Thread.sleep(forTimeInterval: 1.2)
+        }
+
+        for (index, cta) in ["다음", "다음", "완료"].enumerated() {
+            try capture(String(format: "00c-onboarding-%d", index + 1), in: app)
+            let button = app.buttons[cta]
+            guard button.waitForExistence(timeout: 3), button.isEnabled else { break }
+            button.tap()
+            Thread.sleep(forTimeInterval: 1.2)
+        }
+    }
+
+    /// 주간 화면의 계산 근거는 접혀 있다 — 화면 밖이면 스크롤해서 펼친다.
+    @MainActor
+    private func expandWeeklyCalculation(_ app: XCUIApplication) {
+        let toggle = app.staticTexts["이번 주 계산 보기"]
+        for _ in 0..<4 where !toggle.isHittable {
+            app.scrollViews.firstMatch.swipeUp()
+        }
+        if toggle.isHittable { toggle.tap() }
     }
 
     @MainActor

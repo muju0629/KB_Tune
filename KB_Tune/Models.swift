@@ -539,7 +539,7 @@ final class AppModel: ObservableObject {
                 let amount = max(1_000, Int((conditional / 1_000).rounded()) * 1_000)
                 return UpcomingSpend(
                     pattern: pattern, expectedDay: item.expectedDay, amount: amount,
-                    reason: "\(forecast.modelVersion) · 발생확률 \(Int((item.occurrenceProbability * 100).rounded()))% · 편향 보정 중앙값"
+                    reason: "지난 기록을 보면 이번 주에 쓸 가능성이 \(Int((item.occurrenceProbability * 100).rounded()))%예요. 금액은 예측 모델의 추정값이에요."
                 )
             }
             .filter { !dismissedPredictions.contains(Self.predictionOccurrenceKey($0)) }
@@ -767,20 +767,21 @@ final class AppModel: ObservableObject {
         var evidence: [TuneEvidenceReference] = [
             TuneEvidenceReference(id: "goal.savings", source: .goal,
                                   label: "이번 달 적금 목표", amount: savingsGoal, day: nil),
+            // 확률은 금액이 아니라서 값을 라벨에 넣는다 — amount로 넣으면 화면에서 "97원"이 된다.
             TuneEvidenceReference(id: "forecast.goal-probability", source: .forecast,
-                                  label: "목표 달성 확률", amount: probability, day: nil),
+                                  label: "목표를 지킬 확률 \(probability)%", amount: nil, day: nil),
             TuneEvidenceReference(id: "policy.weekly-buffer", source: .policy,
-                                  label: "주간 안전 버퍼 v0", amount: max(50_000, BudgetEngine.fixed / 8), day: nil),
+                                  label: "비상용으로 남겨두는 돈", amount: max(50_000, BudgetEngine.fixed / 8), day: nil),
             TuneEvidenceReference(id: "billing.carryover", source: .billing,
-                                  label: "다음 달 할부 이월", amount: billing.carryover, day: nil),
+                                  label: "다음 달로 넘어가는 할부", amount: billing.carryover, day: nil),
         ]
         if let forecast = weeklyForecast {
             evidence += [
                 TuneEvidenceReference(id: "forecast.central.\(forecast.modelVersion)", source: .forecast,
-                                      label: "이번 주 예상 지출 · 보정 중앙값",
+                                      label: "이번 주 예상 지출",
                                       amount: forecast.centralTotal, day: nil),
                 TuneEvidenceReference(id: "forecast.safe.\(forecast.modelVersion)", source: .forecast,
-                                      label: "이번 주 안전 예상액 · q75",
+                                      label: "넉넉하게 잡았을 때 이번 주 지출",
                                       amount: forecast.safeTotal, day: nil),
             ]
         }
@@ -942,17 +943,19 @@ final class AppModel: ObservableObject {
         max(0, monthlyIncome - BudgetEngine.fixed - savingsGoal - julyEstimateLow)
     }
 
-    // MARK: 7월 일정비 프로파일 (중간 추정값)
+    // MARK: 7월 일정비 프로파일
 
-    // 합계 801,000 = julyEstimate (캘린더 합계와 일치해야 함 — 출근은 무지출이라 카테고리 없음)
-    let spendProfile: [SpendCategory] = [
-        SpendCategory(name: "경조사·쇼핑", symbol: "gift", monthly: 220_000),
-        SpendCategory(name: "모임·식사", symbol: "person.2", monthly: 210_000),
-        SpendCategory(name: "데이트·가족", symbol: "heart", monthly: 150_000),
-        SpendCategory(name: "문화", symbol: "film", monthly: 78_000),
-        SpendCategory(name: "학업·연구", symbol: "laptopcomputer", monthly: 73_000),
-        SpendCategory(name: "건강·관리", symbol: "cross.case", monthly: 70_000),
-    ]
+    /// 캘린더에서 바로 센다. 표로 박아 두면 일정이 늘 때 화면마다 다른 합계가 나온다 —
+    /// 실제로 데모 일정 2건이 늘면서 카드 탭 801,000원 vs 월간 881,000원으로 갈라졌었다.
+    var spendProfile: [SpendCategory] {
+        let events = days(of: DemoClock.firstMonth).flatMap(\.events).filter { $0.amount > 0 }
+        return Dictionary(grouping: events, by: \.category)
+            .map { category, items in
+                SpendCategory(name: category, symbol: items[0].symbol,
+                              monthly: items.reduce(0) { $0 + $1.amount })
+            }
+            .sorted { $0.monthly > $1.monthly }
+    }
     var spendMonthly: Int { spendProfile.reduce(0) { $0 + $1.monthly } }
 
     // MARK: 기기 저장 — 껐다 켜도 이어서

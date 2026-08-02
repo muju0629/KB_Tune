@@ -37,20 +37,35 @@ enum DemoClock {
     /// 이 자리가 없으면 날짜에 기댄 테스트가 하루만 지나도 깨진다.
     static var fixedToday: Int?
 
-    /// 오늘(통산일). 앱을 켤 때마다 실제 날짜를 따라간다.
+    /// 데모 일정이 들어 있는 마지막 날(7월 31일). 8월 캘린더는 비어 있다.
+    ///
+    /// 시드와 어긋나면 `demoContentEndsWhereTheSeedEnds` 테스트가 잡는다.
+    /// 8월 일정을 넣게 되면 이 값을 함께 올릴 것.
+    static let lastContentDay = 31
+
+    /// 오늘(통산일). 실제 날짜를 따라가되, 데모 데이터가 끝난 뒤로는 시연 기준일로 되돌린다.
+    ///
+    /// 8월에 앱을 열면 "이번 주 예정된 지출이 없어요"만 뜬다 — 일정도 예측도 조정안도 없어
+    /// 앱이 무엇을 하는지 보여줄 화면 자체가 없다. 기간 밖일 때 되돌리던 규칙을
+    /// **데이터가 없는 날**까지 넓힌 이유다(2026-08-02).
     static var today: Int {
         if let fixedToday { return fixedToday }
         let c = Calendar(identifier: .gregorian).dateComponents([.year, .month, .day], from: Date())
         guard c.year == demoYear, let m = c.month, let d = c.day, months.contains(m) else {
             return fallbackDay
         }
-        return serial(month: m, day: d)
+        let realDay = serial(month: m, day: d)
+        return realDay <= lastContentDay ? realDay : fallbackDay
     }
 
-    /// 실제 날짜가 데모 기간 안에 있는지. false면 캘린더는 시연 기준일로 고정된다.
+    /// 화면의 '오늘'이 실제 날짜인지. false면 시연 기준일로 고정된 상태다.
     static var isLive: Bool {
-        let c = Calendar(identifier: .gregorian).dateComponents([.year, .month], from: Date())
-        return c.year == demoYear && months.contains(c.month ?? 0)
+        guard fixedToday == nil else { return false }
+        let c = Calendar(identifier: .gregorian).dateComponents([.year, .month, .day], from: Date())
+        guard c.year == demoYear, let m = c.month, let d = c.day, months.contains(m) else {
+            return false
+        }
+        return serial(month: m, day: d) <= lastContentDay
     }
 
     // MARK: 통산일 ↔ 월/일

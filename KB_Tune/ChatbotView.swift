@@ -178,7 +178,9 @@ struct ChatbotView: View {
     @State private var isThinking = false
     @State private var thinkingStep = 0
     @State private var toast: String?
-    @State private var showConsent = false
+    /// 외부 AI 사용 여부. 설정 화면의 스위치와 **같은 칸**을 본다 — 한쪽에서 끄면
+    /// 다른 쪽 화면도 그 자리에서 같이 꺼진다.
+    @AppStorage(AIConsent.key) private var usesExternalAI = false
     /// 검색 동의를 아직 안 받았을 때 띄우는 시트. 검색이 필요한 질문이 나온 순간에만 뜬다.
     @State private var pendingSearchQuery: SearchPrompt?
     /// 지금 이 순간 질문 원문이 검색으로 나가는 중인지. 배지가 이걸 보고 바뀐다.
@@ -189,13 +191,10 @@ struct ChatbotView: View {
     /// 언제 원문이 나가는지를 앱이 눈치로 정하지 않고 사용자가 직접 정하게 하는 자리다.
     @FocusState private var inputFocused: Bool
 
-    // 데모 흐름 순서대로 — 소비 질문 → 절감 지점 → 패턴 → 다음 달 방향 → 적금
     private let suggestions = [
-        "오늘 7만원짜리 바지 사도 될까?",
-        "어디서 줄이는 게 좋을까?",
-        "내 소비 패턴 어때?",
-        "다음 달은 어떻게 하는 게 좋을까?",
-        "적금 통장 하나 더 만들고 싶은데?",
+        "이번 주 내 소비 분석해줄래?",
+        "다음 달은 어떻게 소비하는 게 좋을까?",
+        "이번 달에 어디서 줄여야 할까?",
     ]
     private let thinkingSteps = [
         "일정을 같이 보고 있어요",
@@ -215,9 +214,14 @@ struct ChatbotView: View {
                             // 마지막 실행 카드 아래에 실제 여유 공간을 둔다. 키보드·입력창 높이가
                             // 달라도 버튼이 가려지지 않고 scrollTo의 기준 프레임에도 포함된다.
                             bubble(msg)
-                                .padding(.bottom, msg.id == messages.last?.id ? 56 : 0)
+                                // 첫 화면에선 바로 아래에 예시 칩이 붙으므로 여백을 두지 않는다.
+                                .padding(.bottom, msg.id == messages.last?.id
+                                         && messages.count > 1 ? 56 : 0)
                                 .id(msg.id)
                         }
+                        // 대화를 시작하기 전에만 보여준다. 한 번 물어본 뒤로는 사용자가
+                        // 무엇을 물을지 알고 있어서, 계속 떠 있으면 답변과 자리를 다툰다.
+                        if messages.count <= 1, !isThinking { chips }
                         if isThinking { typingBubble.id("typing") }
                         Color.clear.frame(height: 1).id("chat-end")
                     }
@@ -238,10 +242,6 @@ struct ChatbotView: View {
                 .onChange(of: isThinking) { _, _ in scrollToEnd(proxy) }
             }
 
-            // 답변 안에 실행 버튼이 있을 때 추천 질문이 그 버튼과 경쟁하지 않게 한다.
-            if !isThinking, messages.last?.actions == nil {
-                chips
-            }
             inputBar
         }
         .background(KB.canvas)
@@ -260,12 +260,7 @@ struct ChatbotView: View {
             if wasRecording, !isRecording { adoptSpeechTranscript() }
         }
         .onDisappear { speech.stop() }
-        .task {
-            await agent.ping()
-            // 외부 모델뿐 아니라 원격 백엔드도 재무 집계값이 기기를 떠나는 경계다.
-            showConsent = agent.requiresOffDeviceConsent && !AIConsent.asked
-        }
-        .sheet(isPresented: $showConsent) { consentSheet }
+        .task { await agent.ping() }
         .sheet(item: $pendingSearchQuery) { searchConsentSheet($0) }
     }
 
@@ -277,9 +272,7 @@ struct ChatbotView: View {
         let query = prompt.query.trimmingCharacters(in: .whitespaces)
         return SheetContainer(title: "검색해서 알아볼까요?") {
             VStack(alignment: .leading, spacing: 16) {
-                Text(false
-                     ? "켜 두는 동안 보내는 말이 그대로 검색에 나가요. 예산 계산은 하지 않아요."
-                     : "이 질문 한 줄이 그대로 검색에 나가요.")
+                Text("이 질문 한 줄이 그대로 검색에 나가요.")
                     .font(.kb(14)).foregroundStyle(KB.ink)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -341,15 +334,33 @@ struct ChatbotView: View {
             return
         }
 
-        var reply = ChatMessage(role: .agent, conclusion: result.reply, isStream: true)
-        if !result.actions.isEmpty {
-            reply.actions = .planChanges(result.actions)
+        // 금액을 비워 온 일정 추가는 되묻지 않고 기기 안 추정으로 채워 먼저 보여준다.
+        let filled = result.actions.map(\.withEstimatedAmount)
+        var text = result.reply
+        if let guessed = zip(result.actions, filled)
+            .first(where: { $0.0.amount == nil && $0.1.amount != nil })?.1,
+           let amount = guessed.amount {
+            text += "\n\n금액은 \(formatWon(amount))으로 잡아뒀어요. 다르면 말씀해 주세요."
+        }
+
+        var reply = ChatMessage(role: .agent, conclusion: text, isStream: true)
+        if !filled.isEmpty {
+            reply.actions = .planChanges(filled)
+        } else if Self.failedToFindAmount(text) {
+            // 카테고리 낱말만으로 만든 질의로는 못 찾은 경우다. 여기서 끝내지 말고
+            // 말한 그대로 찾아볼 수 있게 한다 — 원문이 나가므로 버튼을 눌러야 시작한다.
+            reply.actions = .searchWeb(message)
         }
         if let query = result.searchedQuery {
             reply.basis = "웹에 보낸 검색어: ‘\(query)’"
                 + (result.sources.isEmpty ? "" : "\n출처: " + result.sources.joined(separator: "\n"))
         }
         messages.append(reply)
+    }
+
+    /// 서버가 "값을 못 찾았다"고 말한 답변인지. 백엔드가 붙이는 안내 문구를 본다.
+    private static func failedToFindAmount(_ reply: String) -> Bool {
+        ["찾지 못했어요", "보내지 않았어요", "직접 넣어"].contains { reply.contains($0) }
     }
 
     private func runSearch(_ query: String) async {
@@ -359,49 +370,63 @@ struct ChatbotView: View {
             searchingNow = false
             isThinking = false
         }
-        let answer = await agent.search(query)
-        messages.append(answer ?? ChatMessage(
-            role: .agent,
-            conclusion: "검색이 지금은 안 돼요.",
-            reason: "검색을 담당하는 서버에 닿지 못했어요. 잠시 뒤에 다시 물어봐 주세요.",
-            basis: "검색 요청 실패"
-        ))
+        guard var answer = await agent.search(query) else {
+            messages.append(ChatMessage(
+                role: .agent,
+                conclusion: "검색이 지금은 안 돼요.",
+                reason: "검색을 담당하는 서버에 닿지 못했어요. 잠시 뒤에 다시 물어봐 주세요.",
+                basis: "검색 요청 실패"
+            ))
+            return
+        }
+        // 검색으로 알아낸 금액은 그 자리에서 일정이 될 수 있어야 한다.
+        // 답만 읽고 다시 처음부터 일정을 넣게 하면 알아본 의미가 없다.
+        if let draft = draftFromSearch(query: query, answer: answer.conclusion) {
+            answer.preview = EventPreview(title: draft.title, amount: draft.amount,
+                                          day: DemoClock.dayLabel(of: draft.day))
+            answer.actions = .addEvent(draft)
+            pending = draft
+        }
+        messages.append(answer)
+    }
+
+    /// 검색 답변에서 금액을, 원래 질문에서 날짜와 일정 이름을 뽑아 초안을 만든다.
+    /// 셋 중 하나라도 없으면 만들지 않는다 — 없는 값을 지어내면 그건 추정이 아니라 창작이다.
+    private func draftFromSearch(query: String, answer: String) -> EventPhrase.Draft? {
+        guard let day = EventPhrase.day(in: query),
+              let title = EventPhrase.recognizedTitle(in: query),
+              let amount = Self.budgetAmount(in: answer) else { return nil }
+        return EventPhrase.Draft(
+            day: day,
+            title: title,
+            category: EventEstimator.estimate(title).category,
+            amount: amount, low: amount, high: amount,
+            basis: "웹에서 본 값 가운데 가장 큰 쪽으로 잡았어요. 다르면 금액만 말씀해 주세요.",
+            amountWasSpoken: false
+        )
+    }
+
+    /// 검색 답변에 금액이 여러 개면 가장 큰 값을 예산으로 잡는다.
+    ///
+    /// 답변은 보통 "고기값 24,500원 … 음료까지 더하면 30,500원"처럼 부분값을 먼저 말하고
+    /// 합계를 뒤에 둔다. 첫 값을 집으면 예산이 실제보다 작게 잡혀 그 주에 구멍이 난다.
+    /// 예산은 남는 쪽이 모자라는 쪽보다 낫다.
+    static func budgetAmount(in text: String) -> Int? {
+        guard let regex = try? NSRegularExpression(pattern: #"([\d,]{2,11})\s*원"#) else { return nil }
+        let range = NSRange(text.startIndex..., in: text)
+        let amounts = regex.matches(in: text, range: range).compactMap { match -> Int? in
+            guard let r = Range(match.range(at: 1), in: text) else { return nil }
+            return Int(text[r].replacingOccurrences(of: ",", with: ""))
+        }
+        return amounts.filter { (1_000...1_000_000).contains($0) }.max()
     }
 
     // MARK: 외부 AI 동의
-
-    private var consentSheet: some View {
-        SheetContainer(title: "AI 분석 방식을 골라주세요") {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("외부 AI를 쓰지 않아도 예산 계산과 일정 추가는 기기 안에서 그대로 동작해요.")
-                    .font(.kb(14)).foregroundStyle(KB.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                consentRow(icon: "iphone", tint: KB.green, title: "기기 안에서만",
-                           detail: "과거 소비 패턴과 예산 엔진으로 답해요. 외부 AI로 금융 문맥을 보내지 않아요.")
-                consentRow(icon: "person.crop.circle.badge.checkmark", tint: KB.green,
-                           title: "식별정보 없이 분석",
-                           detail: "질문 원문·실명·일정 제목은 보내지 않아요. 답변에 필요한 날짜·유형·금액과 재무 집계값만 외부 AI에 보내요.")
-
-                Text("선택은 설정에서 언제든 바꿀 수 있어요. 아무것도 고르지 않고 닫으면 ‘기기 안에서만’으로 저장돼요.")
-                    .font(.kb(11.5)).foregroundStyle(KB.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                VStack(spacing: 9) {
-                    consentButton("기기 안에서만", filled: true) {
-                        chooseConsent(cloud: false)
-                    }
-                    consentButton("식별정보 없이 분석", filled: false) {
-                        chooseConsent(cloud: true)
-                    }
-                }
-            }
-        }
-        // X로 닫거나 쓸어내리면 외부 전송에 동의하지 않은 것으로 본다.
-        .onDisappear {
-            if !AIConsent.asked { chooseConsent(cloud: false) }
-        }
-    }
+    //
+    // 대화 탭에 들어오자마자 "AI 분석 방식을 고르세요"를 먼저 묻던 시절이 있었다.
+    // 질문을 하기도 전에 동의부터 받는 구조라, 뭘 위한 동의인지 체감이 안 됐다.
+    // 지금은 앱이 답을 못 낼 때(searchConsentSheet)만 그 자리에서 묻는다 —
+    // 질문 → 안 된다는 걸 확인 → 그때 이유와 함께 동의를 구하는 순서라야 판단이 된다.
 
     private func consentRow(icon: String, tint: Color,
                             title: String, detail: String) -> some View {
@@ -431,12 +456,6 @@ struct ChatbotView: View {
         }
     }
 
-    private func chooseConsent(cloud: Bool) {
-        // 국외 이전 동의와 같은 값이다. 여기서 AIConsent 를 직접 쓰면 동의 기록이 안 남는다.
-        ConsentStore.set(.overseas, cloud)
-        showConsent = false
-    }
-
     // MARK: 컨텍스트 바
 
     private var contextBar: some View {
@@ -451,12 +470,16 @@ struct ChatbotView: View {
                 HStack(spacing: 5) {
                     Text("Tune")
                     Circle().fill(KB.green).frame(width: 6, height: 6)
-                    Label(privacyBadgeLabel,
-                          systemImage: "lock.fill")
-                        .font(.kb(9.5, .medium))
-                        .foregroundStyle(KB.green)
-                        .padding(.horizontal, 6).padding(.vertical, 3)
-                        .background(KB.surface.opacity(0.75), in: Capsule())
+                    // 배지는 검색으로 질문이 나가는 동안에만 띄운다. 평소에 '직접식별자·원문
+                    // 비공개' 같은 말을 붙여 두면 뜻도 안 통하고, 정작 원문이 나가는 순간의
+                    // 경고가 늘 켜져 있는 표시에 묻힌다.
+                    if let warning = privacyBadgeLabel {
+                        Label(warning, systemImage: "magnifyingglass")
+                            .font(.kb(9.5, .medium))
+                            .foregroundStyle(KB.caution)
+                            .padding(.horizontal, 6).padding(.vertical, 3)
+                            .background(KB.surface.opacity(0.75), in: Capsule())
+                    }
                 }
                     .font(.kb(15, .semibold))
                     .foregroundStyle(KB.ink)
@@ -474,15 +497,12 @@ struct ChatbotView: View {
         .padding(.horizontal, 18).padding(.vertical, 10)
         .background(KB.yellowSoft)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Tune 계획 도우미. \(privacyBadgeLabel). 이번 주 추가 사용 가능액 \(formatWon(model.weeklyBudget))")
+        .accessibilityLabel("Tune 계획 도우미. \(privacyBadgeLabel ?? "기기 안에서 계산 중"). 이번 주 추가 사용 가능액 \(formatWon(model.weeklyBudget))")
     }
 
-    /// 지금 이 대화에서 무엇이 기기 밖으로 나가는지 한 줄로 알린다.
-    /// 검색은 질문 원문이 그대로 나가므로 가장 강한 표기가 되어야 한다.
-    private var privacyBadgeLabel: String {
-        if searchingNow { return "검색 사용 중" }
-        guard AIConsent.granted else { return "기기 안에서만" }
-        return "직접식별자·원문 비공개"
+    /// 질문 원문이 실제로 기기 밖으로 나가는 동안에만 값이 있다.
+    private var privacyBadgeLabel: String? {
+        searchingNow ? "검색 사용 중" : nil
     }
 
     // MARK: 말풍선
@@ -747,13 +767,13 @@ struct ChatbotView: View {
 
     // MARK: 추천 질문 칩
 
-    /// 아직 물어보지 않은 질문만 최대 2개. 대화가 진행될수록 다음 단계가 앞으로 나온다.
+    /// 아직 물어보지 않은 질문만 최대 3개. 대화가 진행될수록 다음 단계가 앞으로 나온다.
     private var remainingSuggestions: [String] {
         let asked = Set(messages.filter { $0.role == .user }.map(\.conclusion))
         let last = messages.last(where: { $0.role == .user })?.conclusion
             .replacingOccurrences(of: " ", with: "") ?? ""
         let contextual: [String]
-        if last.contains("사도") || last.contains("구매") || last.contains("바지") {
+        if last.contains("사도") || last.contains("구매") {
             contextual = ["그럼 뭘 미루면 돼?", "안 사고 아끼면 뭐가 달라져?"]
         } else if last.contains("패턴") || last.contains("분석") {
             contextual = ["다음 달엔 뭘 먼저 줄일까?", "반복 지출만 따로 보여줘"]
@@ -764,29 +784,31 @@ struct ChatbotView: View {
         } else {
             contextual = suggestions.filter { !asked.contains($0) }
         }
-        return Array(contextual.prefix(2))
+        return Array(contextual.prefix(3))
     }
 
     /// 가로 스크롤을 쓰지 않는다 — 페이지형 탭 안에서 가로 스와이프는 탭 전환에 먹혀,
-    /// 칩을 넘기려던 손짓이 화면을 바꿔버린다. 줄바꿈으로 감싸면 그 충돌 자체가 없다.
+    /// 칩을 넘기려던 손짓이 화면을 바꿔버린다.
+    ///
+    /// 오른쪽에 세운다. 사용자가 보낼 말이라 사용자 말풍선과 같은 편에 있어야
+    /// 누가 하는 말인지 읽기 전에 알 수 있다.
     private var chips: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text(messages.count <= 1 ? "이렇게 물어보세요" : "이어서 물어보기")
+        VStack(alignment: .trailing, spacing: 8) {
+            Text("이렇게 물어보세요")
                 .font(.kb(11.5, .medium)).foregroundStyle(KB.muted)
-            FlowLayout(spacing: 8) {
-                ForEach(remainingSuggestions, id: \.self) { q in
-                    Button { send(q) } label: {
-                        Text(q).font(.kb(13)).foregroundStyle(KB.ink)
-                            .padding(.horizontal, 14).padding(.vertical, 9)
-                            .background(KB.surface, in: Capsule())
-                            .overlay(Capsule().stroke(KB.line, lineWidth: 1))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isThinking)
+            ForEach(remainingSuggestions, id: \.self) { q in
+                Button { send(q) } label: {
+                    Text(q).font(.kb(13)).foregroundStyle(KB.ink)
+                        .multilineTextAlignment(.trailing)
+                        .padding(.horizontal, 14).padding(.vertical, 9)
+                        .background(KB.surface, in: Capsule())
+                        .overlay(Capsule().stroke(KB.line, lineWidth: 1))
                 }
+                .buttonStyle(.plain)
+                .disabled(isThinking)
             }
         }
-        .padding(.horizontal, 18)
+        .frame(maxWidth: .infinity, alignment: .trailing)
         .padding(.vertical, 10)
         .animation(.snappy(duration: 0.25), value: remainingSuggestions)
     }
@@ -798,11 +820,42 @@ struct ChatbotView: View {
             if speech.isRecording || speech.error != nil {
                 micStatus
             }
+            HStack {
+                externalAIToggle
+                Spacer()
+            }
             inputRow
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
         .padding(.top, 2)
+    }
+
+    /// 외부 AI 스위치. 설정 화면 깊숙이 두면 지금 어느 쪽으로 답하고 있는지 모른 채
+    /// 대화하게 된다. 상태를 입력창 바로 위에 적어 두고, 같은 자리에서 끄고 켠다.
+    /// 저장은 설정 화면과 같은 칸(`ConsentStore`)에 하므로 동의 시각도 함께 남는다.
+    private var externalAIToggle: some View {
+        Button {
+            let next = !usesExternalAI
+            ConsentStore.set(.overseas, next)
+            flash(next
+                  ? "외부 AI를 켰어요. 날짜·유형·금액 같은 집계값만 나가고, 일정 제목과 이름은 나가지 않아요."
+                  : "외부 AI를 껐어요. 이제 기기 안에서만 답해요.")
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: usesExternalAI ? "sparkles" : "iphone")
+                    .font(.system(size: 10.5, weight: .semibold))
+                Text(usesExternalAI ? "외부 AI 켜짐" : "기기 안에서만")
+                    .font(.kb(11.5, .medium))
+            }
+            .foregroundStyle(usesExternalAI ? KB.onYellow : KB.muted)
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(usesExternalAI ? KB.yellow : KB.surface, in: Capsule())
+            .overlay(Capsule().stroke(usesExternalAI ? .clear : KB.line, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("external-ai-toggle")
+        .accessibilityLabel(usesExternalAI ? "외부 AI 켜짐, 끄려면 두 번 탭" : "기기 안에서만 답함, 외부 AI를 켜려면 두 번 탭")
     }
 
     /// 녹음 중일 때만 뜨는 줄. 어디서 처리되는지(기기/서버)를 같이 밝힌다.
@@ -826,13 +879,17 @@ struct ChatbotView: View {
     }
 
     private var inputRow: some View {
-        HStack(spacing: 10) {
+        HStack(alignment: .bottom, spacing: 10) {
 
-            TextField("편하게 말해 주세요", text: $input)
+            // 한 줄로 고정하면 긴 질문이 앞뒤로 잘려 방금 적은 말이 안 보인다.
+            // 다섯 줄까지 늘어나고 그 뒤로는 안에서 스크롤한다.
+            TextField("편하게 말해 주세요", text: $input, axis: .vertical)
                 .font(.kb(14))
+                .lineLimit(1...5)
                 .padding(.horizontal, 16).padding(.vertical, 12)
-                .background(KB.surface, in: Capsule())
-                .overlay(Capsule().stroke(KB.line, lineWidth: 1))
+                .background(KB.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(KB.line, lineWidth: 1))
                 .submitLabel(.send)
                 .onSubmit { send(input) }
                 .focused($inputFocused)
@@ -896,6 +953,13 @@ struct ChatbotView: View {
         ))
     }
 
+    /// 사용자가 검색을 직접 부탁했는지. 이 판정이 참일 때만 질문 원문이 검색으로 나간다.
+    private static func asksForWebSearch(_ text: String) -> Bool {
+        let q = text.replacingOccurrences(of: " ", with: "")
+        return ["검색", "찾아봐", "찾아줘", "알아봐", "알아봐줘", "찾아보고", "검색해"]
+            .contains { q.contains($0) }
+    }
+
     private func send(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty, !isThinking else { return }
@@ -905,11 +969,29 @@ struct ChatbotView: View {
         inputFocused = false
         thinkingStep = 0
 
+        // "검색해볼래?"처럼 대놓고 검색을 부탁하면 말한 그대로 찾는다.
+        //
+        // 에이전트를 거치면 검색어가 카테고리 낱말로만 조립돼('외식 1인 평균 비용')
+        // '삼각지'도 '고기'도 빠진 평균값이 돌아온다. 그 규칙은 모델이 사용자 문장을
+        // 검색 엔진에 흘리지 못하게 막는 장치라 그대로 두고, 사용자가 직접 검색을
+        // 요청한 경우에만 원문을 쓴다 — 그때는 무엇이 나가는지 동의로 먼저 확인한다.
+        if Self.asksForWebSearch(trimmed) {
+            if AIConsent.granted {
+                Task { await runSearch(trimmed) }
+            } else {
+                pendingSearchQuery = SearchPrompt(query: trimmed)
+            }
+            return
+        }
+
         // 계획 에이전트를 켰으면 여기로 다 보낸다. 일정 추가·수정·삭제·가격 조회·웹 검색을
         // 한 경로에서 처리하므로, 예전처럼 모드를 골라 가며 쓰지 않아도 된다.
         // 검색은 에이전트가 필요하다고 판단할 때만 일어나고, 그 전에 서버의 검증기가
         // 검색어를 검사한다.
-        if AIConsent.granted {
+        //
+        // 동의만 보고 보내면 안 된다 — 모델이 없는 서버에서도 이 경로로 가서
+        // "서버에 닿지 않아요"만 돌려주고, 기기 안에서 답할 수 있는 질문까지 놓친다.
+        if AIConsent.granted, agent.llmEnabled {
             withAnimation(.easeOut(duration: 0.25)) { isThinking = true }
             Task { await runAgent(trimmed, history: history) }
             return
@@ -1129,6 +1211,12 @@ struct ChatbotView: View {
                 actions: .moveEvent(day: candidate.day, eventID: candidate.event.id,
                                     title: candidate.event.title, amount: candidate.event.amount)
             )
+        }
+
+        // ⓪ 기간을 집어 소비를 물으면 요약부터 답한다. '분석'·'어디서' 같은 낱말이
+        // 뒤 규칙에 먼저 걸려 엉뚱한 답으로 새는 걸 막는다.
+        if Self.mentionsOwnSpending(q), q.contains("이번주") || Self.asksAboutMonth(q) {
+            return spendingSummaryReply(monthly: Self.asksAboutMonth(q))
         }
 
         // ① 지금 이걸 사도 되나 — 이번 주 예산 + 앞으로의 일정 + 다음 달 카드값을 함께 본다.
@@ -1389,6 +1477,13 @@ struct ChatbotView: View {
             )
         }
 
+        // 내 돈 이야기인데 위에서 못 걸렀으면 요약으로 답한다. 앱이 가진 것으로
+        // 답할 수 있는 질문에 "모르겠다"고 하고 웹 검색을 권하는 건, 있는 답을 두고
+        // 밖으로 내보내는 짓이다 — "이번 달 소비 어땠어?"가 그렇게 새고 있었다.
+        if Self.mentionsOwnSpending(q) {
+            return spendingSummaryReply(monthly: Self.asksAboutMonth(q))
+        }
+
         // 앱이 가진 데이터로 답이 안 되는 질문. 모른다고 말하되 그냥 끝내지 않고,
         // 원하면 검색해서 알아보겠다고 제안한다. 누르기 전에는 아무것도 나가지 않는다.
         return ChatMessage(
@@ -1398,6 +1493,43 @@ struct ChatbotView: View {
             impact: "현재 추가 사용 가능액 \(formatWon(model.weeklyBudget))",
             basis: "2026년 7월 캘린더 · 입력한 월수입과 저축 목표",
             actions: .searchWeb(text)
+        )
+    }
+
+    /// 내 소비·지출을 묻는 말인지. 웹에 물어볼 것이 아니라 앱이 답해야 하는 질문이다.
+    private static func mentionsOwnSpending(_ q: String) -> Bool {
+        ["소비", "지출", "얼마썼", "얼마나썼", "쓴돈", "돈썼", "예산", "가계부"]
+            .contains { q.contains($0) }
+    }
+
+    private static func asksAboutMonth(_ q: String) -> Bool {
+        ["이번달", "이달", "한달", "월간", "이번달에"].contains { q.contains($0) }
+    }
+
+    /// 이번 달·이번 주 소비 요약. 화면에 있는 숫자와 같은 값만 말한다.
+    private func spendingSummaryReply(monthly: Bool) -> ChatMessage {
+        let b = model.billing
+        let month = DemoClock.month(of: model.todayDayNumber)
+        guard monthly else {
+            return ChatMessage(
+                role: .agent,
+                conclusion: "이번 주 예상 지출은 \(formatWon(model.plannedSpendTotal))이에요.",
+                reason: model.remainingThisWeek > 0
+                    ? "\(DemoClock.dayLabel(of: model.todayDayNumber)) 기준 아직 안 쓴 건 \(formatWon(model.remainingThisWeek))이에요."
+                    : "이번 주 남은 확정 일정은 없어요.",
+                impact: "추가 사용 가능액 \(formatWon(model.weeklyBudget)) · Tune 점수 \(model.tuneScore.score)점",
+                basis: "이번 주 캘린더 일정 합계"
+            )
+        }
+        let top = model.spendProfile.prefix(2)
+            .map { "\($0.name) \(formatWon($0.monthly))" }
+            .joined(separator: " · ")
+        return ChatMessage(
+            role: .agent,
+            conclusion: "\(month)월 예상 지출은 \(formatWon(model.spendMonthly))이에요. \(DemoClock.dayLabel(of: model.todayDayNumber))까지 \(formatWon(model.spentToDate))을 썼어요.",
+            reason: top.isEmpty ? "아직 잡힌 일정이 없어요." : "가장 큰 건 \(top)이에요.",
+            impact: "이번 달 남은 예산 \(formatWon(model.remainingBudget)) · \(b.payLabel) 카드 청구액 \(formatWon(b.dueNext))",
+            basis: "\(month)월 캘린더 일정 합계 · KB ALL 카드 이용내역 \(b.count)건"
         )
     }
 
@@ -1438,13 +1570,20 @@ struct ChatbotView: View {
             draft.basis = "말씀하신 금액으로 다시 계산했어요."
             draft.amountWasSpoken = true
             pending = draft
-            return proposal(for: draft)
+            // "35,000원으로 잡고 일정에 추가해줘"처럼 넣어 달라는 말이 같이 오면
+            // 다시 버튼을 누르게 하지 않는다. 이미 두 번 말한 셈이다.
+            return Self.asksToAddNow(q) ? confirm(draft) : proposal(for: draft)
         }
         // "추가해줘" — 확정.
-        if q.contains("추가") || q.contains("넣어") || q.contains("잡아줘") || q.contains("등록") {
+        if Self.asksToAddNow(q) {
             return confirm(draft)
         }
         return nil
+    }
+
+    /// 넣어 달라는 말인지. 이 말이 있으면 확인 버튼을 한 번 더 띄우지 않는다.
+    private static func asksToAddNow(_ q: String) -> Bool {
+        ["추가", "넣어", "넣어줘", "잡아줘", "등록", "저장해"].contains { q.contains($0) }
     }
 
     /// 넣기 전 판단. 되는지 안 되는지와 그 영향까지 같이 보여준다.
@@ -1486,6 +1625,12 @@ struct ChatbotView: View {
                        calendarEventID: calendarID)
         if pending == d { pending = nil }
 
+        // 아직 캘린더를 안 붙였으면 여기서 물어본다. 조용히 "권한이 없어요"로 끝내면
+        // 사용자는 어디서 켜야 하는지 모른 채 앱 안에만 남은 일정을 보게 된다.
+        if calendarID == nil, calendar.access == .notDetermined {
+            Task { await connectCalendarAndSync(d) }
+        }
+
         let label = DemoClock.dayLabel(of: d.day)
         let weekLabel = model.currentWeekRange.contains(d.day)
             ? "이번 주"
@@ -1495,10 +1640,27 @@ struct ChatbotView: View {
             conclusion: "\(label) \(d.title) \(formatWon(d.amount))을 계획에 넣었어요.",
             reason: calendarID != nil
                 ? "기기 캘린더에도 저녁 7시로 적어뒀어요."
-                : "캘린더 권한이 없어 앱 안에만 넣었어요.",
+                : (calendar.access == .denied
+                   ? "기기 캘린더는 접근이 꺼져 있어 앱 안에만 넣었어요. 설정 > KB Tune에서 켜면 다음부터 함께 적어요."
+                   : "기기 캘린더에도 적을게요."),
             impact: "\(weekLabel) 추가 사용 가능액 \(formatWon(model.weeklyBudget(for: model.direction, on: d.day)))",
             basis: "금액이나 시간은 하루 화면에서 바꿀 수 있어요."
         )
+    }
+
+    /// 권한을 그 자리에서 받고, 허용되면 방금 넣은 일정을 기기 캘린더에도 적는다.
+    @MainActor
+    private func connectCalendarAndSync(_ d: EventPhrase.Draft) async {
+        await calendar.connect()
+        guard calendar.access == .authorized,
+              let id = calendar.save(title: d.title, day: d.day, startHour: 19, duration: 2),
+              let event = model.day(number: d.day)?.events.first(where: { $0.title == d.title })
+        else {
+            if calendar.access == .denied { flash("기기 캘린더에는 못 적었어요. 앱 계획에는 그대로 있어요.") }
+            return
+        }
+        model.attachCalendarID(id, to: event, on: d.day)
+        flash("기기 캘린더에도 적어뒀어요.")
     }
 
     // MARK: 상품 추천 — 앱만 아는 것

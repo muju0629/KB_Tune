@@ -198,6 +198,57 @@ enum ForecastEngine {
                                     categories: results)
     }
 
+    /// 일정 한 건에 들 금액을 모델로 추정한다.
+    ///
+    /// 모델이 내놓는 건 "그 주에 쓴다면 이 카테고리에 얼마"라는 주간 총액이다.
+    /// 카페처럼 한 주에 여러 번 가는 범주는 총액을 그대로 쓰면 몇 배가 되므로,
+    /// 그 카테고리가 있었던 주의 평균 건수로 나눠 1건 값으로 환산한다.
+    /// 기록이 없는 카테고리는 피처가 모두 0이라 값이 인구 평균으로 수렴한다 — 그때는 nil.
+    static func eventAmount(category: String, records: [SpendRecord], on serialDay: Int)
+        -> (amount: Int, low: Int, high: Int)? {
+        guard let file, file.categories.contains(category),
+              let occurrence = file.amount.models["amountOccurrence"],
+              let conditional = file.amount.models["amountConditionalLog"],
+              let q75 = file.amount.models["safeQ75"] else { return nil }
+
+        let startOrdinal = ordinal(for: serialDay)
+        let transactions = records.map {
+            Transaction(ordinal: $0.dayOfYear - 1, category: $0.category, amount: Double($0.amount))
+        }
+        let stats = PopulationStats(amount: file.amount.metadata.populationAmount,
+                                    occurrence: file.amount.metadata.populationOccurrence)
+        let row = baseFeatures(category: category, startOrdinal: startOrdinal,
+                               transactions: transactions, calendar: [],
+                               stats: stats, categories: file.categories)
+
+        let perWeek = eventsPerActiveWeek(category: category, startOrdinal: startOrdinal,
+                                          transactions: transactions)
+        let weekly = max(0, exp(conditional.predict(row)) - 1)
+        let amount = weekly / perWeek
+        guard amount >= 1_000 else { return nil }
+
+        let p = occurrence.predict(row).clamped(to: 0.01...0.99)
+        let low = min(amount, p * weekly * file.amount.metadata.biasFactor / perWeek)
+        let high = max(amount, max(0, q75.predict(row)) / perWeek)
+        return (roundToThousand(amount),
+                max(1_000, roundToThousand(low)),
+                roundToThousand(high))
+    }
+
+    /// 최근 8주 가운데 그 카테고리 결제가 있었던 주만 보고, 그 주들의 평균 건수.
+    /// 전체 주로 나누면 격주로 가는 사람의 1회 금액이 절반으로 깎인다.
+    private static func eventsPerActiveWeek(category: String, startOrdinal: Int,
+                                            transactions: [Transaction]) -> Double {
+        let start = startOrdinal - 56
+        var counts = [Int](repeating: 0, count: 8)
+        for item in transactions
+        where item.category == category && item.ordinal >= start && item.ordinal < startOrdinal {
+            counts[min(7, max(0, (item.ordinal - start) / 7))] += 1
+        }
+        let active = counts.filter { $0 > 0 }
+        return active.isEmpty ? 1 : Double(active.reduce(0, +)) / Double(active.count)
+    }
+
     // 테스트는 번들에 든 Python 고정 입력을 이 함수로 직접 대조한다.
     static func bundledModel(named name: String) -> CompactTreeModel? {
         file?.amount.models[name] ?? file?.hazard.models[name]

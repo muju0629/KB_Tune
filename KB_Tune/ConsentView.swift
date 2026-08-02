@@ -19,53 +19,95 @@ struct ConsentView: View {
     var onClose: (() -> Void)? = nil
 
     @State private var decisions: [ConsentItem: Bool] = [:]
+    /// 한 화면에 한 항목. 세 개를 한 번에 늘어놓으면 스크롤이 길어져 아래 항목은
+    /// 읽히지 않고 넘어간다 — 항목마다 멈춰 세우는 편이 고지에도 맞다.
+    @State private var index = 0
+    @State private var forward = true
+    private let scrollTopID = "consent-top"
 
     private var essentialGranted: Bool { decisions[.essential] == true }
+    private var items: [ConsentItem] { ConsentItem.allCases }
+    private var current: ConsentItem { items[min(index, items.count - 1)] }
+    private var isLast: Bool { index == items.count - 1 }
 
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider().overlay(KB.line)
 
-            ScrollView {
-                VStack(spacing: 14) {
-                    intro
-                    ForEach(ConsentItem.allCases) { item in
-                        card(item)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 14) {
+                        Color.clear.frame(height: 1).id(scrollTopID)
+                        if index == 0 { intro }
+                        card(current)
+                        if isLast { rightsNotice }
+                        Color.clear.frame(height: 8)
                     }
-                    rightsNotice
-                    Color.clear.frame(height: 8)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 18)
+                    .id(index)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: forward ? .trailing : .leading).combined(with: .opacity),
+                        removal: .move(edge: forward ? .leading : .trailing).combined(with: .opacity)
+                    ))
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 18)
+                // 항목이 바뀌면 맨 위부터 읽어야 한다. 스크롤 위치를 그대로 두면
+                // 다음 고지가 중간부터 보이고, 그건 고지한 게 아니다.
+                .onChange(of: index) { _, _ in proxy.scrollTo(scrollTopID, anchor: .top) }
             }
 
             bottomBar
         }
         .background(KB.canvas)
         .onAppear {
-            for item in ConsentItem.allCases {
+            // 처음 받는 동의는 비워 둔다 — 저장값(기본 false)을 미리 채우면
+            // 선택 항목을 한 번도 보지 않고 '거부'로 넘어가게 된다.
+            guard ConsentStore.isComplete else { return }
+            for item in items {
                 decisions[item] = ConsentStore.granted(item)
             }
         }
     }
 
-    // MARK: 머리말
+    // MARK: 머리말 — 온보딩과 같은 진행 막대
 
     private var header: some View {
-        HStack {
-            Text("개인정보 처리 동의")
-                .font(.kb(17, .semibold))
-                .foregroundStyle(KB.ink)
-            Spacer()
-            if let onClose {
-                Button("닫기", action: onClose)
-                    .font(.kb(14))
-                    .foregroundStyle(KB.muted)
+        VStack(spacing: 12) {
+            HStack(spacing: 8) {
+                if index > 0 {
+                    Button {
+                        forward = false
+                        withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) { index -= 1 }
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.kb(17, .semibold)).foregroundStyle(KB.ink)
+                    }
+                }
+                Text("개인정보 처리 동의")
+                    .font(.kb(17, .semibold))
+                    .foregroundStyle(KB.ink)
+                Spacer()
+                Text("\(index + 1) / \(items.count)")
+                    .font(.kb(12.5, .medium)).foregroundStyle(KB.muted)
+                if let onClose {
+                    Button("닫기", action: onClose)
+                        .font(.kb(14))
+                        .foregroundStyle(KB.muted)
+                }
             }
+            .frame(height: 22)
+
+            HStack(spacing: 5) {
+                ForEach(0..<items.count, id: \.self) { i in
+                    Capsule()
+                        .fill(i <= index ? KB.yellow : KB.line)
+                        .frame(height: 4)
+                }
+            }
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: index)
         }
         .padding(.horizontal, 20)
-        .padding(.vertical, 14)
+        .padding(.top, 14)
     }
 
     private var intro: some View {
@@ -73,7 +115,7 @@ struct ConsentView: View {
             Text("세 가지를 따로 여쭤봐요")
                 .font(.kb(20, .bold))
                 .foregroundStyle(KB.ink)
-            Text("필수 하나, 선택 둘이에요. 선택은 거부하셔도 앱의 모든 기능을 그대로 쓸 수 있어요. 아래 내용이 전문이고, 요약본이 따로 있지 않아요.")
+            Text("필수 하나, 선택 둘이에요. 선택은 거부하셔도 앱의 모든 기능을 그대로 쓸 수 있어요. 화면에 있는 내용이 전문이고, 요약본이 따로 있지 않아요.")
                 .font(.kb(13))
                 .foregroundStyle(KB.muted)
                 .lineSpacing(3)
@@ -223,33 +265,52 @@ struct ConsentView: View {
 
     // MARK: 하단
 
+    /// 항목마다 답을 하나 고르기 전에는 넘어가지 않는다. 선택 항목도 마찬가지 —
+    /// 무응답을 '동의 안 함'으로 흘려보내면 물어본 적이 없는 것과 같다.
+    private var canAdvance: Bool {
+        current.isRequired ? decisions[current] == true : decisions[current] != nil
+    }
+
     private var bottomBar: some View {
-        VStack(spacing: 0) {
+        let enabled = canAdvance && (!isLast || essentialGranted)
+        return VStack(spacing: 0) {
             Divider().overlay(KB.line)
             Button {
+                guard isLast else {
+                    forward = true
+                    withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) { index += 1 }
+                    return
+                }
                 for (item, value) in decisions {
                     ConsentStore.set(item, value)
                 }
                 ConsentStore.finish()
                 onFinish()
             } label: {
-                Text(essentialGranted ? "동의하고 시작하기" : "필수 항목에 동의해 주세요")
+                Text(bottomLabel)
                     .font(.kb(16, .semibold))
-                    .foregroundStyle(essentialGranted ? KB.onYellow : KB.muted)
+                    .foregroundStyle(enabled ? KB.onYellow : KB.muted)
                     .frame(maxWidth: .infinity)
                     .frame(height: 52)
                     .background(
                         RoundedRectangle(cornerRadius: 13, style: .continuous)
-                            .fill(essentialGranted ? KB.yellow : KB.line)
+                            .fill(enabled ? KB.yellow : KB.line)
                     )
             }
             .buttonStyle(.plain)
-            .disabled(!essentialGranted)
+            .disabled(!enabled)
             .padding(.horizontal, 20)
             .padding(.top, 12)
             .padding(.bottom, 8)
         }
         .background(KB.surface)
+    }
+
+    private var bottomLabel: String {
+        if !canAdvance {
+            return current.isRequired ? "필수 항목에 동의해 주세요" : "동의 여부를 골라 주세요"
+        }
+        return isLast ? "동의하고 시작하기" : "다음"
     }
 }
 

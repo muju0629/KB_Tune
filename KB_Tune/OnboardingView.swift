@@ -54,38 +54,62 @@ struct OnboardingView: View {
 
     private var topBar: some View {
         let showsBack = step < questionCount && (step > 0 || onBack != nil)
-        return HStack(spacing: 8) {
-            if showsBack {
-                Button {
-                    if step > 0 {
-                        forward = false
-                        withAnimation(stepSpring) { step -= 1 }
-                    } else {
-                        onBack?()
+        return VStack(spacing: 12) {
+            HStack(spacing: 8) {
+                if showsBack {
+                    Button {
+                        if step > 0 {
+                            forward = false
+                            withAnimation(stepSpring) { step -= 1 }
+                        } else {
+                            onBack?()
+                        }
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.kb(17, .semibold))
+                            .foregroundStyle(KB.ink)
                     }
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.kb(17, .semibold))
-                        .foregroundStyle(KB.ink)
+                }
+                Spacer()
+                if step < questionCount {
+                    Text("\(step + 1) / \(questionCount)")
+                        .font(.kb(12.5, .medium)).foregroundStyle(KB.muted)
+                        .contentTransition(.numericText(value: Double(step)))
                 }
             }
-            Spacer()
+            .frame(height: 22)
+
+            // 점 대신 채워지는 막대 — 몇 단계 중 어디쯤인지 한눈에 보인다.
             if step < questionCount {
-                HStack(spacing: 6) {
+                HStack(spacing: 5) {
                     ForEach(0..<questionCount, id: \.self) { i in
                         Capsule()
-                            .fill(i == step ? KB.ink : (i < step ? KB.yellow : KB.line))
-                            .frame(width: i == step ? 20 : 7, height: 7)
+                            .fill(i <= step ? KB.yellow : KB.line)
+                            .frame(height: 4)
                     }
                 }
                 .animation(.spring(response: 0.35, dampingFraction: 0.8), value: step)
             }
-            Spacer()
-            if showsBack { Color.clear.frame(width: 17, height: 17) }
         }
         .padding(.horizontal, 24)
         .padding(.top, 12)
-        .frame(height: 44)
+    }
+
+    /// 단계마다 다른 문구를 쓰던 CTA를 한 자리로 모은다.
+    /// 버튼이 매번 다른 말을 하면 어디를 눌러야 넘어가는지 매 화면 다시 읽어야 한다.
+    private func footer(_ title: String = "다음",
+                        disabled: Bool = false,
+                        hint: String,
+                        action: @escaping () -> Void) -> some View {
+        VStack(spacing: 0) {
+            Button(action: action) { Text(title) }
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(disabled)
+                .opacity(disabled ? 0.5 : 1)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 8)
+            agentHint(hint)
+        }
     }
 
     // MARK: 공통 helper
@@ -156,19 +180,12 @@ struct OnboardingView: View {
 
             Spacer()
 
-            VStack(spacing: 12) {
-                Button {
-                    model.usesDemoData = true
-                    next()
-                } label: { Text(connectedCount > 0 ? "다음" : "7월 데모 일정으로 시작하기") }
-                .buttonStyle(PrimaryButtonStyle())
+            footer(hint: connectedCount == 0
+                   ? "연결하지 않아도 7월 데모 일정으로 둘러볼 수 있어요"
+                   : "연결한 자료로 일정별 예상 금액을 계산할게요") {
+                model.usesDemoData = true
+                next()
             }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 8)
-
-            agentHint(connectedCount == 0
-                      ? "연결하지 않아도 7월 데모 일정으로 둘러볼 수 있어요"
-                      : "연결한 자료로 일정별 예상 금액을 계산할게요")
         }
         .sheet(isPresented: $showKBPayConsent) {
             KBPayConsentSheet { model.kbPayLinked = true }
@@ -240,12 +257,7 @@ struct OnboardingView: View {
 
             Spacer()
 
-            Button { next() } label: { Text("다음") }
-                .buttonStyle(PrimaryButtonStyle())
-                .padding(.horizontal, 24)
-                .padding(.bottom, 8)
-
-            agentHint("수입에 맞춰 이번 주 금액을 계산해요")
+            footer(hint: "수입에 맞춰 이번 주 금액을 계산해요") { next() }
         }
     }
 
@@ -322,17 +334,12 @@ struct OnboardingView: View {
             }
 
             // 더 필요한 소비(protectedTags)는 hobbies에서 자동 파생 — 별도 저장 없음
-            Button { next() } label: { Text("7월 계획 계산하기") }
-                .buttonStyle(PrimaryButtonStyle())
-                .disabled(model.hobbies.isEmpty)
-                .opacity(model.hobbies.isEmpty ? 0.5 : 1)
-                .padding(.horizontal, 24)
+            footer("완료",
+                   disabled: model.hobbies.isEmpty,
+                   hint: model.hobbies.isEmpty
+                   ? "고른 소비는 예산을 조정할 때 줄이지 않아요"
+                   : "\(selectedKeepSummary) — 더 필요한 소비로 기억할게요") { next() }
                 .padding(.top, 8)
-                .padding(.bottom, 8)
-
-            agentHint(model.hobbies.isEmpty
-                      ? "고른 소비는 예산을 조정할 때 줄이지 않아요"
-                      : "\(selectedKeepSummary) — 더 필요한 소비로 기억할게요")
         }
     }
 
