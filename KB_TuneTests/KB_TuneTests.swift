@@ -145,10 +145,26 @@ struct KB_TuneTests {
         #expect(model.julyEstimateHigh == 881_000)
         #expect(model.plannedSpendLow == 95_000)
         #expect(model.plannedSpendHigh == 95_000)
+        // 카드 탭의 "7월 예상 지출"과 월간의 합계가 갈라지면 안 된다.
+        #expect(model.spendMonthly == model.julyEstimateHigh)
         // 월말 여유는 캘린더 합계에서 파생 — 일정이 늘면 같은 폭으로 줄어야 한다.
         #expect(model.monthEndRemainingLow
                 == model.monthlyIncome - BudgetEngine.fixed - model.savingsGoal - model.julyEstimateHigh)
         #expect(model.monthEndRemainingHigh == model.monthEndRemainingLow)
+    }
+
+    /// 데모 데이터가 끝난 날과 `DemoClock.lastContentDay`가 어긋나면,
+    /// 8월에 앱을 연 사람은 "이번 주 예정된 지출이 없어요"만 보게 된다.
+    /// 8월 일정을 넣게 되면 이 테스트가 먼저 깨져서 상수를 함께 올리라고 알려준다.
+    @Test func demoContentEndsWhereTheSeedEnds() {
+        let lastDayWithSpend = AppModel.makeCalendar()
+            .filter { day in day.events.contains { $0.amount > 0 } }
+            .map(\.dayNumber)
+            .max()
+        #expect(lastDayWithSpend == DemoClock.lastContentDay)
+
+        // 그 다음 날에 앱을 열면 시연 기준일로 되돌아가야 한다.
+        #expect(DemoClock.fallbackDay <= DemoClock.lastContentDay)
     }
 
     @Test func internshipCostsNothingAndLaserIsConfirmed() {
@@ -196,17 +212,36 @@ struct KB_TuneTests {
         #expect(e.amount == 40_000)
     }
 
-    @Test func cafeEstimateComesFromCardHistoryMedian() throws {
+    /// 검색 답변에는 부분 금액이 먼저 나오고 합계가 뒤에 온다.
+    /// 첫 값을 집으면 예산이 실제보다 작게 잡혀 그 주에 구멍이 난다.
+    @Test func searchAnswerBudgetTakesTheLargestAmount() {
+        let answer = """
+            돼지고기 기준으로 350g 정도 고기값이 약 24,500원이고 식사와 음료(맥주 1병 포함)를
+            더하면 약 30,500원 정도 예상돼요. 서울 외식 삼겹살 1인분(200g)은 평균 21,000원대예요.
+            """
+        #expect(ChatbotView.budgetAmount(in: answer) == 30_500)
+
+        // 금액이 하나뿐이면 그 값을, 없으면 nil.
+        #expect(ChatbotView.budgetAmount(in: "1인 12,000원 정도예요.") == 12_000)
+        #expect(ChatbotView.budgetAmount(in: "가격을 찾지 못했어요.") == nil)
+        // 터무니없는 값은 버린다 — 연 매출 같은 숫자가 섞여 들어와도 일정 금액으로 쓰지 않는다.
+        #expect(ChatbotView.budgetAmount(in: "매출 5,000,000,000원 · 1인 20,000원") == 20_000)
+    }
+
+    @Test func cafeEstimateComesFromTheForecastModel() throws {
+        // 카페 결제 기록이 있으므로 예측 모델이 값을 낸다. 모델은 주간 총액을 내놓으니
+        // 1건 값으로 환산된 뒤여야 한다 — 카드 이력 범위(10,000~30,000원)를 벗어나면
+        // 환산이 깨진 것이다.
         let baseline = EventEstimator.estimate("카페 약속")
-        #expect(baseline.amount == 20_000)       // 10,000원·30,000원 표본의 중앙값
-        #expect(baseline.method == "history")
-        #expect(baseline.basis.contains("2건"))
-        #expect(baseline.basis.contains("중앙값"))
+        print("[카페 약속] \(baseline.amount)원 (\(baseline.low)~\(baseline.high)) \(baseline.method)")
+        #expect(baseline.method == "forecast")
+        #expect(baseline.low <= baseline.amount && baseline.amount <= baseline.high)
+        #expect(baseline.amount >= 5_000 && baseline.amount <= 40_000)
+        #expect(baseline.basis.contains("예측 모델"))
 
         let draft = try #require(EventPhrase.parse("8월 5일 카페 갈래"))
 
-        #expect(draft.amount == baseline.amount) // 자연어 일정 추가도 같은 카드 이력을 쓴다
-        #expect(draft.basis.contains("2건"))
+        #expect(draft.amount == baseline.amount) // 자연어 일정 추가도 같은 추정을 쓴다
     }
 
     @Test func deprecatedCashLearningStateIsIgnoredWithoutLosingCalendar() throws {
@@ -242,7 +277,9 @@ struct KB_TuneTests {
 
             // 모델 확률이 임계값을 넘긴 캘린더 밖 지출만 제안한다.
             #expect(keys.contains("쿠팡 장보기"))
-            #expect(model.upcomingSpends.allSatisfy { $0.reason.contains(ForecastEngine.modelVersion) })
+            // 근거 문장에 모델 ID는 노출하지 않는다 — 사용자가 읽는 말로만 남긴다.
+            #expect(model.upcomingSpends.allSatisfy { $0.reason.contains("예측 모델") })
+            #expect(model.upcomingSpends.allSatisfy { !$0.reason.contains(ForecastEngine.modelVersion) })
             // 이번 주 캘린더에 이미 있는 '와드'는 중복 제안하지 않는다
             #expect(!keys.contains("와드"))
 
@@ -868,10 +905,12 @@ struct KB_TuneTests {
         // 모임에 표본 2건이 있었기 때문이다. 와드는 미용실이라 자기관리로 옮겼고,
         // 그 결과 모임 이력이 0건이 됐다. 검증하려는 불변식은 그대로이므로 이력이 있는
         // 카테고리로 픽스처만 바꾼다.
+        // 데이트는 예측 모델이 다루는 카테고리라 이력이 있으면 모델이 값을 낸다.
+        // 지켜야 하는 불변식은 그대로 — 공개 통계 평균이 개인 데이터를 덮으면 안 된다.
         let result = EventEstimator.estimate("저녁 데이트")
-        #expect(result.method == "history")
+        #expect(result.method == "forecast")
         #expect(result.amount != BaselinePrices.forCategory("데이트")?.amount)
-        #expect(result.basis.contains("기기에 저장된"))
+        #expect(result.basis.contains("기기 안"))
     }
 
     @Test func ageBucketOnlyMovesTheStatisticalBaseline() {

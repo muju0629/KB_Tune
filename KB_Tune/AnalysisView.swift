@@ -38,11 +38,13 @@ struct AnalysisView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
+                // 분석 탭이면 분석이 먼저다. 업로드는 도구라 결과 아래로 내린다 —
+                // 캡처가 없는 사람은 빈 상자부터 보게 되어 탭 이름과 첫 화면이 어긋났다.
                 title
-                uploadSection
-                if !store.shots.isEmpty { extractSection }
                 breakdownSection
                 insight
+                uploadSection
+                if !store.shots.isEmpty { extractSection }
                 productEntry
             }
             .padding(20)

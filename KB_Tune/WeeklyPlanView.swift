@@ -24,6 +24,8 @@ struct WeeklyPlanView: View {
     @State private var toast: String?
     @State private var showBillingDetail = false
     @State private var showTuneScoreDetail = false
+    @State private var showCalculationDetail = false
+    @State private var showAllPredictions = false
 
     /// 수정 중인 일정. 어느 날의 어떤 일정인지 함께 들고 있어야 모델을 고칠 수 있다.
     struct EditTarget: Identifiable {
@@ -83,14 +85,6 @@ struct WeeklyPlanView: View {
                         .padding(.horizontal, 24)
                         .padding(.top, 8)
                         .padding(.bottom, 32)
-                    }
-                    // 결제예정 바가 가리지 않게 아래를 비워둔다.
-                    // 월간·타임테이블로 넘어가면 아래로 미끄러져 나간다.
-                    .safeAreaInset(edge: .bottom) {
-                        if mode == .week && selectedDay == nil {
-                            billingDock
-                                .transition(.move(edge: .bottom).combined(with: .opacity))
-                        }
                     }
                     .animation(switchSpring, value: mode)
                     .animation(switchSpring, value: selectedDay?.dayNumber)
@@ -213,13 +207,33 @@ struct WeeklyPlanView: View {
             spendTimeline
             if !model.upcomingSpends.isEmpty { predictedSpends }
 
-            // 여기서부터 금액 근거
-            rolloverCard
-            nextMonthCard
-
-            recommendation
+            // 금액 근거는 접어 둔다 — 결론 세 줄을 보러 온 사람에게 계산 카드 세 장을
+            // 먼저 들이밀면 첫 화면이 시험지가 된다. 궁금할 때만 편다.
+            calculationDisclosure
+            // 청구액은 하단 고정 바였다. 탭 바와 두 겹으로 쌓여 콘텐츠 영역을 깎아
+            // 카드로 내렸다 — 이번 주 금액보다 한 단계 뒤에 오는 정보라 위치도 맞다.
+            billingDock
             benefitRow
         }
+    }
+
+    /// 이번 주 금액이 어떻게 나왔는지 — 펼쳤을 때만 계산 카드들을 보여준다.
+    private var calculationDisclosure: some View {
+        DisclosureGroup(isExpanded: $showCalculationDetail) {
+            VStack(alignment: .leading, spacing: 18) {
+                rolloverCard
+                nextMonthCard
+                recommendation
+            }
+            .padding(.top, 14)
+        } label: {
+            Text("이번 주 계산 보기")
+                .font(.kb(14.5, .semibold)).foregroundStyle(KB.ink)
+        }
+        .padding(16)
+        .background(KB.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(KB.line, lineWidth: 1))
+        .accessibilityIdentifier("weekly-calculation-disclosure")
     }
 
     /// 화면 맨 아래 붙어 있는 다음 결제일 청구액 요약.
@@ -239,9 +253,10 @@ struct WeeklyPlanView: View {
                 Image(systemName: "chevron.right").font(.system(size: 11, weight: .bold))
                     .foregroundStyle(KB.ink.opacity(0.55))
             }
-            .padding(.horizontal, 18).padding(.vertical, 9)
-            .background(KB.yellowSoft)
-            .overlay(alignment: .top) { Rectangle().fill(KB.yellow).frame(height: 1) }
+            .padding(.horizontal, 16).padding(.vertical, 14)
+            .background(KB.yellowSoft, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(KB.yellow.opacity(0.55), lineWidth: 1))
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("billing-dock")
@@ -360,10 +375,6 @@ struct WeeklyPlanView: View {
 
     private var hero: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("\(model.userName)님의 이번 주 예상 지출은 \(formatWon(model.plannedSpendTotal))")
-                .font(.kb(14, .medium))
-                .foregroundStyle(KB.muted)
-
             Text("이번 주 추가 사용 가능액")
                 .font(.kb(13, .semibold))
                 .foregroundStyle(KB.muted)
@@ -382,6 +393,25 @@ struct WeeklyPlanView: View {
                 .font(.kb(19, .semibold))
                 .foregroundStyle(KB.ink)
                 .accessibilityIdentifier("budget-status")
+
+            // 여유가 없는 주에 경고만 띄우면 첫 화면이 그냥 나쁜 소식이다.
+            // 지금 할 수 있는 일을 같은 자리에서 말한다.
+            if model.weeklyBudget == 0, let fix = topAdjustment {
+                Button {
+                    showTuneScoreDetail = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "wand.and.stars").font(.system(size: 12.5, weight: .semibold))
+                        Text("‘\(fix.title)’ 하나만 조정하면 \(formatWon(fix.gain))이 생겨요")
+                            .fixedSize(horizontal: false, vertical: true)
+                            .multilineTextAlignment(.leading)
+                        Image(systemName: "chevron.right").font(.system(size: 10.5, weight: .bold))
+                    }
+                    .font(.kb(13.5, .semibold)).foregroundStyle(KB.green)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("hero-quick-fix")
+            }
 
             tuneScoreRow
 
@@ -406,11 +436,14 @@ struct WeeklyPlanView: View {
                 Text("Tune 점수")
                     .font(.kb(13.5, .semibold)).foregroundStyle(KB.ink)
                 Spacer()
+                // 일정을 옮기면 이 숫자가 그 자리에서 올라간다 — 결과를 눈으로 잇는다.
+                // 만점 표기와 '자세히'는 뺐다. 이 줄에서 읽을 것은 점수 하나뿐이고,
+                // 눌러서 들어간다는 건 다른 줄과 같은 > 하나로 충분하다.
                 Text("\(result.score)점")
-                    .money(16, weight: .bold)
-                    .foregroundStyle(alert == nil ? KB.ink : KB.caution)
-                Text("자세히")
-                    .font(.kb(11.5, .medium)).foregroundStyle(KB.muted)
+                    .money(19, weight: .heavy)
+                    .foregroundStyle(alert == nil ? KB.score(result.score) : KB.caution)
+                    .contentTransition(.numericText(value: Double(result.score)))
+                    .animation(.snappy(duration: 0.45), value: result.score)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 10.5, weight: .bold)).foregroundStyle(KB.muted)
             }
@@ -423,6 +456,13 @@ struct WeeklyPlanView: View {
         .accessibilityIdentifier("tune-score-card")
         .accessibilityLabel("Tune 점수 \(result.score)점, 자세히 보기")
         .accessibilityHint("점수 근거와 조정안을 봅니다")
+    }
+
+    /// 지금 바로 실행할 수 있는 조정안 가운데 여유를 가장 많이 만드는 것.
+    private var topAdjustment: TuneAdjustmentCandidate? {
+        model.tuneAdjustmentCandidates
+            .filter { $0.isExecutable && $0.gain > 0 }
+            .max { $0.gain < $1.gain }
     }
 
     /// 오늘이 든 달 — 이월·계산 근거 문구에서 사용한다.
@@ -527,8 +567,23 @@ struct WeeklyPlanView: View {
                 ForEach(Array(groups.enumerated()), id: \.element.key) { index, entry in
                     timelineDay(dayNumber: entry.key, items: entry.value, isLast: index == groups.count - 1)
                 }
+                weekTotalRow
             }
         }
+    }
+
+    /// 타임라인 항목의 합 — 위에 늘어놓은 금액이 얼마가 되는지 한 줄로 닫는다.
+    private var weekTotalRow: some View {
+        HStack {
+            Text("이번 주 합계").font(.kb(14, .semibold)).foregroundStyle(KB.onYellow)
+            Spacer()
+            Text(formatWon(model.plannedSpendTotal))
+                .money(19, weight: .bold).foregroundStyle(KB.onYellow)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 13)
+        .background(KB.yellow, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding(.top, 14)
+        .accessibilityElement(children: .combine)
     }
 
     private func timelineDay(dayNumber: Int, items: [WeekSpendItem], isLast: Bool) -> some View {
@@ -645,7 +700,11 @@ struct WeeklyPlanView: View {
                 Text("캘린더에 없는 지출").font(.kb(11)).foregroundStyle(KB.muted)
             }
 
-            ForEach(model.upcomingSpends, id: \.pattern.key) { spend in
+            // 첫 화면엔 한 건만. 예측을 세 장 펼쳐 놓으면 확정 일정보다 더 크게 보인다.
+            let shown = showAllPredictions
+                ? model.upcomingSpends
+                : Array(model.upcomingSpends.prefix(1))
+            ForEach(shown, id: \.pattern.key) { spend in
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 10) {
                         IconBadge(systemName: spend.pattern.symbol, background: KB.surface, size: 38)
@@ -708,6 +767,17 @@ struct WeeklyPlanView: View {
                 .accessibilityLabel("\(spend.pattern.key) 예상 \(formatWon(spend.amount)). \(spend.reason)")
             }
 
+            if !showAllPredictions, model.upcomingSpends.count > 1 {
+                Button("\(model.upcomingSpends.count - 1)건 더 보기") {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                        showAllPredictions = true
+                    }
+                }
+                .font(.kb(13, .medium)).foregroundStyle(KB.muted)
+                .frame(maxWidth: .infinity)
+                .buttonStyle(.plain)
+            }
+
             // 예상 소비가 예산을 넘으면 0원으로 뭉개지 말고 부족분을 밝힌다.
             Group {
                 if model.predictedShortfall > 0 {
@@ -734,11 +804,7 @@ struct WeeklyPlanView: View {
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("이번 주 예상 지출은 \(formatWonRange(model.plannedSpendLow, model.plannedSpendHigh))이에요.")
-                        .font(.kb(17, .semibold))
-                        .foregroundStyle(KB.ink)
-                        .fixedSize(horizontal: false, vertical: true)
-                    // 주간 합계는 지나간 날까지 포함 — 남은 금액과 창이 달라 함께 밝힌다.
+                    // 주간 합계는 타임라인 아래에서 보여준다 — 여기선 남은 금액만.
                     Text(model.remainingThisWeek > 0
                          ? "\(DemoClock.dayLabel(of: model.todayDayNumber)) 기준 아직 안 쓴 건 \(formatWon(model.remainingThisWeek))이에요."
                          : "이번 주 남은 확정 일정은 없어요.")
@@ -945,7 +1011,7 @@ struct WeeklyPlanView: View {
                 if let day, day.spendTotal > 0 {
                     Text(compactSpend(day.spendTotal))
                         .font(.kb(11, .semibold))
-                        .foregroundStyle(KB.expenseRed)
+                        .foregroundStyle(exceedsDailyAllowance(day) ? KB.expenseRed : KB.ink)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                 }
@@ -955,6 +1021,16 @@ struct WeeklyPlanView: View {
         }
         .buttonStyle(.plain)
         .sensoryFeedback(.selection, trigger: selectedMonthDay)
+    }
+
+    /// 달력의 빨강은 '문제'라는 신호여야 한다. 계획대로 쓴 날까지 빨갛게 칠하면
+    /// 한 달의 절반이 경고색이 되고, 정작 넘긴 날이 눈에 띄지 않는다.
+    /// 기준은 그 주 배분을 날짜 수로 나눈 하루치 — 그걸 넘긴 날만 빨강.
+    private func exceedsDailyAllowance(_ day: PlanDay) -> Bool {
+        guard let week = model.weekBudgets(of: DemoClock.month(of: day.dayNumber))
+            .first(where: { $0.days.contains(day.dayNumber) }),
+              !week.days.isEmpty else { return false }
+        return day.spendTotal > week.baseAllowance / week.days.count
     }
 
     private func summaryLine(_ title: String, _ value: String, highlight: Bool = false, tint: Color = KB.ink) -> some View {

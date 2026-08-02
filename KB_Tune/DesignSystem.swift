@@ -45,6 +45,12 @@ enum KB {
     static let violet = Color(light: 0x7A5CF0, dark: 0x9E86FF)      // AI·개인화 (My혜택·KB금융그룹 계열)
     static let tangerine = Color(light: 0xF07C1E, dark: 0xFF9A45)   // 추천·이벤트
     static let info = Color(light: 0x2A72E5, dark: 0x6FA8FF)        // 강조 수치 — KB Pay가 금액 하이라이트에 쓰는 파랑
+
+    /// Tune 점수를 칠하는 색. 주간 카드와 상세 시트가 같은 기준을 쓰도록 여기 둔다 —
+    /// 두 곳에 따로 적어 두면 한쪽만 고쳐져 같은 점수가 화면마다 다른 색이 된다.
+    static func score(_ value: Int) -> Color {
+        value >= 80 ? green : (value >= 60 ? ink : caution)
+    }
 }
 
 // MARK: - 라벨 뱃지 (KB Pay 3.0 문법)

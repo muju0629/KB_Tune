@@ -169,8 +169,9 @@ def _attach_search(result: AgentResult, query: str) -> None:
     """검색어를 검사하고, 통과한 것만 실제로 검색한다."""
     if not searchguard.is_safe(query):
         # 모델이 사용자 문장을 질의에 옮겨 담았다. 검색을 아예 하지 않는다.
+        # 금액을 직접 넣으라고 하지 않는다. 앱이 기기 안 추정치로 채워 보여준다.
         result.reply += ("\n\n(웹에서 찾아보려 했는데, 검색어에 개인적인 말이 섞여 있어 "
-                         "보내지 않았어요. 금액을 직접 넣어 주세요.)")
+                         "보내지 않았어요.)")
         return
 
     found = search_cost(query)

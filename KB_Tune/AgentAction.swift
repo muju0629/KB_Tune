@@ -41,6 +41,19 @@ struct AgentAction: Codable, Identifiable, Equatable {
     }
 }
 
+extension AgentAction {
+    /// 모델이 금액을 비워 보낸 일정 추가를 기기 안 추정치로 미리 채운다.
+    /// 버튼을 누르면 어차피 같은 값이 들어간다 — 그렇다면 누르기 전에 보여줘야
+    /// 사용자가 금액을 직접 타이핑하는 일이 없다.
+    var withEstimatedAmount: AgentAction {
+        guard kind == .addEvent, amount == nil, let title, !title.isEmpty else { return self }
+        let estimate = EventEstimator.estimate(title)
+        return AgentAction(kind: kind, day: day, title: title, ref: ref,
+                           category: category ?? estimate.category, amount: estimate.amount,
+                           toDay: toDay, label: "\(label) \(formatWon(estimate.amount))")
+    }
+}
+
 /// 서버에 보내는 기존 일정 목록 한 줄. **제목이 없다** — 번호로 가리키면 되기 때문이다.
 struct AgentEventRef: Codable {
     let ref: Int
